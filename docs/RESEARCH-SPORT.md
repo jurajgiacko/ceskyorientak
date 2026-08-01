@@ -980,3 +980,243 @@ sheet (symbol 14.1).
 distance the athlete actually runs. Real running distance is typically **10–25 % longer** than the stated length
 in forest and can be **30–60 % longer** in sprint. **[estimate — see §8.6]** Do not conflate the two.
 
+---
+---
+
+# 5. SportIdent
+
+Sources: SPORTident docs (https://docs.sportident.com/user-guide/classic-system,
+https://docs.sportident.com/user-guide/air-plus-system, https://docs.sportident.com/user-guide/config-plus,
+https://docs.sportident.com/products/cards/siac, https://docs.sportident.com/products/stations/bsf9) ·
+SPORTident UK card-comparison sheet https://www.sportident.co.uk/information_sheets/sportident-cardcomparison.pdf ·
+SPORTident Organiser Guide https://orienteering-shop.com/media/pdf/04/76/15/SPORTident_organiser-guide.pdf ·
+SPORTident AIR+ information for organisers https://www.sportident.com/tibiapi/medialib/6627c0d60938460001504eb9/file/sportident_airplus_information_for_organisers.pdf ·
+British Orienteering, *SportIdent advice for Event Advisers* (July 2025, authored by the Chair of the IOF Rules
+Commission) https://www.britishorienteering.org.uk/doc/resource-library/planning-courses/sportident-advice-for-event-advisers ·
+IOF Competition Rules 2025 §20 and Appendix 4.
+
+## 5.1 SI-Card generations — capacity and behaviour
+
+| | **SI-5** | **SI-6** | **SI-8** | **SI-9** | **SI-10** | **SI-11** | **SIAC** | **pCard** |
+|---|---|---|---|---|---|---|---|---|
+| Card-number range | 1–499 999 | 500 001–999 999 | 2 000 001–2 999 999 | 1 000 001–1 999 999 | 7 000 001–7 999 999 | 9 000 001–9 999 999 | 8 000 001–8 999 999 | 4 000 001–4 999 999 |
+| **Control records** | **30 + 6 code-only** | **64** (192 if configured) | **30 (hard cap)** | **50** | **128** | **128** | **128** | **20 (hard cap)** |
+| Total records incl. start/finish/check | 39 | 68 | 33 | 53 | 132 | 132 | 132 | 23 |
+| **Contact punch dwell time** | **330 ms** | 130 ms | 115 ms | 115 ms | **60 ms** | 60 ms | 60 ms direct / **50 ms contactless** | 115 ms |
+| Time format | **12-hour only** | 24 h + day-of-week + 4-week counter | 24 h + DoW | 24 h + DoW | 24 h + DoW | 24 h + DoW | 24 h + DoW, **4 ms resolution** | 24 h + DoW |
+| Control-code range | **1–255** | 1–511 | 1–511 | 1–511 | 1–511 | 1–511 | 1–511 | 1–511 |
+| Stores start time | yes | yes | yes | yes | yes | yes | yes | yes |
+| Stores finish time | yes | yes | yes | yes | yes | yes | yes | yes |
+| Stores **clear** time | **no** | yes | yes | yes | yes | yes | yes | yes |
+| Stores **check** time | yes (overwritten in "Sprint" mode) | yes | **no** | **no** | yes | yes | yes | bonus data |
+| Contactless (AIR+) | no | no | no | no | no | no | **yes** | no |
+| Status | discontinued | discontinued | current | current | current | current | current | current |
+
+**Behavioural quirks that matter for a simulator:**
+
+* **SI-5** — only the first **30** punches get *code + time*; punches **31–36 store the code only** (you know the
+  order, not the time); beyond 36 nothing is written. **12-hour clock**, no day counter → punch times are ambiguous
+  across noon and useless for events longer than 12 h. Its **330 ms** dwell is ~3× the modern cards' and is the
+  classic cause of the "punched too fast" disqualification.
+* **SI-6** — 64 punches by default. **192 punches only if every station at the event, including the read-out
+  station, has the "SI-Card6 with 192 punches" flag set** in Config+.
+* **SI-8 (30) and pCard (20)** — hard caps, frequently too small for a dense urban sprint.
+* **SI-10 / SI-11 / SIAC** — have a **reserve memory slot**: a second finish punch pushes the *first* finish time
+  into the reserve and writes the second into the main slot. Same for start.
+* **SI-11 and SIAC have an LED** and cannot punch again while the feedback is running. **Programme the CLEAR
+  station with code 1** so the card suppresses feedback after clearing — otherwise the immediately-following CHECK
+  punch silently fails, and with a SIAC **AIR+ is never activated**.
+* **Read-out time** is only published for SIAC: **RFID < 4 s, SRR < 1 s**. Per-card read-out durations are not
+  published. **[UNCERTAIN]**
+* **Card storage time resolution is 1 second** for every passive card. Only the **SIAC** stores to **4 ms**.
+  **Station internal resolution is 1/256 s ≈ 3.9 ms.** Station clock drift: SPORTident quotes **< ±20 s/month**;
+  British Orienteering quotes **~1 s/day**.
+
+## 5.2 SIAC — touch-free (AIR+) punching
+
+### Active range — sources disagree; use the anisotropic model
+
+| Station | SPORTident docs / Organiser Guide | IOF Rules Appendix 4 | British Orienteering (Jul 2025) |
+|---|---|---|---|
+| **BSF7 / BSF8 / BSF9 in AIR+** (normal foot-O control) | **~50 cm** (max approach 40 km/h) | **"~30 cm"** | **"about 30 cm"** |
+| BS11-BS (blue, MTBO) | **180 cm** | — | "up to 120 cm" |
+| BS11-BL (large) | **300 cm** | — | "up to 3 m" |
+| BS11-LA (loop antenna) | up to **600 cm** (lanes to 6 m) | — | — |
+
+The reconciliation is in the 2019 Organiser Guide (p. 81): the field is **anisotropic** — the SIAC records
+*"at a range of **60 cm above** and **30 cm around** the station."*
+**→ Model foot-O AIR+ as ~30 cm lateral / ~60 cm vertical.** (SportIdent separately warns that BS11 stations in
+AIR+ mode can produce stray timestamps *"up to 5 metres"* away — hence the 25 m minimum control separation.)
+
+### Re-punch, feedback, and the beacon caveat
+
+* **Re-punch rule:** *"The SIAC records a second punch if it has been **outside of the beacon station's active
+  field for at least 8 seconds** and then is moved back in."*
+* **In beacon mode the STATION gives no feedback.** *"SI-Stations in beacon mode will NOT give a feedback signal
+  when a SIAC registers a contactless punch."* The **card** beeps and flashes instead:
+  *"The tip of the SIAC flashes when a punch has been recorded and the SIAC emits an audible beep. The flashing
+  continues while the SIAC is in the field of the control."*
+* **A contactless punch is written only to the card** — *"not recorded in the backup memory of the station."*
+  → **There is no station-side evidence for a contactless punch.** This kills the usual "read the backup" appeal.
+
+### Feedback timing (published values)
+
+| Setting | Duration |
+|---|---|
+| **Default** | **≈ 3 s** |
+| Long | ≈ 5 s |
+| Short | **< 1 s** |
+| SIAC "blink only" (no sound) | ≈ 4 s |
+| Any station in **Timing Mode** | always short, regardless of setting |
+
+British Orienteering quotes "2.5 s" in one place and "3 s" in another for the SIAC — both consistent with the ~3 s
+default. **Millisecond-level beep/flash envelopes are not published anywhere.** **[UNCERTAIN]**
+British Orienteering also states the **SI-11** *"flashes for about 7 seconds"* and cannot re-punch while flashing —
+this conflicts with the ~3 s Config+ default and is probably an older firmware. **[UNCERTAIN]**
+
+### Contact punch — the six-step sequence (what "single beep + single flash" actually means)
+
+1. Competitor inserts the card.
+2. Station **reads** the card (fast).
+3. Station **writes** control code + time (the longest step — this is what the dwell time in §5.1 measures).
+4. Station **re-reads to verify** the write.
+5. Station **beeps and flashes**, and writes card number + time to its **backup memory**.
+6. Card is withdrawn.
+
+→ **One beep + one flash, given only after write-verify.** A punch with no feedback is a punch that did not happen.
+
+### Silent-by-design cases (critical — these are *not* faults)
+
+* **CHECK** beeps **only if the card is empty**.
+* **START** gives **no feedback signal if the card is not empty**.
+* **CLEAR** always beeps and blinks on completion.
+* A **full card** produces **no feedback at all** — the station writes nothing but logs the attempt in its backup
+  with error flag **`Err9`**. (A BSF7/8 will still wake from stand-by, so the runner sees a lit display and no beep —
+  the classic "the box is broken" false alarm.)
+
+### Battery
+
+* SIAC expected life **~4 years** (basis: 50 controls × 50 events/year); SportIdent recommends **replacement after
+  3 years**. **Direct contact punching always works even with a flat SIAC battery** (it degrades to an SI-Card 10).
+* **There is no in-race low-battery warning.** The only check is the **SIAC Battery Test** station, pre-race:
+  * **single normal beep + `OK` on the LCD** → battery fine
+  * **several higher-frequency beeps** (British Orienteering: **5 beeps**) + **`WARN`** → below **2.72 V**; will
+    survive this event unless heavy live-timing traffic
+  * **no beep at all** + **`FAIL`** (BO: LCD `LOW`) → below **2.44 V**; contactless will not work
+* Station uptime: BSF8 in AIR+ ≈ **1 500 h / ~120 events**; BSF7 ≈ double; BS11-BS ≈ 75 h; BS11-BL ≈ 90 h.
+  Beacon-mode operating time is **not** reset by contactless punches — only by a direct punch (BSF7/8) or a magnet
+  held ~4 s (BS11). Config+ default stay-active: **beacon 12 h**, classic **4 h**.
+
+### Switching the SIAC on and off
+
+| Action | How | Writes a record? |
+|---|---|---|
+| **ON** | punch the **CHECK** station (the recommended orienteering method, after CLEAR) | yes (check record) |
+| **ON** | punch a **SIAC ON** station | **no**; works even if the card was not cleared |
+| **ON** | punch a **SIAC Test** station | test only |
+| **OFF** | **FINISH** punch (contact or contactless) — *"The SIAC automatically turns off after receiving BC FIN"* | yes |
+| **OFF** | punch a **SIAC OFF** station | no |
+| **OFF** | **auto-timeout** — *"The SIAC remains active for about **20 hours** if it is not switched off. **This timer is reset with each direct or proximity punch.**"* | — |
+
+Active state is indicated by a **slowly blinking green LED in the card tip**.
+*(British Orienteering also claims the SIAC is switched off at download; this is not confirmed in SportIdent's own
+docs — **[UNCERTAIN]**.)*
+
+## 5.3 Station types and the race sequence
+
+**Classic modes (BSF7 / BSF8 / BSF9 / BSM7 / BSM8):**
+`CLR` Clear (CZ *mazání*) · `CHK` Check (*kontrola mazání*) · `STA` Start · `CN` Control · `FIN` Finish.
+**Read-out:** BSM8-D-USB — the SI-Master / main station; downloads cards and can remote-control field stations.
+**AIR+ / beacon modes:** `BC STA`, `BC CN`, `BC FIN`.
+**SIAC special modes:** `SIAC ON`, `SIAC OFF`, `SIAC Test`, `SIAC Battery Test`, `SIAC Radio Readout`.
+**BS11 series** (BS11-BS / BS11-BL / BS11-LA): contactless **only** — `BC START`, `BC FINISH`, `BC CONTROL`.
+**Instruction cards:** `SERVICE/OFF` (stand-by), `Clear Back-up memory`, `Time Master` (sync; "Extended" also
+clears backup memory and sets stay-active time).
+
+### The mandatory sequence
+
+```
+CLEAR  →  CHECK  →  START  →  CONTROL … CONTROL  →  FINISH  →  DOWNLOAD (read-out)
+```
+
+* **Why CLEAR exists.** Stations refuse to write into occupied slots. A card carrying old punches will (a) fail
+  against the new course and (b) once full, produce **no feedback at all**. CLEAR empties every control slot.
+* **Why CHECK exists.** It is the **verification gate**: the CHECK station gives feedback **only if the card is
+  empty**, so it is the last chance to catch an uncleared card before the start — because the START station's
+  failure mode is *silence*, which a runner under pressure will not notice. In AIR+, **CHECK is also what switches
+  the SIAC on.** Both CLEAR and CHECK write timestamps into dedicated fields, so the pre-start procedure is
+  auditable afterwards.
+* British Orienteering recommends an extra **pre-start SIAC Test beacon** between CHECK and the start line:
+  *"Experience shows that a small proportion always slip through without being turned on."*
+* The **Start and Check stations' backup memory identifies who actually started** — essential for missing-runner
+  searches.
+
+**Station backup memory:** max **21 802 punches** / max **1 022 card data records** (BSF8/BSF9); oldest overwritten
+when full.
+
+## 5.4 Split times
+
+* **The card stores absolute punch timestamps** (control code + time per record) — **not** splits.
+* **Splits are computed by the results software** as differences between consecutive punch timestamps.
+  This is why a control unit with a drifted clock corrupts two adjacent splits, not one.
+* IOF **Rule 23.5**: *"In interval start races, times must be rounded **down** to whole seconds."* Mass/chasing
+  starts may display tenths. **Rule 23.6**: timekeeping accuracy relative to competitors in the same class must be
+  **0.5 s or better**.
+* **Rule 24.15**: *"It is **forbidden to eliminate sections of the course on the basis of split times** unless the
+  section has been specified in advance."*
+
+## 5.5 Mispunch → not placed (IOF Competition Rules 2025 §20)
+
+The IOF rules never say "DSQ" or "MP" — they say **"must not be placed"**. `MP` and `DSQ` are national/software
+conventions; Rule 24.1 only requires that *a reason* be shown.
+
+| Rule | Text (2025 edition) |
+|---|---|
+| **20.3** | *"Competitors are **responsible** for punching their control card at each control using the punching unit provided. If one unit is not working, or appears not to be working, a competitor must use the backup provided and **will not be placed if no punch is recorded**."* |
+| **20.4** | *"The control card must clearly show that **all** controls have been visited."* |
+| **20.5** | *"A competitor with a control punch **missing or unidentifiable must not be placed** unless it can be established with certainty that the punch missing or unidentifiable is **not the competitor's fault**. In this exceptional circumstance, other evidence may be used … such as evidence from control officials or cameras or read-out from the control unit. **In all other circumstances, such evidence is not acceptable** and the competitor must not be placed."* Then, for traditional (non-contactless) SportIdent, SFR and Learnjoy: *"If a competitor punches **too fast** and fails to receive the feedback signals, the card will not contain the punch and the competitor must not be placed, **even though the control unit may have recorded the competitor's card number as an error punch**."* Plus a **20 EUR backup-read fee**, refunded if the backup shows a complete (non-error) punch. |
+| **20.6** | *"Competitors who **lose their control card, omit a control or visit controls in the wrong order** must not be placed."* ← **the single clause covering missing control, wrong control and wrong order** |
+| **20.7** | Two contactless cards must be carried **on the same arm**; if the first read out has missing punches, both cards' punches are **merged**. |
+| **20.8** | A **back-up punching method** must be provided. |
+| **20.9** | *"When contactless punching is used, the **last control may have a punching unit with a longer range** than standard and this must be stated in the final bulletin."* |
+| **24.1** | Those who fail to correctly complete the course are shown at the end of the results with no placing and **a reason (e.g. mispunched, retired, disqualified)**. |
+| **App. 4** | Approved systems: Emit EPT · SPORTident · Emit touch-free (2013+) · **SPORTident Air+ (range ~30 cm)** · SFR Classic · Learnjoy. *"With respect to the original SPORTident system, a **backup needle punch must be present at each control**. … If, **and only if**, no feedback signal is received, the competitor must use the backup punch."* |
+
+**The rare SI write bug** (David Rosen, Chair of the IOF Rules Commission): roughly **1 in 100 000 punches**, the
+unit believes it wrote successfully, gives full feedback, and writes a **non-error** backup record, but the card
+holds nothing. If the backup shows a **complete non-error punch**, the competitor **must be reinstated**; an *error*
+punch means the disqualification stands. **This route does not exist for contactless punches** — no station record.
+
+**Wrong-control detection in practice:** results software flags an **extra punch marked with an asterisk** around
+the expected time — that is a visit to the wrong control.
+
+### Game state machine
+
+```
+DSQ conditions (all → "not placed"):
+  • any control code missing from the card
+  • controls present but not in the prescribed order
+  • control card lost
+  • entering / following / crossing any Rule-17.2 symbol (§2.6)
+  • not following a marked route for its entire length (17.3)
+Recoverable:
+  • unit dead + backup punch used correctly            → placed
+  • non-error backup punch proves a card write failure  → reinstated (contact punching only)
+```
+
+## 5.6 Punching start vs start gate vs timed start
+
+| Mode | Mechanics | Rules |
+|---|---|---|
+| **Interval (timed) start** | Start time comes from the start list. Requires the start clock, the results computer and every control unit to be synchronised to a common reference time. **A clock showing competition time must be displayed at the start.** Optional **pre-start** with a clock showing **call-up time**. | 22.1, 22.4, 22.5 |
+| **Start gate** | The elite standard: *"A **time-trial, individual format** is used. **The competitor must have passed the start gate before having access to the map.**"* Start intervals: **Sprint 1 min, Middle 2 min, Long 3 min**. | App. 6 §1.4/2.4/3.4 |
+| **Punching start** | The competitor punches a START unit and that timestamp becomes their start time. Only the control units need to be synchronised **to each other**, not to real time. *"A punching start is more flexible **but is not appropriate for top-level competitions**."* Beware: if a start time exists on the card, results software will generally use it, **overriding** the allocated time. | practice; SPORTident docs |
+| **Mass / chasing start** | *"the placings are determined by the **order in which the competitors finish**"* — finish order across the line governs, not the clock; tenths of a second may be shown. **Finish line ≥ 1.5 m wide** for interval starts, **≥ 3 m** for mass/chasing starts. Course-combination allocation must be **kept secret until after the last competitor has started**. | 24.7, 23.5, 23.3, 12.12 |
+| **Late starters** | Must be permitted to start; a new start time is recorded. Interval start: less than ½ interval late → start immediately; more than ½ interval late → the next available **half** start interval. **Late through own fault → timed from the original start time. Late through the organiser's fault → timed from the new start time.** | 22.9, 22.10 |
+
+**AIR+ design traps:** putting the **START** in beacon mode is inadvisable — a SIAC drifting near the box records a
+premature start. Putting the **FINISH** in beacon mode requires that no runner can pass near it mid-race, because
+passing it **switches their SIAC off**. And because the card flashes for ~3 s and an elite runner covers ~25 m in
+that time, **control separation and the finish run-in must both be ≥ 25 m** (this is the stated rationale behind
+Rule 19.4 / Appendix 2 §3.5.5).
+

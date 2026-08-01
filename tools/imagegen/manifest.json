@@ -51,7 +51,7 @@
       "seed": 10201,
       "tileable": true,
       "pbr": true,
-      "prompt": "Weathered Šumava granite rock surface filling the entire frame, seen straight down. Coarse-grained grey granite with visible quartz, feldspar and biotite crystals, speckled salt-and-pepper mineral texture, shallow weathering pits and fine hairline cracks, patches of pale grey-green and rusty-orange crustose lichen creeping across the stone. Flat rock face, no boulder outline, no edges, no ground around it.",
+      "prompt": "Weathered coarse porphyritic Weinsberg-type granite from the Šumava massif, filling the entire frame, seen straight down. Large blocky pale pink and cream potassium-feldspar phenocrysts up to three centimetres long set at random angles in a coarse grey groundmass of glassy grey quartz, white plagioclase and black flaky biotite. Crystals are clearly individually visible, not a fine even speckle. Rounded weathering hollows, granular decay where crystals have plucked out, fine hairline cracks, and patches of pale grey-green and rusty-orange crustose lichen creeping across the stone. Flat rock face, no boulder outline, no edges, no ground around it, not concrete, not terrazzo, not sandstone.",
       "material": { "heightStrength": 1.2, "roughRange": [0.55, 0.88], "aoStrength": 0.8, "heightBlur": 0.6 },
       "notes": "Šumava is a granite/gneiss massif — this is the dominant rock across the whole map."
     },
@@ -75,7 +75,7 @@
       "seed": 10301,
       "tileable": true,
       "pbr": true,
-      "prompt": "Spruce forest floor seen straight down from above, filling the entire frame. A deep dense litter of fallen brown spruce needles in every direction, a scatter of small dry twigs, a few spent spruce cones and cone scales, fragments of bark, and small tufts of dark green moss and haircap moss pushing through. Damp dark humus visible in the gaps between needles. Uniform coverage across the frame.",
+      "prompt": "Spruce forest floor seen straight down from above, filling the entire frame. A deep dense litter of fallen spruce needles lying in every direction, each needle about one and a half centimetres long, in desaturated olive-brown, greyish tan and faded khaki — muted and cool, never orange, never red, never pink. A scatter of thin grey dry twigs, a few spent spruce cones and loose cone scales, fragments of dark bark, and small tufts of dark green moss pushing through. Damp near-black humus visible in the gaps between the needles. Fine dense detail, uniform coverage across the frame.",
       "material": { "heightStrength": 1.1, "roughRange": [0.72, 0.96], "aoStrength": 0.9, "heightBlur": 0.5 },
       "notes": "Runnable-forest ground plane, the single most-seen texture in the game."
     },

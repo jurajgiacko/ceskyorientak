@@ -386,12 +386,19 @@ export function buildAO(height, w, h, mat) {
   for (const { sigma, weight } of AO_SCALES) {
     const b = blurWrap(height, w, h, sigma * (w / 1024));
     for (let i = 0; i < occ.length; i++) {
-      occ[i] += weight * clamp((b[i] - height[i]) * 3.0, 0, 1);
+      occ[i] += weight * Math.max(0, b[i] - height[i]);
     }
   }
+  /* Normalise against the deep tail rather than an absolute gain: the raw
+     cavity depth depends on how contrasty this particular albedo happened to
+     be, and without this `aoStrength` would mean something different per
+     texture. p98 -> only the deepest 2% of the surface reaches full strength. */
+  const top = Math.max(1e-5, percentile(occ, 0.98));
   const out = Buffer.alloc(w * h);
   for (let i = 0; i < occ.length; i++) {
-    out[i] = clamp(Math.round((1 - occ[i] * mat.aoStrength) * 255), 0, 255);
+    const t = clamp(occ[i] / top, 0, 1);
+    /* gamma < 1 opens up the mid-range so AO is not just a few black pits */
+    out[i] = clamp(Math.round((1 - Math.pow(t, 0.8) * mat.aoStrength) * 255), 0, 255);
   }
   return out;
 }

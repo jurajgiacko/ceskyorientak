@@ -285,3 +285,75 @@ both a gameplay lie and a compliance problem.
 chosen race must not read as bad choices — they read as *unnecessary* ones, with
 the reason stated. That distinction is the difference between the mechanic
 teaching the real protocol and it teaching superstition.
+
+---
+
+## D-013 — SUPERSEDES D-010: no product may move Focus
+
+**Decision.** `Focus` is driven by fatigue and terrain only. No Enervit product
+raises it, directly or indirectly. The mouth-rinse-improves-Focus mechanic
+described in **D-010 is withdrawn**.
+
+**Why the earlier call was wrong.** D-010 was made on solid physiology — the
+rinse effect is real, it is CNS rather than metabolic, and our Middle distance
+sits squarely in the 30–75 min band where it applies. What it did not account
+for is that a stat bar responding to a named product **is a health claim** under
+Art. 2(2)(1) of Reg. 1924/2006, regardless of how well evidenced the underlying
+science is. Evidence and authorisation are different tests, and only one of them
+is the law.
+
+The specifics are unambiguous:
+- **No SKU in the range carries an authorised EU cognition claim.**
+- **Caffeine has no authorised claim at all** — the Commission's draft was
+  vetoed by Parliament in 2016 and never re-tabled. So a caffeinated gel raising
+  a focus bar is a symbolic health claim with no authorisation route.
+
+**Also removed: the indirect path.** `bloodSugar` no longer feeds
+`navigationQuality`. Blood sugar is movable by product, so routing it into
+navigation would rebuild the prohibited pathway one step removed — and an
+inference the consumer draws is still a claim under Art. 3(a), even when every
+individual step is true.
+
+**What we lose is less than it looks.** Carter et al. (2004) infused glucose
+intravenously through a one-hour time trial and measured no performance
+benefit, so carbohydrate availability is not limiting at Sprint or Middle
+duration in the first place. The mechanic we are giving up was the one the
+physiology least supported for those formats.
+
+**What replaces it** is already stronger, and it is a real measured effect
+rather than a borrowed one: the **control-approach mechanic** (see
+`src/sim/athlete.ts`). National-standard orienteers show a heart-rate rise at
+controls of 5 ± 1 bpm; club-standard show 17 ± 4 bpm, and the authors attribute
+the gap directly to failing to plan the next leg before arriving (Bird et al.,
+BJSM 2003). Planning ahead is the measurable difference between a good
+orienteer and an average one — it is free of any product, so it is free of any
+claim, and it is a better mechanic besides.
+
+**The general principle**, worth stating once: where compliance and honesty
+appeared to conflict here, they turned out not to. Every prohibited mechanic we
+found was also the mechanic the evidence supported least. That is not luck —
+the claims regime exists to stop exactly the inferences that thin evidence
+invites.
+
+---
+
+## D-014 — Over-fuelling makes you slower
+
+**Decision.** Carrying and consuming more than the race needs costs time:
+mass on the belt, and gut distress past what the gut can absorb for the elapsed
+duration. `overfuellingPenalty()` in `src/sim/athlete.ts`.
+
+**Why.** Art. 3(c) prohibits a mechanic that rewards consumption without limit,
+so *something* had to cap it. But a cap alone would have been a compliance
+patch. Making over-fuelling actively worse is the more useful design, because it
+is true: 60 g/h in a 32-minute race is not caution, it is dead weight and a
+sour stomach. Enervit's own running guidance says carbohydrate is typically
+unnecessary under 60 minutes, and conditions the 60 g/h figure on efforts over
+two hours.
+
+This is what makes the BEFORE screen a real decision rather than a shopping
+list. A player who loads the belt "to be safe" should finish behind one who
+read the course profile — and when they do, they have learned the actual
+protocol.
+
+Distress is capped so that being wrong costs time rather than ending the race.

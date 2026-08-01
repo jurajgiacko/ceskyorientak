@@ -9,7 +9,9 @@
     "packshotPath is absolute. `traspa` = transparent background, preferred for UI compositing.",
     "phase follows Enervit's own NUTRITION SYSTEM® placement. Products usable in more than one phase carry `alsoPhase`.",
     "See NUTRITION_PROTOCOL.md for the phase timings and CLAIMS_TO_REVIEW.md before writing any player-facing copy about these products.",
-    "nameCz values were read from eshop.enervit.cz and enervitshop.cz, the official Enervit CZ/SK shops operated by the distributor VITAR Sport s.r.o. IMPORTANT: the Czech market does NOT translate SKU names — products are sold under the English brand name with an 'ENERVIT' prefix, and only flavours and pack descriptors are Czech. nameCz is therefore a prefix+suffix transformation, not a translation. Flavour spellings and pack sizes carry transcription risk and should be spot-checked against the live shop before shipping. A null nameCz means the name could NOT be found and must not be guessed."
+    "nameCz values were read from eshop.enervit.cz and enervitshop.cz, the official Enervit CZ/SK shops operated by the distributor VITAR Sport s.r.o. IMPORTANT: the Czech market does NOT translate SKU names — products are sold under the English brand name with an 'ENERVIT' prefix, and only flavours and pack descriptors are Czech. nameCz is therefore a prefix+suffix transformation, not a translation. Flavour spellings and pack sizes carry transcription risk and should be spot-checked against the live shop before shipping. A null nameCz means the name could NOT be found and must not be guessed.",
+    "gameStat.focus is 0.0 for EVERY SKU by design, not by omission. No product may drive the focus stat — see CLAIMS_TO_REVIEW.md §3.1 and §5. This is a compliance boundary, not a balance decision: do not 'fix' it.",
+    "gameStat values are design starting points, not measurements. Only the carbsG/sodiumMg/caffeineMg/proteinG fields carry sourced data. Any player-facing statement derived from a gameStat must clear CLAIMS_TO_REVIEW.md first."
   ],
   "assetRoot": "/Users/jurajgiacko/Projects/JG 2026/VitarSport2026/Context/brand-assets/enervit-brand",
   "skus": [
@@ -55,9 +57,9 @@
         "glycogen": 0.35,
         "bloodSugar": 0.25,
         "hydration": 0.0,
-        "focus": 0.2
+        "focus": 0.0
       },
-      "gameNote": "Blocked on a verified caffeine figure. Caffeine also carries a specific regulatory problem — see CLAIMS_TO_REVIEW.md."
+      "gameNote": "Blocked on a verified caffeine figure. Caffeine also carries a specific regulatory problem — see CLAIMS_TO_REVIEW.md. COMPLIANCE OVERRIDE: focus was zeroed. Per CLAIMS_TO_REVIEW.md no product in the range may drive the focus stat — there is no authorised EU cognition claim on any of these SKUs, and for caffeine there is no authorised claim of any kind (the Commission's draft was vetoed by the European Parliament, P8_TA(2016)0319). A product-driven focus effect would be a symbolic health claim under Art. 2(2)(1) of Reg. 1924/2006. Drive focus from fatigue and terrain only."
     },
     {
       "id": "pre-sport-jelly-cranberry",
@@ -102,9 +104,9 @@
         "glycogen": 0.2,
         "bloodSugar": 0.15,
         "hydration": 0.6,
-        "focus": 0.05
+        "focus": 0.0
       },
-      "gameNote": "The hydration workhorse and the single most important SKU in the mechanic, because it is the one product we can attach an authorised EU health claim to verbatim. Weight the hydration stat toward this SKU."
+      "gameNote": "The hydration workhorse and the single most important SKU in the mechanic, because it is the one product we can attach an authorised EU health claim to verbatim. Weight the hydration stat toward this SKU. COMPLIANCE OVERRIDE: focus was zeroed. Per CLAIMS_TO_REVIEW.md no product in the range may drive the focus stat — there is no authorised EU cognition claim on any of these SKUs, and for caffeine there is no authorised claim of any kind (the Commission's draft was vetoed by the European Parliament, P8_TA(2016)0319). A product-driven focus effect would be a symbolic health claim under Art. 2(2)(1) of Reg. 1924/2006. Drive focus from fatigue and terrain only."
     },
     {
       "id": "isotonic-drink-orange",
@@ -126,9 +128,9 @@
         "glycogen": 0.2,
         "bloodSugar": 0.15,
         "hydration": 0.6,
-        "focus": 0.05
+        "focus": 0.0
       },
-      "gameNote": "Flavour skin over isotonic-drink-lemon."
+      "gameNote": "Flavour skin over isotonic-drink-lemon. COMPLIANCE OVERRIDE: focus was zeroed. Per CLAIMS_TO_REVIEW.md no product in the range may drive the focus stat — there is no authorised EU cognition claim on any of these SKUs, and for caffeine there is no authorised claim of any kind (the Commission's draft was vetoed by the European Parliament, P8_TA(2016)0319). A product-driven focus effect would be a symbolic health claim under Art. 2(2)(1) of Reg. 1924/2006. Drive focus from fatigue and terrain only."
     },
     {
       "id": "gel-citrus",
@@ -172,9 +174,9 @@
         "glycogen": 0.25,
         "bloodSugar": 0.55,
         "hydration": -0.05,
-        "focus": 0.25
+        "focus": 0.0
       },
-      "gameNote": "20 mg is a LOW caffeine dose — roughly a quarter of an espresso. Do not model it as a dramatic focus surge; overstating it is both wrong and a claims risk. Caffeine health claims are NOT authorised in the EU — see CLAIMS_TO_REVIEW.md."
+      "gameNote": "20 mg is a LOW caffeine dose — roughly a quarter of an espresso. Do not model it as a dramatic focus surge; overstating it is both wrong and a claims risk. Caffeine health claims are NOT authorised in the EU — see CLAIMS_TO_REVIEW.md. COMPLIANCE OVERRIDE: focus was zeroed. Per CLAIMS_TO_REVIEW.md no product in the range may drive the focus stat — there is no authorised EU cognition claim on any of these SKUs, and for caffeine there is no authorised claim of any kind (the Commission's draft was vetoed by the European Parliament, P8_TA(2016)0319). A product-driven focus effect would be a symbolic health claim under Art. 2(2)(1) of Reg. 1924/2006. Drive focus from fatigue and terrain only."
     },
     {
       "id": "gel-cola",
@@ -287,9 +289,9 @@
         "glycogen": 0.25,
         "bloodSugar": 0.35,
         "hydration": 0.2,
-        "focus": 0.2
+        "focus": 0.0
       },
-      "gameNote": "Blocked on a verified caffeine figure."
+      "gameNote": "Blocked on a verified caffeine figure. COMPLIANCE OVERRIDE: focus was zeroed. Per CLAIMS_TO_REVIEW.md no product in the range may drive the focus stat — there is no authorised EU cognition claim on any of these SKUs, and for caffeine there is no authorised claim of any kind (the Commission's draft was vetoed by the European Parliament, P8_TA(2016)0319). A product-driven focus effect would be a symbolic health claim under Art. 2(2)(1) of Reg. 1924/2006. Drive focus from fatigue and terrain only."
     },
     {
       "id": "competition-bar-orange",
@@ -356,9 +358,9 @@
         "glycogen": 0.5,
         "bloodSugar": 0.6,
         "hydration": -0.1,
-        "focus": 0.5
+        "focus": 0.0
       },
-      "gameNote": "100 mg caffeine is a genuine dose — five times the Enervit Gel Raspberry. This is the strongest focus item in the range and the one most likely to tempt non-compliant copy. It also triggers the mandatory EU high-caffeine labelling threshold; see CLAIMS_TO_REVIEW.md before writing a single word about it."
+      "gameNote": "100 mg caffeine is a genuine dose — five times the Enervit Gel Raspberry. This is the strongest focus item in the range and the one most likely to tempt non-compliant copy. It also triggers the mandatory EU high-caffeine labelling threshold; see CLAIMS_TO_REVIEW.md before writing a single word about it. COMPLIANCE OVERRIDE: focus was zeroed. Per CLAIMS_TO_REVIEW.md no product in the range may drive the focus stat — there is no authorised EU cognition claim on any of these SKUs, and for caffeine there is no authorised claim of any kind (the Commission's draft was vetoed by the European Parliament, P8_TA(2016)0319). A product-driven focus effect would be a symbolic health claim under Art. 2(2)(1) of Reg. 1924/2006. Drive focus from fatigue and terrain only."
     },
     {
       "id": "carbo-gel-lemon-sodium",
@@ -563,9 +565,9 @@
         "glycogen": 0.6,
         "bloodSugar": 0.4,
         "hydration": 0.25,
-        "focus": 0.05
+        "focus": 0.0
       },
-      "gameNote": "A full hour of Long-race fuelling in one bottle. Hydration gain is deliberately lower than Isotonic Drink at the same 500 ml because the concentration is more than double — the same volume of water doing more carbohydrate work and less hydration work. That difference is the whole reason both SKUs exist, and it is a mechanic worth making visible."
+      "gameNote": "A full hour of Long-race fuelling in one bottle. Hydration gain is deliberately lower than Isotonic Drink at the same 500 ml because the concentration is more than double — the same volume of water doing more carbohydrate work and less hydration work. That difference is the whole reason both SKUs exist, and it is a mechanic worth making visible. COMPLIANCE OVERRIDE: focus was zeroed. Per CLAIMS_TO_REVIEW.md no product in the range may drive the focus stat — there is no authorised EU cognition claim on any of these SKUs, and for caffeine there is no authorised claim of any kind (the Commission's draft was vetoed by the European Parliament, P8_TA(2016)0319). A product-driven focus effect would be a symbolic health claim under Art. 2(2)(1) of Reg. 1924/2006. Drive focus from fatigue and terrain only."
     },
     {
       "id": "isocarb-sachet-mild-lemon",
@@ -586,9 +588,9 @@
         "glycogen": 0.6,
         "bloodSugar": 0.4,
         "hydration": 0.25,
-        "focus": 0.05
+        "focus": 0.0
       },
-      "gameNote": "Pre-portioned form of isocarb. Mechanically identical; useful in career mode as the 'travel' variant."
+      "gameNote": "Pre-portioned form of isocarb. Mechanically identical; useful in career mode as the 'travel' variant. COMPLIANCE OVERRIDE: focus was zeroed. Per CLAIMS_TO_REVIEW.md no product in the range may drive the focus stat — there is no authorised EU cognition claim on any of these SKUs, and for caffeine there is no authorised claim of any kind (the Commission's draft was vetoed by the European Parliament, P8_TA(2016)0319). A product-driven focus effect would be a symbolic health claim under Art. 2(2)(1) of Reg. 1924/2006. Drive focus from fatigue and terrain only."
     },
     {
       "id": "salt-caps",
@@ -610,9 +612,9 @@
         "glycogen": 0.0,
         "bloodSugar": 0.0,
         "hydration": 0.3,
-        "focus": 0.05
+        "focus": 0.0
       },
-      "gameNote": "Pure electrolyte, zero carbohydrate — the only SKU that isolates the hydration axis, which makes it the cleanest way to teach what sodium actually does. Its honest place in this game is narrow: for races of 15–90 minutes in Czech August conditions the evidence for needing supplemental sodium is weak. Model it as situational (hot weather, back-to-back race days) rather than as a free stat gain, and note that Enervit's own page carries a 'helps reduce tiredness and fatigue' line whose exact wording is an amber item in CLAIMS_TO_REVIEW.md."
+      "gameNote": "Pure electrolyte, zero carbohydrate — the only SKU that isolates the hydration axis, which makes it the cleanest way to teach what sodium actually does. Its honest place in this game is narrow: for races of 15–90 minutes in Czech August conditions the evidence for needing supplemental sodium is weak. Model it as situational (hot weather, back-to-back race days) rather than as a free stat gain, and note that Enervit's own page carries a 'helps reduce tiredness and fatigue' line whose exact wording is an amber item in CLAIMS_TO_REVIEW.md. COMPLIANCE OVERRIDE: focus was zeroed. Per CLAIMS_TO_REVIEW.md no product in the range may drive the focus stat — there is no authorised EU cognition claim on any of these SKUs, and for caffeine there is no authorised claim of any kind (the Commission's draft was vetoed by the European Parliament, P8_TA(2016)0319). A product-driven focus effect would be a symbolic health claim under Art. 2(2)(1) of Reg. 1924/2006. Drive focus from fatigue and terrain only."
     },
     {
       "id": "r2-recovery-drink",
@@ -633,9 +635,9 @@
         "glycogen": 0.7,
         "bloodSugar": 0.3,
         "hydration": 0.35,
-        "focus": 0.1
+        "focus": 0.0
       },
-      "gameNote": "The AFTER anchor and the mechanic that carries career mode: what the player drinks after Thursday's Middle sets the glycogen they start Friday's Long with. Note the protein dose is small for recovery purposes — if the design wants a genuine carb+protein recovery story it should pair this with 100% Whey Protein rather than overstate R2 on its own."
+      "gameNote": "The AFTER anchor and the mechanic that carries career mode: what the player drinks after Thursday's Middle sets the glycogen they start Friday's Long with. Note the protein dose is small for recovery purposes — if the design wants a genuine carb+protein recovery story it should pair this with 100% Whey Protein rather than overstate R2 on its own. COMPLIANCE OVERRIDE: focus was zeroed. Per CLAIMS_TO_REVIEW.md no product in the range may drive the focus stat — there is no authorised EU cognition claim on any of these SKUs, and for caffeine there is no authorised claim of any kind (the Commission's draft was vetoed by the European Parliament, P8_TA(2016)0319). A product-driven focus effect would be a symbolic health claim under Art. 2(2)(1) of Reg. 1924/2006. Drive focus from fatigue and terrain only."
     },
     {
       "id": "whey-protein-cocoa",
@@ -702,9 +704,9 @@
         "glycogen": 0.0,
         "bloodSugar": 0.0,
         "hydration": 0.15,
-        "focus": 0.1
+        "focus": 0.0
       },
-      "gameNote": "Placeholder stats pending the magnesium dose. Note the internal briefing records that Enervit expected CZ regulatory sign-off on magnesium in late May 2026 — there is an open regulatory thread here the client will know about. Resist any 'prevents cramp' framing; that is a red-list phrasing."
+      "gameNote": "Placeholder stats pending the magnesium dose. Note the internal briefing records that Enervit expected CZ regulatory sign-off on magnesium in late May 2026 — there is an open regulatory thread here the client will know about. Resist any 'prevents cramp' framing; that is a red-list phrasing. COMPLIANCE OVERRIDE: focus was zeroed. Per CLAIMS_TO_REVIEW.md no product in the range may drive the focus stat — there is no authorised EU cognition claim on any of these SKUs, and for caffeine there is no authorised claim of any kind (the Commission's draft was vetoed by the European Parliament, P8_TA(2016)0319). A product-driven focus effect would be a symbolic health claim under Art. 2(2)(1) of Reg. 1924/2006. Drive focus from fatigue and terrain only."
     }
   ]
 }
