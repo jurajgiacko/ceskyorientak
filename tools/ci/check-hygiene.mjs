@@ -27,6 +27,8 @@ const FORBIDDEN = [
   [/^tools\/audio\/\.build\//, 'audio build intermediate'],
   [/^research\/raw\//, 'raw research downloads'],
   [/\.(DS_Store|log|tmp|swp)$/, 'OS or editor scratch'],
+  [/__pycache__\//, 'Python bytecode cache'],
+  [/\.pyc$/, 'Python bytecode'],
   [/^dist\//, 'build output'],
   [/^node_modules\//, 'dependencies'],
   [/\.env(\.|$)/, 'environment file — may contain secrets'],
