@@ -58,7 +58,10 @@ from lib import cli, exporter, lod, mat, mesh as M, uvtools  # noqa: E402
 
 NAME = "boulder-set"
 VARIANTS = 6
-TARGET_LOD0 = 1470       # tris per variant -> 8820 total, budget is 9000
+# 1420 x 6 = 8520. Trimmed from 1470 to buy headroom under the *project-wide*
+# 40k LOD0 ceiling, which the trees dominate; at this density a 3% cut is not
+# visible on a boulder, whereas it would be on a spruce crown.
+TARGET_LOD0 = 1420
 RATIOS = (1.0, 0.40, 0.10)
 
 # The palette constants are *linear* base colours: GRANITE_MID 0.235 linear is
@@ -196,7 +199,10 @@ def relief(obj, amplitude, freq, octaves=2, offset=(0, 0, 0), mode="plain",
         for _ in range(octaves):
             s = bnoise.noise(p * f)
             if mode == "billow":
-                s = abs(s) * 2.4 - 0.45
+                # sqrt(s^2 + eps) rather than abs(s): the fold at the zero
+                # crossing gets a finite radius, so neighbouring vertices
+                # cannot displace past each other and pinch into a flap.
+                s = math.sqrt(s * s + 0.02) * 2.4 - 0.45
             elif mode == "groove":
                 s = max(0.0, 1.0 - abs(s) * width)
             total += s * amp
@@ -304,7 +310,9 @@ def build_boulder(index, spec, rng):
     # triangles back, and it stops the boulder reading as a floating pebble.
     mn, mx = M.bounds(obj)
     height = mx.z - mn.z
-    M.cut_plane(obj, (0.0, 0.0, mn.z + height * 0.16), (0, 0, -1), flatten=1.0)
+    # Kept shallow on purpose: trim much further up and the projection folds
+    # the outward-bulging flank back over itself.
+    M.cut_plane(obj, (0.0, 0.0, mn.z + height * 0.09), (0, 0, -1), flatten=1.0)
 
     M.merge_doubles(obj, 1e-4)
     recentre(obj, sink=height * 0.10)

@@ -9,3 +9,6 @@ research/raw/
 tools/imagegen/.cache/
 
 tools/blender/.cache/
+tools/audio/renders/
+tools/imagegen/.cache/
+tools/blender/previews/*.blend

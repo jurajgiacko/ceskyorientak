@@ -30,9 +30,19 @@
  *    peak-to-peak swing of the fitted component relative to mean luminance.
  *    Textures must be flat-lit, so both must be near zero.
  *
+ * SCOPE. The build gate is the albedo, because that is the map the tiling pass
+ * actually operates on and the only one where "baked lighting" is a meaningful
+ * concept — a brightness ramp in a roughness map just means one side of the
+ * material is genuinely rougher. normal/roughness/AO are derived from the
+ * tiled albedo using exclusively wrap-around operators, so they inherit its
+ * tiling by construction; `--selftest` proves that mechanically by checking
+ * the derivation is equivariant under a wrap shift. Running with `--map=`
+ * anything other than albedo is therefore diagnostic and never fails the build.
+ *
  * Usage:
- *   node tools/imagegen/validate.mjs
- *   node tools/imagegen/validate.mjs --map=normal --size=1024 --json
+ *   node tools/imagegen/validate.mjs                 # the gate
+ *   node tools/imagegen/validate.mjs --selftest      # prove derived maps wrap
+ *   node tools/imagegen/validate.mjs --map=normal --size=512 --json
  */
 import { readFileSync, existsSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
@@ -74,6 +84,74 @@ const SIZE = sizeArg ? Number(sizeArg.slice(7)) : 1024;
 const onlyArg = args.find((a) => a.startsWith('--only='));
 const ONLY = onlyArg ? new Set(onlyArg.slice(7).split(',')) : null;
 const JSON_OUT = args.includes('--json');
+const SELFTEST = args.includes('--selftest');
+const GATED = MAP === 'albedo';
+
+/* ------------------------------------------------------- derived-map proof */
+
+/**
+ * The derived maps tile because every operator in their derivation wraps.
+ * Rather than assert that, check it: a pipeline built only from wrap-around
+ * operators is equivariant under a circular shift, so
+ *
+ *     maps(roll(albedo, d))  ==  roll(maps(albedo), d)
+ *
+ * must hold to the last bit. If it does, no shift of the source can expose an
+ * edge the derivation treats specially — which is exactly what "tileable"
+ * means for a derived map. If someone later swaps in a clamped blur or a
+ * non-wrapping Sobel, this fails immediately.
+ */
+async function selftest() {
+  const { buildHeight, buildNormal, buildRoughness, buildAO } = await import('./pbr.mjs');
+  const N = 128, D = 37; // deliberately not a factor of N
+  const rng = (() => { let s = 12345; return () => (s = (s * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff; })();
+  const lin = new Float32Array(N * N);
+  for (let i = 0; i < lin.length; i++) lin[i] = rng();
+  /* add low-frequency structure so the large-radius passes are exercised too */
+  for (let y = 0; y < N; y++) {
+    for (let x = 0; x < N; x++) {
+      lin[y * N + x] = clamp01(lin[y * N + x] * 0.4 +
+        0.3 + 0.3 * Math.sin(2 * Math.PI * x / N) * Math.cos(4 * Math.PI * y / N));
+    }
+  }
+  const roll = (src, ch) => {
+    const out = src instanceof Float32Array ? new Float32Array(src.length) : Buffer.alloc(src.length);
+    for (let y = 0; y < N; y++) {
+      for (let x = 0; x < N; x++) {
+        const sy = (y - D + N) % N, sx = (x - D + N) % N;
+        for (let c = 0; c < ch; c++) out[(y * N + x) * ch + c] = src[(sy * N + sx) * ch + c];
+      }
+    }
+    return out;
+  };
+  const mat = { heightStrength: 1.2, roughRange: [0.5, 0.9], aoStrength: 0.85, heightBlur: 0.7 };
+  const derive = (L) => {
+    const hgt = buildHeight(L, N, N, mat);
+    return {
+      normal: { buf: buildNormal(hgt, N, N, mat.heightStrength), ch: 3 },
+      roughness: { buf: buildRoughness(L, N, N, mat), ch: 1 },
+      ao: { buf: buildAO(hgt, N, N, mat), ch: 1 }
+    };
+  };
+  const a = derive(lin);
+  const b = derive(roll(lin, 1));
+  let ok = true;
+  console.log(`\nwrap-equivariance selftest · ${N}x${N}, shift ${D}px\n`);
+  for (const name of ['normal', 'roughness', 'ao']) {
+    const expect = roll(a[name].buf, a[name].ch);
+    const got = b[name].buf;
+    let maxDiff = 0;
+    for (let i = 0; i < got.length; i++) maxDiff = Math.max(maxDiff, Math.abs(got[i] - expect[i]));
+    const pass = maxDiff <= 1; // 1 LSB of rounding slack
+    ok &&= pass;
+    console.log(`  ${name.padEnd(12)} max |maps(roll(A)) - roll(maps(A))| = ${maxDiff}   ${pass ? 'PASS' : 'FAIL'}`);
+  }
+  console.log(`\n${ok ? 'derived maps are wrap-equivariant: they tile exactly as well as the albedo'
+    : 'a non-wrapping operator has been introduced into the derivation'}\n`);
+  process.exit(ok ? 0 : 3);
+}
+
+const clamp01 = (v) => (v < 0 ? 0 : v > 1 ? 1 : v);
 
 /* -------------------------------------------------------------------- FFT */
 
@@ -244,6 +322,8 @@ function illumination(L, w, h) {
 
 /* ------------------------------------------------------------------- main */
 
+if (SELFTEST) await selftest();
+
 const manifest = JSON.parse(readFileSync(MANIFEST_PATH, 'utf8'));
 const targets = manifest.assets.filter(
   (a) => a.tileable && (!ONLY || ONLY.has(a.id))
@@ -274,8 +354,10 @@ for (const a of targets) {
   if (sx.ratio > th.seamRatio || sx.z > th.seamZ) fail.push('seam-x');
   if (sy.ratio > th.seamRatio || sy.z > th.seamZ) fail.push('seam-y');
   if (rep.peak > th.acfPeak) fail.push('repeat');
-  if (ill.ramp > th.illumRamp) fail.push('ramp');
-  if (ill.vignette > th.illumVignette) fail.push('vignette');
+  /* Baked lighting is only a meaningful concept for albedo. A ramp in a
+     roughness or AO map is the material genuinely varying, not a lighting bug. */
+  if (GATED && ill.ramp > th.illumRamp) fail.push('ramp');
+  if (GATED && ill.vignette > th.illumVignette) fail.push('vignette');
 
   rows.push({ id: a.id, sx, sy, rep, ill, th, fail, pass: fail.length === 0, override: !!a.validate });
 }
@@ -284,7 +366,8 @@ if (JSON_OUT) {
   console.log(JSON.stringify({ map: MAP, size: SIZE, thresholds: THRESHOLDS, rows }, null, 2));
 } else {
   const f = (v, d = 2) => (Number.isFinite(v) ? v.toFixed(d) : ' n/a');
-  console.log(`\ntiling validation · map=${MAP} · ${SIZE}px`);
+  console.log(`\ntiling validation · map=${MAP} · ${SIZE}px` +
+    (GATED ? '  [BUILD GATE]' : '  [diagnostic only — derived map, never fails the build]'));
   console.log(
     `thresholds: seam ratio<=${THRESHOLDS.seamRatio} z<=${THRESHOLDS.seamZ} · ` +
     `acf peak<=${THRESHOLDS.acfPeak} · ramp<=${THRESHOLDS.illumRamp} · vign<=${THRESHOLDS.illumVignette}\n`
@@ -316,4 +399,4 @@ if (JSON_OUT) {
   }
 }
 
-if (rows.some((r) => !r.missing && !r.pass)) process.exit(2);
+if (GATED && rows.some((r) => !r.missing && !r.pass)) process.exit(2);

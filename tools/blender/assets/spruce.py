@@ -13,7 +13,7 @@ botany rather than a generic "cone of blobs":
     rotated by a golden angle against the previous one so the rings do not line
     up into visible columns;
   * every branch leaves the trunk sweeping up, then falls away: the tip z is
-    ``L * (sin(rise) * s - droop * s**2.6)``.  ``rise`` grows and ``droop``
+    ``L * (sin(rise) * s - droop * s**2.15)``.  ``rise`` grows and ``droop``
     shrinks towards the top of the crown, which is what produces the drooping
     lower / upswept upper habit that identifies Norway spruce.
 
@@ -41,14 +41,17 @@ import sys
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 import bpy  # noqa: E402
+import numpy as np  # noqa: E402
 from mathutils import Matrix, Vector  # noqa: E402
 
-from lib import cli, exporter, lod, mat, mesh as M, scatter, tex  # noqa: E402
+from lib import cli, exporter, lod, mat, mesh as M, scatter, tex, uvtools  # noqa: E402
 
 NAME = "spruce"
-ATLAS_SIZE = 1024
+ATLAS_SIZE = 512
 ATLAS_CELLS = 2
-IMPOSTER_PX = 512       # imposter render height in pixels
+IMPOSTER_PX = 256       # imposter render height in pixels
+IMPOSTER_MAX_W = 128    # ...capped in width; LOD2 is only ever seen far away
+BARK_TEX = ("public", "textures", "bark-spruce", "albedo@256.webp")
 
 
 # ---------------------------------------------------------------------------
@@ -116,6 +119,74 @@ def join_keep_uv(objs, name):
     return obj
 
 
+def bake_bark_png(src, dst, size=128, gain=(0.60, 0.58, 0.56)):
+    """Downscale and darken the shared bark albedo into the asset cache.
+
+    Two reasons not to embed the shipped file as-is.  It is a bright pine-ish
+    brown, where Norway spruce in a closed stand is a near-black grey-brown --
+    and the preview showed the untouched map rendering as a pale, almost white
+    pole.  And embedding a .webp makes EXT_texture_webp a *required* glTF
+    extension, so any loader in the chain that lacks it refuses the whole file.
+    A 128 px PNG costs about the same bytes and has neither problem.
+
+    The material keeps the name `spruce_bark`, so a runtime that wants the full
+    normal/roughness/ao set can still bind it by name.
+    """
+    img = bpy.data.images.load(src, check_existing=False)
+    w, h = img.size
+    px = np.array(img.pixels[:], np.float32).reshape(h, w, 4)
+    bpy.data.images.remove(img)
+    k = max(1, min(w, h) // int(size))
+    if k > 1:
+        hh, ww = (h // k) * k, (w // k) * k
+        px = px[:hh, :ww].reshape(h // k, k, w // k, k, 4).mean(axis=(1, 3))
+    for c in range(3):
+        px[..., c] *= gain[c]
+    px[..., 3] = 1.0
+    return tex.write_png(dst, (np.clip(px, 0.0, 1.0) * 255.0 + 0.5).astype(np.uint8))
+
+
+def force_alpha_clip(material, cutoff=0.4):
+    """Make the glTF exporter emit alphaMode MASK instead of BLEND.
+
+    Blender 4.2 stopped using `blend_method` as the source of truth for alpha:
+    the exporter now reads the node graph and only calls a material masked when
+    a Math node thresholds the alpha.  `mat.image_material(alpha_mode="CLIP")`
+    therefore still exports as BLEND, which for a forest of tens of thousands of
+    foliage cards means per-fragment sorting instead of a cheap discard -- and
+    visible sort popping.  Adding the threshold node is the documented way to
+    get MASK back.
+    """
+    nt = material.node_tree
+    bsdf = nt.nodes.get("BSDF")
+    src = nt.nodes.get("BASE_TEX")
+    alpha_in = bsdf.inputs.get("Alpha") if bsdf else None
+    if src is None or alpha_in is None:
+        return material
+    for link in list(alpha_in.links):
+        nt.links.remove(link)
+    gate = nt.nodes.new("ShaderNodeMath")
+    gate.operation = "GREATER_THAN"
+    gate.location = (-40, -320)
+    gate.inputs[1].default_value = cutoff
+    nt.links.new(src.outputs["Alpha"], gate.inputs[0])
+    nt.links.new(gate.outputs["Value"], alpha_in)
+    return material
+
+
+def set_tiling(material, mode="REPEAT"):
+    """`mat.image_material` hard-codes CLIP, which exports as CLAMP_TO_EDGE.
+
+    Right for atlas cards (it stops one cell bleeding into the next), fatal for
+    a tiling bark map: every texel past u=1 turns into the smeared edge column
+    and the trunk comes out a flat pale streak.
+    """
+    src = material.node_tree.nodes.get("BASE_TEX")
+    if src is not None:
+        src.extension = mode
+    return material
+
+
 def dense_spray(canvas, rng, cx, cy, w, h):
     """One atlas cell: several layered lib.tex.spruce_spray shoots.
 
@@ -150,10 +221,10 @@ VARIANTS = [
         height=6.1,
         base_r=0.072, tip_r=0.006, lean=0.008,
         crown_lo=0.030, crown_hi=0.965,   # crown extent as a fraction of height
-        whorls=16, per_whorl=(5, 6),
+        whorls=14, per_whorl=(5, 6),
         reach=1.32, reach_pow=0.62, reach_var=0.13,
-        rise=(0.26, 0.66), droop=(0.34, 0.06),
-        card_min=0.21, card_max=0.55,
+        rise=(0.22, 0.62), droop=(0.52, 0.08),
+        card_min=0.30, card_max=0.72,
         density=1.20, drop=0.0,
         dead=0,
     ),
@@ -162,35 +233,37 @@ VARIANTS = [
         height=27.6,
         base_r=0.295, tip_r=0.011, lean=0.013,
         crown_lo=0.255, crown_hi=0.980,   # ~7 m of clean bare trunk
-        whorls=20, per_whorl=(5, 6),
+        whorls=22, per_whorl=(5, 6),
         reach=3.55, reach_pow=0.70, reach_var=0.15,
-        rise=(0.13, 0.62), droop=(0.62, 0.09),
-        card_min=0.44, card_max=1.45,
+        rise=(0.10, 0.58), droop=(0.86, 0.12),
+        card_min=0.78, card_max=1.80,
         density=1.0, drop=0.0,
-        dead=0,
+        dead=15,                          # shaded-out stubs on the bare bole
     ),
     dict(
         key="v2", label="old",
         height=31.6,
         base_r=0.355, tip_r=0.013, lean=0.019,
         crown_lo=0.360, crown_hi=0.985,   # live crown starts ~11.4 m up
-        whorls=17, per_whorl=(4, 6),
+        whorls=18, per_whorl=(4, 6),
         reach=3.35, reach_pow=0.56, reach_var=0.34,   # irregular, ragged
-        rise=(0.10, 0.55), droop=(0.68, 0.10),
-        card_min=0.44, card_max=1.45,
+        rise=(0.06, 0.52), droop=(0.96, 0.14),
+        card_min=0.78, card_max=1.80,
         density=0.82, drop=0.15,          # 15 % of card stations left empty
-        dead=8,                           # bare dead stubs low on the trunk
+        dead=20,                          # bare dead stubs low on the trunk
     ),
 ]
 
 # geometry resolution per LOD level
 QUALITY = [
-    dict(trunk_sides=7, trunk_pts=12, branch_sides=3, branch_pts=4,
+    dict(trunk_sides=6, trunk_pts=11, branch_sides=3, branch_pts=4,
          whorl_frac=1.00, per_station=3, station_a=2.0, station_b=1.25,
-         station_max=9, card_fill=2.45, card_mul=1.0, apex_cards=8),
+         station_max=9, card_fill=2.80, card_mul=1.0, min_mul=1.0,
+         apex_cards=8),
     dict(trunk_sides=4, trunk_pts=6, branch_sides=3, branch_pts=4,
          whorl_frac=0.50, per_station=2, station_a=1.2, station_b=0.70,
-         station_max=5, card_fill=2.55, card_mul=2.05, apex_cards=3),
+         station_max=5, card_fill=2.90, card_mul=2.05, min_mul=1.15,
+         apex_cards=3),
 ]
 
 
@@ -262,7 +335,7 @@ def branch_fn(origin, azim, length, rise, droop, sway):
 
     def f(s):
         rad = length * s
-        z = length * (math.sin(rise) * s - droop * (s ** 2.6))
+        z = length * (math.sin(rise) * s - droop * (s ** 2.15))
         lat = math.sin(s * 2.5) * sway * length
         return Vector((ox + dx * rad - dy * lat,
                        oy + dy * rad + dx * lat,
@@ -305,6 +378,19 @@ def remap_card_uv(obj, rect, flip_u=False):
     return obj
 
 
+def cell_rect(index):
+    """Atlas cell cropped to the ink.
+
+    `tex.atlas_uv_rect` hands back the whole cell, but a spray never reaches
+    the corners, so a card mapped to the full rect spends a chunk of its area
+    on transparent texels -- i.e. on triangles that draw nothing.  Trimming the
+    margins raises the foliage-per-triangle ratio for free.
+    """
+    x0, y0, x1, y1 = tex.atlas_uv_rect(index, cells=ATLAS_CELLS, inset=0.0)
+    w, h = x1 - x0, y1 - y0
+    return (x0 + w * 0.055, y0 + h * 0.012, x1 - w * 0.055, y1 - h * 0.012)
+
+
 def place_card(out, rng, name, pos, direction, height, width, roll):
     """One needle-spray quad whose local +Z runs along `direction`.
 
@@ -316,8 +402,7 @@ def place_card(out, rng, name, pos, direction, height, width, roll):
     mtx = (Matrix.Translation(pos) @ frame @ Matrix.Rotation(roll, 4, "Z"))
     c = scatter.card(name, width, height, matrix=mtx, pivot_bottom=True)
     cell = rng.randint(0, ATLAS_CELLS * ATLAS_CELLS - 1)
-    remap_card_uv(c, tex.atlas_uv_rect(cell, cells=ATLAS_CELLS),
-                  flip_u=rng.chance(0.5))
+    remap_card_uv(c, cell_rect(cell), flip_u=rng.chance(0.5))
     out.append(c)
     return c
 
@@ -329,11 +414,11 @@ def dress_branch(out, rng, f, length, spec, q, tag):
     span = 0.92
     step = span / n_st
     hc = clamp(q["card_fill"] * step * length * q["card_mul"],
-               spec["card_min"] * q["card_mul"], spec["card_max"] * q["card_mul"])
+               spec["card_min"] * q["min_mul"], spec["card_max"] * q["card_mul"])
 
     per = q["per_station"]
     for i in range(n_st):
-        s = 0.08 + step * (i + rng.uniform(0.15, 0.85))
+        s = 0.02 + step * (i + rng.uniform(0.02, 0.72))
         if spec["drop"] > 0.0 and rng.chance(spec["drop"]):
             continue
         base = f(clamp(s, 0.0, 1.0))
@@ -345,14 +430,14 @@ def dress_branch(out, rng, f, length, spec, q, tag):
                 + rng.uniform(-0.26, 0.26)
             d = Matrix.Rotation(splay, 4, "Z") @ tan
             # shoots hang: this is what keeps the drooping habit in silhouette
-            d = d + Vector((0.0, 0.0, rng.uniform(-0.58, 0.06)))
+            d = d + Vector((0.0, 0.0, rng.uniform(-0.85, 0.05)))
             if d.length < 1e-6:
                 d = tan.copy()
             d.normalize()
             roll = (k / float(per)) * math.pi + rng.uniform(-0.35, 0.35)
             off = Vector(rng.offset3(hc * 0.18))
             place_card(out, rng, "%s_c%d_%d" % (tag, i, k), base + off, d,
-                       hc * scale, hc * 1.08 * scale, roll)
+                       hc * scale, hc * 1.22 * scale, roll)
 
 
 def dress_apex(out, rng, pts, spec, q, top_z):
@@ -418,41 +503,50 @@ def build_tree(spec, rng, level, bark, deadwood, foliage):
             f = branch_fn(origin, azim, length,
                           br.vary(rise, 0.25), br.vary(droop, 0.22),
                           br.uniform(-0.09, 0.09))
+            bpts = (q["branch_pts"] if length > 0.42 * spec["reach"]
+                    else max(3, q["branch_pts"] - 2))
             wood.append(branch_tube("%s_w%db%d" % (spec["key"], w, b), f,
-                                    length, q["branch_sides"], q["branch_pts"]))
+                                    length, q["branch_sides"], bpts))
             if br.chance(spec["density"]):
                 dress_branch(cards, br.sub("f"), f, length, spec, q,
                              "%s_w%db%d" % (spec["key"], w, b))
 
     dress_apex(cards, rng.sub("apex"), pts, spec, q, h)
 
-    # dead bare lower branches -- old Sumava spruce keep them for decades
+    # Dead bare lower branches.  In a closed stand the canopy shades the lower
+    # whorls out and the tree keeps the stubs for decades -- short, bare, grey,
+    # angled down.  This is the single feature that says "spruce forest", so
+    # both the mature and the old variant carry them.
     dead = []
     if spec["dead"] and level == 0:
         dr = rng.sub("dead")
         for i in range(spec["dead"]):
             t = i / float(max(1, spec["dead"] - 1))
-            z = lerp(h * 0.085, h * (spec["crown_lo"] - 0.02), t)
+            z = lerp(h * 0.075, h * (spec["crown_lo"] - 0.012), t)
             centre, r_stem = trunk_at(pts, radii, z)
-            azim = ga * (i * 3 + 1) + dr.uniform(-0.4, 0.4)
-            length = dr.uniform(0.55, 1.9) * (0.5 + 0.9 * t)
-            f = branch_fn((centre.x + math.cos(azim) * r_stem * 0.85,
-                           centre.y + math.sin(azim) * r_stem * 0.85, z),
-                          azim, length, dr.uniform(0.02, 0.16),
-                          dr.uniform(0.55, 0.95), dr.uniform(-0.12, 0.12))
+            azim = ga * (i * 3 + 1) + dr.uniform(-0.5, 0.5)
+            length = dr.uniform(0.35, 0.95) * (0.75 + 0.5 * t)
+            f = branch_fn((centre.x + math.cos(azim) * r_stem * 0.88,
+                           centre.y + math.sin(azim) * r_stem * 0.88, z),
+                          azim, length, dr.uniform(-0.22, -0.04),
+                          dr.uniform(0.30, 0.60), dr.uniform(-0.14, 0.14))
             dead.append(branch_tube("%s_dead%d" % (spec["key"], i), f, length,
-                                    4, 5, thick=0.85))
+                                    4, 3, thick=1.7))
 
     mat.assign_all(trunk, bark)
+    # bark tiles up the stem instead of stretching once over 28 m
+    uvtools.cylinder_project(trunk, scale=1.5, axis="Z", u_repeat=2.0)
     parts = [trunk]
     if wood:
         w_obj = join_keep_uv(wood, "%s_branches" % spec["key"])
         M.shade_smooth(w_obj, 60.0)
+        uvtools.cube_project(w_obj, 0.30)
         mat.assign_all(w_obj, bark)
         parts.append(w_obj)
     if dead:
         d_obj = join_keep_uv(dead, "%s_deadwood" % spec["key"])
         M.shade_smooth(d_obj, 60.0)
+        uvtools.cube_project(d_obj, 0.22)
         mat.assign_all(d_obj, deadwood)
         parts.append(d_obj)
     if cards:
@@ -530,6 +624,9 @@ def render_imposter(obj, path, size=IMPOSTER_PX):
     height = max(z_top - z_bot, 1e-3)
     res_y = int(size)
     res_x = max(8, int(round(res_y * (half_w * 2.0) / height / 4.0)) * 4)
+    if res_x > IMPOSTER_MAX_W:      # keep the aspect, shrink both axes
+        res_y = max(8, int(round(res_y * IMPOSTER_MAX_W / float(res_x) / 4.0)) * 4)
+        res_x = IMPOSTER_MAX_W
     width = height * (res_x / float(res_y))
 
     hidden = [(o, o.hide_render) for o in bpy.data.objects]
@@ -654,10 +751,23 @@ def main():
     needles = tex.load_image(atlas_path, "spruce_needles")
     foliage = mat.image_material("spruce_needles", needles, alpha_mode="CLIP",
                                  backface_culling=False, roughness=0.85)
-    bark = mat.principled("spruce_bark", mat.BARK_SPRUCE, roughness=0.90,
-                          specular=0.22)
-    deadwood = mat.principled("spruce_deadwood", mat.WOOD_DEAD, roughness=0.95,
-                              specular=0.15)
+    force_alpha_clip(foliage, 0.38)
+    # `spruce_bark` / `spruce_deadwood` are bound by NAME at runtime, which
+    # swaps in the full normal/roughness/ao set -- only the 256 px albedo is
+    # embedded here, the rest would dwarf the geometry in the .glb.
+    bark_file = os.path.join(cli.ROOT, *BARK_TEX)
+    if os.path.exists(bark_file):
+        bark_png = bake_bark_png(bark_file, cli.cache_path(args, "spruce_bark.png"))
+        bark_img = tex.load_image(bark_png, "spruce_bark_albedo")
+        bark = mat.image_material("spruce_bark", bark_img, alpha_mode="OPAQUE",
+                                  use_alpha=False, roughness=0.90)
+        set_tiling(bark, "REPEAT")
+    else:
+        print("spruce: %s missing, falling back to flat bark" % bark_file)
+        bark = mat.principled("spruce_bark", mat.BARK_SPRUCE, roughness=0.90,
+                              specular=0.22)
+    deadwood = mat.principled("spruce_deadwood", (0.168, 0.152, 0.132),
+                              roughness=0.96, specular=0.12)
 
     all_lods = []
     summary = []
@@ -672,6 +782,7 @@ def main():
         imp_mat = mat.image_material("spruce_imposter_%s" % spec["key"], imp_img,
                                      alpha_mode="CLIP", backface_culling=False,
                                      roughness=0.92)
+        force_alpha_clip(imp_mat, 0.45)
         billboard = lod.crossed_billboard("%s_%s_L2" % (NAME, spec["key"]),
                                           imp_mat, width, height,
                                           z_offset=z_bot, planes=2)

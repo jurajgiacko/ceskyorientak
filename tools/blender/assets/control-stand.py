@@ -49,16 +49,18 @@ ARM_Z = 1.2210
 # Out level, then a smooth arc down into a cradle and back up into a stop:
 # the cradle is where a control-flag hook settles, the stop is what keeps it
 # from sliding off.  Enough path points that the bend reads as a curve.
+# No joint in the path turns more than ~23 deg, otherwise an 8-gon sweep
+# shows the joint as a crease rather than a bend.
 ARM_PATH = [(0.004, 0.0, ARM_Z),
-            (0.055, 0.0, ARM_Z),
-            (0.100, 0.0, ARM_Z - 0.0015),
-            (0.134, 0.0, ARM_Z - 0.0070),
-            (0.158, 0.0, ARM_Z - 0.0125),
-            (0.176, 0.0, ARM_Z - 0.0100),
-            (0.186, 0.0, ARM_Z + 0.0020)]
+            (0.056, 0.0, ARM_Z - 0.0002),
+            (0.102, 0.0, ARM_Z - 0.0032),
+            (0.136, 0.0, ARM_Z - 0.0092),
+            (0.160, 0.0, ARM_Z - 0.0122),
+            (0.178, 0.0, ARM_Z - 0.0100),
+            (0.192, 0.0, ARM_Z - 0.0020)]
 ARM_RADII = [ARM_R, ARM_R, 0.0089, 0.0087, 0.0084, 0.0078, 0.0068]
-FLAG_HANG_X = 0.158
-FLAG_HANG_Z = ARM_Z - 0.0125 + 0.0084   # top of the rod at the cradle
+FLAG_HANG_X = 0.160
+FLAG_HANG_Z = ARM_Z - 0.0122 + 0.0084   # top of the rod at the cradle
 
 # Facet angles: a regular n-gon sweep has 360/n between neighbouring side
 # faces, so the smoothing limit has to clear that but stay under the 90 deg

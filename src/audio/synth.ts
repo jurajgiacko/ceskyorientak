@@ -384,7 +384,7 @@ export const IR_PRESETS: Readonly<Record<ReverbId, IrSpec>> = {
     seed: 1202,
   },
   stoneCourtyard: {
-    seconds: 2.55,
+    seconds: 3.0,
     predelay: 0.019,
     hfStart: 11000,
     hfEnd: 3100,

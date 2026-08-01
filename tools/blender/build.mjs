@@ -236,17 +236,21 @@ async function main() {
     seed,
     totalLod0Tris: entries.reduce((a, e) => a + (e.tris ?? 0), 0),
     totalBytes: entries.reduce((a, e) => a + (e.bytes ?? 0), 0),
-    assets: entries.map((e) => ({
-      name: e.name,
-      file: e.file,
-      bytes: e.bytes,
-      tris: e.tris,
-      lods: e.lods,
-      ...(e.variants ? { variants: e.variants } : {}),
-      ...(e.hookTopZ ? { hookTopZ: e.hookTopZ } : {}),
-      ...(e.notes ? { notes: e.notes } : {}),
-      ...(e.originNote ? { originNote: e.originNote } : {}),
-      ...(e.brandUV ? { brandUV: e.brandUV } : {}),
+    // Pass every extra an asset emits straight through. An earlier whitelist
+    // here silently swallowed fields the assets were deliberately publishing
+    // (spectator-fence's repeatPitchX, for one) -- the asset script is the
+    // authority on what the runtime needs to know about it.
+    assets: entries.map(({ trisAllLods, ...rest }) => ({
+      name: rest.name,
+      file: rest.file,
+      bytes: rest.bytes,
+      tris: rest.tris,
+      lods: rest.lods,
+      ...Object.fromEntries(
+        Object.entries(rest).filter(
+          ([k]) => !['name', 'file', 'bytes', 'tris', 'lods'].includes(k),
+        ),
+      ),
     })),
   };
   fs.writeFileSync(MANIFEST, `${JSON.stringify(manifest, null, 2)}\n`);

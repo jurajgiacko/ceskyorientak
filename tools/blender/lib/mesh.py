@@ -126,8 +126,16 @@ def apply_mods(obj):
 
 
 def apply_transform(obj, location=False, rotation=True, scale=True):
-    """Bake object transform into vertices (bevel/solidify need real scale)."""
-    mw = obj.matrix_world
+    """Bake object transform into vertices (bevel/solidify need real scale).
+
+    The view-layer update is required, not defensive: `matrix_world` is derived
+    lazily, so an object whose `.location` was just assigned still reports an
+    identity matrix until the depsgraph catches up. Without this, `join()` --
+    which calls this on every part -- silently baked identity and snapped
+    positioned parts back to the origin.
+    """
+    bpy.context.view_layer.update()
+    mw = obj.matrix_world.copy()
     loc, rot, scl = mw.decompose()
     basis = Matrix.Identity(4)
     if location:
@@ -243,7 +251,14 @@ def shade_flat(obj):
 
 
 def join(objs, name=None):
-    """Join meshes into the first object, preserving per-face materials."""
+    """Join meshes into the first object, preserving materials AND UVs.
+
+    `bmesh.faces.new()` allocates fresh loops, which do not inherit loop data
+    layers -- so UVs have to be copied across by hand, per loop. Getting this
+    wrong is silent and nasty: every joined-in mesh keeps its geometry but
+    collapses to UV (0, 0), which for an alpha-cutout atlas material means the
+    whole object samples one transparent texel and simply disappears.
+    """
     objs = [o for o in objs if o is not None]
     if not objs:
         return None
@@ -262,6 +277,16 @@ def join(objs, name=None):
         if m is not None:
             mat_index[m.name] = i
 
+    # union of UV layer names across every input, created up-front on the target
+    uv_names = [l.name for l in target.data.uv_layers]
+    for src in objs[1:]:
+        for l in src.data.uv_layers:
+            if l.name not in uv_names:
+                uv_names.append(l.name)
+    uv_layers = {}
+    for n in uv_names:
+        uv_layers[n] = bm.loops.layers.uv.get(n) or bm.loops.layers.uv.new(n)
+
     tmp_layer = bm.faces.layers.int.get("_mi") or bm.faces.layers.int.new("_mi")
     for f in bm.faces:
         f[tmp_layer] = f.material_index
@@ -279,6 +304,8 @@ def join(objs, name=None):
                 mat_index[m.name] = len(target.data.materials) - 1
             remap[i] = mat_index[m.name]
 
+        src_uv = {n: sbm.loops.layers.uv.get(n) for n in uv_names}
+
         vmap = {}
         for v in sbm.verts:
             vmap[v] = bm.verts.new(v.co)
@@ -290,6 +317,17 @@ def join(objs, name=None):
                 continue
             nf.smooth = f.smooth
             nf[tmp_layer] = remap.get(f.material_index, 0)
+            # New edges default to smooth, which would silently discard the
+            # sharp-edge flags each part got from shade_smooth() before the
+            # join -- bevels and hard corners would go soft.
+            for enew, eold in zip(nf.edges, f.edges):
+                enew.smooth = eold.smooth
+            for n, dst in uv_layers.items():
+                s = src_uv.get(n)
+                if s is None:
+                    continue
+                for lnew, lold in zip(nf.loops, f.loops):
+                    lnew[dst].uv = lold[s].uv
         sbm.free()
         remove(src)
 

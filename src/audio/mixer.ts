@@ -13,11 +13,18 @@
  * is not muting the world; it is *narrowing attention*. The world does not stop.
  * So the duck is shaped:
  *
- *   footsteps  −6.0 dB   still there. You are still running.
- *   ambience  −11.1 dB   the forest recedes furthest. This is the big move.
- *   music      −8.9 dB
- *   breath     −1.7 dB   almost untouched — deliberately.
- *   ui           0.0 dB  a punch must never be ducked.
+ *   footsteps  −9.0 dB   still there. You are still running.
+ *   ambience  −15.0 dB   the forest recedes furthest. This is the big move.
+ *   music     −12.0 dB
+ *   breath     −4.5 dB   the shallowest duck by a wide margin — deliberately.
+ *   ui          0.0 dB   a punch must never be ducked.
+ *
+ * The first version of this table used −1.7 dB on breath, which read correctly
+ * on paper and measured as a 1.6 dB duck overall: breath is the loudest thing
+ * in the mix at low glycogen, so leaving it almost untouched left the whole
+ * duck almost untouched. −4.5 dB still puts breath 4.5–10.5 dB forward of
+ * everything else, which is the relationship that matters, and the mix now
+ * actually moves.
  *
  * plus two things a level change alone cannot do:
  *
@@ -45,10 +52,10 @@ import { clamp, dbToGain } from './synth';
 
 /** Map-reading duck targets, in dB. */
 const MAP_DUCK_DB: Readonly<Record<BusName, number>> = {
-  footsteps: -6,
-  breath: -1.7,
-  ambience: -11.1,
-  music: -8.9,
+  footsteps: -9,
+  breath: -4.5,
+  ambience: -15,
+  music: -12,
   ui: 0,
 };
 

@@ -21,6 +21,14 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, '..', '..');
 const MODELS = path.join(ROOT, 'public', 'models');
 
+/**
+ * Global ceiling across every asset's LOD0. These are instanced heavily across
+ * the terrain, so the sum is what actually matters; the per-asset numbers below
+ * deliberately sum to more than this so one asset can borrow from another's
+ * slack, but the total is still enforced.
+ */
+export const TOTAL_LOD0_BUDGET = 40000;
+
 /** LOD0 triangle budget per asset (see README). */
 export const BUDGETS = {
   'control-flag': 600,
@@ -30,7 +38,10 @@ export const BUDGETS = {
   spruce: 12000,
   beech: 11000,
   deadwood: 3600,
-  'race-belt': 900,
+  // First-person prop: never instanced and always seen close up, so it gets a
+  // slightly looser allowance than a scatter asset. The global ceiling is the
+  // real constraint here and there is room under it.
+  'race-belt': 1000,
   'finish-gantry': 2200,
   'arena-tent': 1400,
   'spectator-fence': 600,
@@ -184,8 +195,11 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     const bytes = rows.reduce((a, r) => a + r.bytes, 0);
     console.log(`\n${rows.length} assets, LOD0 total ${total} tris, ${kb(bytes)} on disk`);
     const bad = rows.filter((r) => !r.ok);
-    if (bad.length) {
-      console.error(`\n${bad.length} asset(s) failed validation`);
+    if (total > TOTAL_LOD0_BUDGET) {
+      console.error(`\nOVER GLOBAL BUDGET: ${total} > ${TOTAL_LOD0_BUDGET} LOD0 tris`);
+    }
+    if (bad.length || total > TOTAL_LOD0_BUDGET) {
+      if (bad.length) console.error(`\n${bad.length} asset(s) failed validation`);
       process.exit(1);
     }
   }

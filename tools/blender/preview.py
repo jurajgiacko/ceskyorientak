@@ -34,12 +34,14 @@ def parse():
     p.add_argument("--cell", type=int, default=560, help="pixels per grid cell")
     p.add_argument("--max-width", type=int, default=2000)
     p.add_argument("--lod", type=int, default=0)
-    p.add_argument("--samples", type=int, default=28)
-    # Cycles is the default deliberately: EEVEE Next silently drops
-    # alpha-blended foliage cards in --background, which made trees render
-    # as bare trunks and would have hidden real defects.
-    p.add_argument("--engine", default="CYCLES")
-    p.add_argument("--bg", type=float, default=0.30)
+    p.add_argument("--samples", type=int, default=64)
+    # EEVEE Next is the default: it renders the alpha-cutout foliage correctly
+    # and is ~15x faster than Cycles here. (An earlier bare-trunk tree render
+    # was blamed on EEVEE; the actual cause was the UV-dropping bug in
+    # mesh.join(), since fixed. Pass --engine CYCLES to cross-check.)
+    p.add_argument("--engine", default="BLENDER_EEVEE_NEXT")
+    p.add_argument("--bg", type=float, default=0.22)
+    p.add_argument("--view", default="AgX", help="view transform: AgX or Standard")
     return p.parse_args(argv)
 
 
@@ -57,11 +59,19 @@ def world_bg(value):
 
 
 def three_point():
-    """Key / fill / rim -- enough separation to judge silhouette and bevels."""
+    """Key / fill / rim -- enough separation to judge silhouette and bevels.
+
+    Total irradiance is deliberately modest (~3.8). An earlier rig at ~8.7 was
+    roughly two stops hot, and because Blender 4.x tone-maps through AgX by
+    default, the blown highlights came back desaturated -- every asset rendered
+    as pale pastel regardless of its actual base colour. That made the preview
+    useless as a colour reference and pushed asset authors into darkening their
+    materials to compensate.
+    """
     specs = [
-        ("key", 4.2, (math.radians(52), 0.0, math.radians(38)), (1.0, 0.97, 0.92)),
-        ("fill", 1.5, (math.radians(66), 0.0, math.radians(-115)), (0.80, 0.86, 1.0)),
-        ("rim", 3.0, (math.radians(105), 0.0, math.radians(196)), (1.0, 0.99, 0.95)),
+        ("key", 2.1, (math.radians(52), 0.0, math.radians(38)), (1.0, 0.97, 0.92)),
+        ("fill", 0.7, (math.radians(66), 0.0, math.radians(-115)), (0.80, 0.86, 1.0)),
+        ("rim", 1.0, (math.radians(105), 0.0, math.radians(196)), (1.0, 0.99, 0.95)),
     ]
     for name, energy, rot, color in specs:
         data = bpy.data.lights.new(name, "SUN")
@@ -173,6 +183,10 @@ def main():
 
     world_bg(args.bg)
     three_point()
+    try:
+        bpy.context.scene.view_settings.view_transform = args.view
+    except Exception:
+        pass
 
     width = min(args.max_width, args.cell * cols)
     height = int(width * rows / float(cols))

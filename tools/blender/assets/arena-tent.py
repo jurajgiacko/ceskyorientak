@@ -23,7 +23,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 
 from mathutils import Vector  # noqa: E402
 
-from lib import cli, exporter, lod, mat, mesh as M  # noqa: E402
+from lib import cli, exporter, lod, mat, mesh as M, uvtools  # noqa: E402
 
 NAME = "arena-tent"
 
@@ -33,16 +33,18 @@ EAVE_Z = 2.20
 PEAK_Z = 3.40
 VALANCE_H = 0.25
 
-ROOF_NU = 12            # stations along one eave (must divide VALANCE_NU / 4)
+ROOF_NU = 10            # stations along one eave (VALANCE_NU = 4 * this)
 ROOF_NV = 5             # eave -> apex
 VALANCE_NU = 4 * ROOF_NU
-VALANCE_NV = 3
+VALANCE_NV = 2
 
-ROOF_SAG = 0.085        # droop at the centre of a panel
+ROOF_SAG = 0.115        # droop at the centre of a panel
+EAVE_DROOP = 0.055      # dip of the eave line between corner legs
+VALANCE_WAVES = 8       # scallops around the perimeter (40 stations -> 5/wave)
 FRAME_SIDES = 6
-LEG_R = 0.023
-RAIL_R = 0.019
-RAFTER_R = 0.017
+LEG_R = 0.032        # 64 mm -- heavy-duty frame marquee leg
+RAIL_R = 0.027
+RAFTER_R = 0.023
 
 CORNERS = [(-CANVAS_HALF, -CANVAS_HALF), (CANVAS_HALF, -CANVAS_HALF),
            (CANVAS_HALF, CANVAS_HALF), (-CANVAS_HALF, CANVAS_HALF)]
@@ -109,7 +111,19 @@ def perimeter(t):
     p = p0.lerp(p1, f)
     edge = (p1 - p0).normalized()
     out = Vector((edge.y, -edge.x))          # corners are CCW -> outward
-    return p, out
+    return p, out, f
+
+
+def eave_point(t):
+    """Canvas eave line: dips between the corner legs like a tensioned hem.
+
+    Roof panels and the valance both sample this, at matching stations
+    (ROOF_NU per edge, VALANCE_NU = 4 * ROOF_NU), so the two weld into one
+    surface in `M.merge_doubles`.
+    """
+    p, out, f = perimeter(t)
+    z = EAVE_Z - math.sin(math.pi * f) * EAVE_DROOP
+    return Vector((p.x, p.y, z)), out
 
 
 # ---------------------------------------------------------------------------
@@ -126,14 +140,15 @@ def build_roof_panel(k, canvas):
         normal = -normal
 
     def fn(u, v):
-        p = a.lerp(b, u).lerp(apex, v)
+        eave, _ = eave_point((k + u) * 0.25)
+        p = eave.lerp(apex, v)
         # Sag vanishes on all three panel edges: u=0 and u=1 are the hip
         # rafters, v=0 the eave rail, v=1 the peak.  Neighbouring panels
         # therefore still meet exactly along the hips.
         span = math.sin(math.pi * u) ** 1.15
-        rise = math.sin(math.pi * v) ** 0.80
+        rise = math.sin(math.pi * v) * (1.0 - 0.30 * v)
         droop = span * rise * ROOF_SAG
-        ripple = math.sin(u * 7.3 + k * 1.7) * math.cos(v * 3.9) * 0.10
+        ripple = math.sin(u * 7.3 + k * 1.7) * math.cos(v * 3.9) * 0.12
         return tuple(p - normal * (droop * (1.0 + ripple)))
 
     obj = M.param_surface("%s_roof%d" % (NAME, k), fn, ROOF_NU, ROOF_NV)
@@ -146,10 +161,14 @@ def build_valance(canvas):
     weld together; the free hem waves and flares outward a little."""
 
     def fn(u, v):
-        p, out = perimeter(u)
-        wave = math.sin(u * 2.0 * math.pi * 8.0)
-        flare = out * (v * v * (0.020 + 0.012 * wave))
-        z = EAVE_Z - v * VALANCE_H + v * wave * 0.016
+        p, out = eave_point(u)
+        _, _, f = perimeter(u)
+        wave = math.sin(u * 2.0 * math.pi * VALANCE_WAVES)
+        # The outward normal flips discontinuously at a corner, so the flare
+        # has to fade out there or the two edges' skirts meet in a flap.
+        corner = math.sin(math.pi * f) ** 0.5
+        flare = out * (v * v * corner * (0.026 + 0.020 * wave))
+        z = p.z - v * VALANCE_H + v * v * wave * 0.034
         return (p.x + flare.x, p.y + flare.y, z)
 
     obj = M.param_surface("%s_valance" % NAME, fn, VALANCE_NU, VALANCE_NV,
@@ -169,8 +188,10 @@ def build_frame(steel, out):
     for k, (x, y) in enumerate(legs):
         out.append(member("%s_leg%d" % (NAME, k), (x, y, 0.012),
                           (x, y, EAVE_Z), LEG_R, True, steel))
-        out.append(box_at("%s_foot%d" % (NAME, k), (0.15, 0.15, 0.014),
-                          (x, y, 0.007), radius=0.004))
+        foot = box_at("%s_foot%d" % (NAME, k), (0.19, 0.19, 0.022),
+                      (x, y, 0.011), radius=0.005)
+        mat.assign_all(foot, steel)
+        out.append(foot)
 
     for k in range(4):
         x0, y0 = legs[k]
@@ -180,8 +201,8 @@ def build_frame(steel, out):
         out.append(member("%s_rafter%d" % (NAME, k), (x0, y0, EAVE_Z),
                           (0.0, 0.0, PEAK_Z - 0.05), RAFTER_R, False, steel))
 
-    out.append(member("%s_crown" % NAME, (0.0, 0.0, PEAK_Z - 0.11),
-                      (0.0, 0.0, PEAK_Z - 0.005), 0.032, True, steel))
+    out.append(member("%s_crown" % NAME, (0.0, 0.0, PEAK_Z - 0.15),
+                      (0.0, 0.0, PEAK_Z - 0.035), 0.030, True, steel))
 
 
 def main():
@@ -199,9 +220,14 @@ def main():
 
     obj = M.join(parts, NAME)
     M.merge_doubles(obj, 1e-4)
+    # `M.join` does not carry loop data across, so every part except the
+    # first arrives with collapsed UVs; re-project at 1 UV unit per metre.
+    uvtools.cube_project(obj, 1.0)
     print("TENT tris=%d" % M.tri_count(obj))
 
-    thresholds = {"tent_canvas": 28.0, "tent_frame": 70.0}
+    # 44 deg keeps the ~65 deg roof/valance crease sharp but smooths the
+    # ~35 deg hips, so the canopy reads as tensioned fabric, not folded card.
+    thresholds = {"tent_canvas": 44.0, "tent_frame": 70.0}
     shade_by_material(obj, thresholds)
 
     lods = lod.decimate_lods(obj, NAME, ratios=(1.0, 0.40), smooth_angle=None)

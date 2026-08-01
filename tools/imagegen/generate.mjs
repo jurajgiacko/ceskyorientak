@@ -267,14 +267,23 @@ const t0 = Date.now();
 const { results, errors } = await runAll();
 const dt = ((Date.now() - t0) / 1000).toFixed(1);
 
-/* ---- merge into the lock so partial runs never drop unrelated entries ---- */
+/* ---- merge into the lock so partial runs never drop unrelated entries ----
+   `fetched` is per-run state, not provenance — keeping it out means a re-run
+   that changes nothing produces a byte-identical lock and no git churn. */
 let lock = { version: 1, model: MODEL, assets: {} };
 if (existsSync(LOCK_PATH)) {
   try { lock = JSON.parse(readFileSync(LOCK_PATH, 'utf8')); } catch { /* rewrite */ }
 }
 lock.model = MODEL;
 lock.assets = lock.assets || {};
-for (const r of results) lock.assets[r.id] = r;
+for (const r of results) {
+  const { fetched, ...entry } = r;
+  /* keep the original generatedAt when nothing was re-fetched */
+  if (!fetched && lock.assets[r.id]?.generatedAt) {
+    entry.generatedAt = lock.assets[r.id].generatedAt;
+  }
+  lock.assets[r.id] = entry;
+}
 lock.updatedAt = new Date().toISOString();
 lock.assets = Object.fromEntries(Object.entries(lock.assets).sort(([a], [b]) => a.localeCompare(b)));
 writeFileSync(LOCK_PATH, JSON.stringify(lock, null, 2) + '\n');

@@ -28,6 +28,7 @@ import {
   jitter,
   makeRng,
   NoiseBank,
+  normalisePeak,
   percussive,
   rand,
   renderModal,
@@ -373,6 +374,10 @@ export class Ambience {
         0.75,
         { strikeNoise: 0.5, strikeMs: 2, seed: seed + 40 + i },
       );
+      // Additive synthesis sums to whatever it sums to; normalise so the level
+      // is set by the mix and not by how many partials the recipe happens to
+      // have.
+      normalisePeak(data, 0.85);
       this.cowbells.push(toBuffer(this.ctx, data));
     }
     // Two bells a minor third apart, as a small monastery pair would be cast.
@@ -397,6 +402,7 @@ export class Ambience {
         4.6,
         { strikeNoise: 0.28, strikeMs: 5, seed: seed + 60 + i },
       );
+      normalisePeak(data, 0.85);
       this.bells.push(toBuffer(this.ctx, data));
     }
   }

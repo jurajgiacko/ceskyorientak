@@ -92,6 +92,8 @@ export class AudioGraph {
   readonly master: GainNode;
   readonly mute: GainNode;
   readonly limiter: DynamicsCompressorNode;
+  /** Final safety net. Guarantees |out| ≤ 0.97 no matter what. */
+  readonly softClip: WaveShaperNode;
   readonly reverbSend: GainNode;
   readonly reverbReturn: GainNode;
 
@@ -107,21 +109,36 @@ export class AudioGraph {
     this.ctx = ctx;
 
     // --- master chain, built back-to-front ---------------------------------
+    // `DynamicsCompressorNode` is a compressor, not a limiter: its detector is
+    // smoothed and its minimum attack is ~3 ms, so isolated transients walk
+    // straight through it. Measured, that let the arena mix reach +2.9 dBFS.
+    // So the compressor does the musical work and a waveshaper backstops it.
+    this.softClip = ctx.createWaveShaper();
+    this.softClip.curve = makeSoftClipCurve();
+    // 'none': the resampling filters in 2x/4x mode can overshoot the curve's
+    // endpoint by a few percent, and the whole point of this node is a bound
+    // that holds absolutely. The knee is gentle enough that the aliasing it
+    // trades away is negligible.
+    this.softClip.oversample = 'none';
+    this.softClip.connect(destination);
+
     this.limiter = ctx.createDynamicsCompressor();
-    this.limiter.threshold.value = -3;
+    this.limiter.threshold.value = -6;
     this.limiter.knee.value = 0;
     this.limiter.ratio.value = 20;
     this.limiter.attack.value = 0.002;
     this.limiter.release.value = 0.12;
-    this.limiter.connect(destination);
+    this.limiter.connect(this.softClip);
 
     this.mute = ctx.createGain();
     this.mute.gain.value = 1;
     this.mute.connect(this.limiter);
 
     this.master = ctx.createGain();
-    // 0.8 leaves the limiter something to do rather than something to fix.
-    this.master.gain.value = 0.8;
+    // Headroom, chosen from the measured worst case (arena, everything at
+    // once, punching): it puts that mix at about −18 dBFS RMS and leaves the
+    // limiter tidying peaks rather than rescuing them.
+    this.master.gain.value = 0.62;
     this.master.connect(this.mute);
 
     this.tone = ctx.createBiquadFilter();
@@ -227,12 +244,16 @@ export class AudioGraph {
     this.setReverb('openForest', 0);
   }
 
-  /** Crossfade to another space. Equal-power over `rampS`. */
-  setReverb(id: ReverbId, rampS = 1.5): void {
+  /**
+   * Crossfade to another space over `rampS`. `when` defaults to now; the
+   * offline renderer passes an explicit instant, because an
+   * `OfflineAudioContext` sits at `currentTime === 0` until it renders.
+   */
+  setReverb(id: ReverbId, rampS = 1.5, when?: number): void {
     if (id === this.currentReverb) return;
     const ir = this.irs.get(id);
     if (!ir) return;
-    const t = this.ctx.currentTime;
+    const t = when ?? this.ctx.currentTime;
     const target = this.activeIsA ? this.convB : this.convA;
     const upGain = this.activeIsA ? this.gainB : this.gainA;
     const downGain = this.activeIsA ? this.gainA : this.gainB;
@@ -463,6 +484,34 @@ export class AudioEngine {
 }
 
 const GESTURES: readonly string[] = ['pointerdown', 'touchend', 'mousedown', 'keydown'];
+
+/**
+ * Soft-clip transfer curve.
+ *
+ * A `WaveShaperNode` maps input −1…+1 across the whole curve array and clamps
+ * anything outside that to the endpoints, so the curve must be defined on
+ * exactly that domain. (Defining it over −4…+4, which is the intuitive thing to
+ * do and which this code did first, silently applies about 11 dB of gain to
+ * everything quiet. It measured as louder peaks, not softer ones.)
+ *
+ * Identity below 0.7 (−3.1 dBFS) — bit-transparent on the overwhelming majority
+ * of samples — then a `tanh` knee. Because input is clamped at ±1, the output
+ * can never exceed the curve's endpoint, which is 0.908. That is the hard
+ * guarantee behind the "peak < 0.99" line in the verification report.
+ */
+function makeSoftClipCurve() {
+  const n = 2049;
+  const knee = 0.7;
+  const span = 0.25;
+  const curve = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    const x = (i / (n - 1)) * 2 - 1;
+    const a = Math.abs(x);
+    const y = a <= knee ? a : knee + span * Math.tanh((a - knee) / span);
+    curve[i] = x < 0 ? -y : y;
+  }
+  return curve;
+}
 
 function isRealtime(ctx: BaseAudioContext): ctx is AudioContext {
   return typeof (ctx as AudioContext).resume === 'function' && 'baseLatency' in ctx;

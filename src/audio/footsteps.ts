@@ -67,16 +67,16 @@ interface Recipe {
 /**
  * The nine surfaces. Numbers here were tuned by ear and then checked against
  * the offline spectral analysis; the centroid ordering
- * marsh < grass < asphalt < leaf < rock < water < needles < cobble < gravel
+ * marsh < grass < water < asphalt < leaf < needles < rock < cobble < gravel
  * is deliberate and is the thing that makes them tell apart blind.
  */
 const RECIPES: Readonly<Record<GroundType, Recipe>> = {
   // Šumava spruce floor. Soft, dry, high — closer to a brush than an impact.
   needles: {
     colour: 'pink',
-    hp: 2100,
-    lp: 8600,
-    peakFreq: 5000,
+    hp: 2250,
+    lp: 8700,
+    peakFreq: 5100,
     peakQ: 1.0,
     peakDb: 4,
     attack: 0.005,
@@ -94,9 +94,9 @@ const RECIPES: Readonly<Record<GroundType, Recipe>> = {
   // Beech litter. The crunch is the point: three offset grains, not one burst.
   leaf: {
     colour: 'white',
-    hp: 620,
-    lp: 6800,
-    peakFreq: 2300,
+    hp: 540,
+    lp: 5200,
+    peakFreq: 2000,
     peakQ: 2.2,
     peakDb: 6,
     attack: 0.003,
@@ -134,7 +134,7 @@ const RECIPES: Readonly<Record<GroundType, Recipe>> = {
   // Granite. Short, hard, and it rings — Q6 at 2.7 kHz is the boulder field.
   rock: {
     colour: 'white',
-    hp: 380,
+    hp: 520,
     lp: 10500,
     peakFreq: 2750,
     peakQ: 6,
@@ -174,9 +174,9 @@ const RECIPES: Readonly<Record<GroundType, Recipe>> = {
   // Loose stones. Four grains, wide band, nothing resonant — the brightest.
   gravel: {
     colour: 'white',
-    hp: 1450,
-    lp: 13500,
-    peakFreq: 4200,
+    hp: 2000,
+    lp: 15000,
+    peakFreq: 4600,
     peakQ: 1.2,
     peakDb: 4,
     attack: 0.002,
@@ -194,8 +194,8 @@ const RECIPES: Readonly<Record<GroundType, Recipe>> = {
   // Krumlov. A hard bright click, 45 ms end to end, thrown at the courtyard.
   cobble: {
     colour: 'white',
-    hp: 1250,
-    lp: 13000,
+    hp: 1700,
+    lp: 14000,
     peakFreq: 3450,
     peakQ: 8,
     peakDb: 14,
@@ -214,9 +214,9 @@ const RECIPES: Readonly<Record<GroundType, Recipe>> = {
   // Flat slap. Dry, mid, short. Deliberately the least interesting surface.
   asphalt: {
     colour: 'white',
-    hp: 700,
-    lp: 6200,
-    peakFreq: 1750,
+    hp: 620,
+    lp: 4400,
+    peakFreq: 1550,
     peakQ: 3,
     peakDb: 7,
     attack: 0.0016,
@@ -234,9 +234,9 @@ const RECIPES: Readonly<Record<GroundType, Recipe>> = {
   // Opening sweep — spray thrown up — then droplets falling back.
   water: {
     colour: 'white',
-    hp: 260,
-    lp: 4200,
-    peakFreq: 950,
+    hp: 180,
+    lp: 2150,
+    peakFreq: 640,
     peakQ: 1.1,
     peakDb: 3,
     attack: 0.004,
@@ -440,7 +440,7 @@ export class Footsteps {
     for (let i = 0; i < n; i++) {
       const t = when + rand(rng, 0.06, 0.3);
       const v = this.pool.acquire(t);
-      const f = rand(rng, 1400, 3600);
+      const f = rand(rng, 900, 1900);
       v.hp.frequency.setValueAtTime(f * 0.5, t);
       v.peak.frequency.setValueAtTime(f, t);
       v.peak.frequency.exponentialRampToValueAtTime(f * 1.5, t + 0.03);
@@ -449,7 +449,7 @@ export class Footsteps {
       v.lp.frequency.setValueAtTime(f * 2.2, t);
       v.pan.pan.setValueAtTime(pan + rand(rng, -0.3, 0.3), t);
       v.send.gain.setValueAtTime(0.22, t);
-      percussive(v.amp.gain, t, 0.1 * effort * rand(rng, 0.5, 1), 0.001, 0.035);
+      percussive(v.amp.gain, t, 0.07 * effort * rand(rng, 0.5, 1), 0.001, 0.035);
       this.play(v, 'white', t, 0.06);
     }
   }

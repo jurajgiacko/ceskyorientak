@@ -6,11 +6,14 @@ carrying a triangular top beam, apex up.  Everything structural is swept with
 buried inside a chord, which halves their cost -- that is what buys enough
 triangles for a believable number of diagonals inside the 2200 tri budget.
 
-The banner is a separate, single-sided fabric panel hung between the uprights
-just under the beam.  Its material is named exactly `BRAND_BANNER` and its UV
-island fills the whole 0..1 square, so brand artwork drops straight on.  The
-panel's billow is applied purely along its own normal (+Y), so the planar
-UV projection stays an exact, uniformly spaced rectangle.
+The banner is a separate, single-sided fabric panel laced to a batten under
+the beam.  Its material is named exactly `BRAND_BANNER` and its UV island
+fills the whole 0..1 square, so brand artwork drops straight on.  Order
+matters there: `uvtools.set_face_uv_rect` derives the island from world
+positions, so the panel is built dead flat, given its UV rect, and only then
+allowed to hang (`relax_banner`) -- billow out of plane plus a catenary droop
+of the free lower hem.  The rect is therefore exact and uniformly spaced no
+matter how much the fabric sags.
 
 Origin: ground level, mid-span.  +X along the arch, +Z up.  The banner reads
 un-mirrored when viewed from -Y.
@@ -42,10 +45,13 @@ BEAM_RISE = TRUSS * math.sqrt(3.0) / 2.0   # 0.2511 -- apex above lower chords
 
 BANNER_W = 5.60
 BANNER_H = 1.10
-BANNER_TOP = CLEAR_H - 0.05
-BANNER_BOW = 0.055
-BANNER_NU = 14
+BANNER_TOP = CLEAR_H - 0.013   # tucked up against the lacing batten
+BANNER_BOW = 0.075             # billow out of plane (+/-Y)
+BANNER_SAG = 0.055             # catenary droop of the free lower hem (Z)
+BANNER_NU = 16
 BANNER_NV = 3
+BATTEN_Z = CLEAR_H
+N_TIES = 5
 
 UPRIGHT_BAYS = 8
 BEAM_BAYS = 8
@@ -110,7 +116,12 @@ def box_at(name, size, location, radius=0.012, segments=1):
 
 
 def member(name, a, b, radius, sides, caps, material):
-    obj = M.tube(name, [tuple(a), tuple(b)], radius, sides=sides, caps=caps)
+    return member_path(name, [tuple(a), tuple(b)], radius, sides, caps, material)
+
+
+def member_path(name, points, radius, sides, caps, material):
+    obj = M.tube(name, [tuple(p) for p in points], radius, sides=sides,
+                 caps=caps)
     mat.assign_all(obj, material)
     return obj
 
@@ -180,7 +191,7 @@ def build_upright(sx, steel, out):
         zigzag_bracing("%s_f%d" % (tag, k), chords[k], chords[(k + 1) % 3],
                        UPRIGHT_BAYS, BRACE_R, steel, out)
 
-    ring_bracing(tag, chords, (0.25, 0.5, 0.75, 0.995), BRACE_R, steel, out)
+    ring_bracing(tag, chords, (0.33, 0.66, 0.995), BRACE_R, steel, out)
 
 
 def build_beam(steel, out):
@@ -201,7 +212,7 @@ def build_beam(steel, out):
         zigzag_bracing("%s_f%d" % (tag, k), chords[k], chords[(k + 1) % 3],
                        BEAM_BAYS, BRACE_R, steel, out)
 
-    ring_bracing(tag, chords, (0.06, 0.35, 0.65, 0.94), BRACE_R, steel, out)
+    ring_bracing(tag, chords, (0.06, 0.5, 0.94), BRACE_R, steel, out)
 
 
 def build_base(sx, fitting, out):
@@ -234,28 +245,69 @@ def build_corner(sx, fitting, out):
 
 
 def build_banner(banner_mat):
-    """Flat fabric panel, billowed purely along +/-Y.
+    """Perfectly flat fabric panel in the y=0 plane.
+
+    It is built flat on purpose: `uvtools.set_face_uv_rect` derives the island
+    from world positions, so the 0..1 rect is only exact while the panel is a
+    plane.  `relax_banner()` puts the sag in afterwards, once the UVs exist.
 
     u runs from +X to -X so the surface normal comes out +Y; `set_face_uv_rect`
     then derives U from +X, which is what makes artwork read the right way
-    round from the -Y side.  Because the displacement is normal-only and the
-    x/z grid is uniform, the resulting UV island is an exact 0..1 rectangle.
+    round from the -Y side.
     """
     x0 = BANNER_W * 0.5
     z0 = BANNER_TOP - BANNER_H
 
     def fn(u, v):
-        x = x0 - u * BANNER_W
-        z = z0 + v * BANNER_H
-        span = math.sin(math.pi * u)
-        slack = 0.32 + 0.68 * (1.0 - v)
-        wrinkle = math.sin(u * 11.0 + 0.7) * math.cos(v * 3.1) * 0.10
-        y = -span * slack * BANNER_BOW * (1.0 + wrinkle)
-        return (x, y, z)
+        return (x0 - u * BANNER_W, 0.0, z0 + v * BANNER_H)
 
     obj = M.param_surface("%s_banner" % NAME, fn, BANNER_NU, BANNER_NV)
     mat.assign_all(obj, banner_mat)
     return obj
+
+
+def relax_banner(obj, face_indices):
+    """Let the (already UV'd) banner hang: billow out of plane plus a catenary
+    droop of the free lower hem.
+
+    Both terms vanish along the laced top edge and both laced side edges, so
+    the panel stays attached to the batten and the uprights, and the UV
+    rectangle set beforehand is untouched.
+    """
+    x0 = BANNER_W * 0.5
+    z0 = BANNER_TOP - BANNER_H
+    me = obj.data
+    verts = set()
+    for i in face_indices:
+        verts.update(me.polygons[i].vertices)
+
+    for vi in verts:
+        co = me.vertices[vi].co
+        u = min(1.0, max(0.0, (x0 - co.x) / BANNER_W))
+        v = min(1.0, max(0.0, (co.z - z0) / BANNER_H))
+        span = math.sin(math.pi * u)
+        slack = 0.30 + 0.70 * (1.0 - v)
+        wrinkle = math.sin(u * 11.0 + 0.7) * math.cos(v * 3.1) * 0.12
+        co.y -= span * slack * BANNER_BOW * (1.0 + wrinkle)
+        co.z -= span * ((1.0 - v) ** 1.25) * BANNER_SAG
+    me.update()
+    return obj
+
+
+def build_lacing(steel, out):
+    """Batten under the beam plus the ties that lash the banner to it."""
+    x_end = BANNER_W * 0.5 + 0.06
+    out.append(member("%s_batten" % NAME, (-x_end, 0.0, BATTEN_Z),
+                      (x_end, 0.0, BATTEN_Z), 0.016, BRACE_SIDES, True, steel))
+
+    for k in range(N_TIES):
+        x = -BANNER_W * 0.42 + (k / float(N_TIES - 1)) * BANNER_W * 0.84
+        path = [(x, -0.032, BATTEN_Z - 0.048),
+                (x, -0.026, BATTEN_Z + 0.026),
+                (x, +0.026, BATTEN_Z + 0.026),
+                (x, +0.032, BATTEN_Z - 0.040)]
+        out.append(member_path("%s_tie%d" % (NAME, k), path, 0.005,
+                               BRACE_SIDES, False, steel))
 
 
 def main():
@@ -275,14 +327,23 @@ def main():
         build_base(sx, fitting, parts)
         build_corner(sx, fitting, parts)
     build_beam(steel, parts)
+    build_lacing(steel, parts)
     parts.append(build_banner(banner_mat))
 
     obj = M.join(parts, NAME)
     M.merge_doubles(obj, 1e-5)
 
+    # `M.join` does not carry loop data across, so every part except the first
+    # arrives with collapsed UVs.  Re-project the whole thing (1 UV unit per
+    # metre, fine for tiling detail on the steel) before claiming the banner's
+    # own island back.
+    uvtools.cube_project(obj, 1.0)
+
+    # UVs first, on the flat panel -> an exact 0..1 island; then let it hang.
     banner_faces = faces_with_material(obj, "BRAND_BANNER")
     uvtools.set_face_uv_rect(obj, banner_faces, rect=(0.0, 0.0, 1.0, 1.0))
-    print("BANNER faces=%d  structure tris=%d" %
+    relax_banner(obj, banner_faces)
+    print("BANNER faces=%d  total tris=%d" %
           (len(banner_faces), M.tri_count(obj)))
 
     thresholds = {"gantry_steel": 76.0, "gantry_fitting": 26.0,

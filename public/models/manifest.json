@@ -2,22 +2,46 @@
   "generator": "blender-asset-pipeline (Blender 4.5.12 LTS)",
   "generatedAt": "2026-08-01",
   "seed": 20260805,
-  "totalLod0Tris": 33918,
-  "totalBytes": 2142080,
+  "totalLod0Tris": 39916,
+  "totalBytes": 1385632,
   "assets": [
+    {
+      "name": "arena-tent",
+      "file": "arena-tent.glb",
+      "bytes": 54120,
+      "tris": 912,
+      "lods": [
+        {
+          "node": "arena-tent_LOD0",
+          "tris": 912
+        },
+        {
+          "node": "arena-tent_LOD1",
+          "tris": 364
+        }
+      ],
+      "footprintM": [
+        5,
+        5
+      ],
+      "eaveZ": 2.2,
+      "peakZ": 3.4,
+      "originNote": "centre of the 5x5 m footprint at ground level, +Z up",
+      "notes": "open sided; canvas overhangs the frame by 50 mm"
+    },
     {
       "name": "beech",
       "file": "beech.glb",
-      "bytes": 1157632,
-      "tris": 10100,
+      "bytes": 393392,
+      "tris": 10840,
       "lods": [
         {
           "node": "beech_v0_LOD0",
-          "tris": 1400
+          "tris": 1420
         },
         {
           "node": "beech_v0_LOD1",
-          "tris": 700
+          "tris": 620
         },
         {
           "node": "beech_v0_LOD2",
@@ -25,7 +49,7 @@
         },
         {
           "node": "beech_v1_LOD0",
-          "tris": 4300
+          "tris": 4680
         },
         {
           "node": "beech_v1_LOD1",
@@ -37,7 +61,7 @@
         },
         {
           "node": "beech_v2_LOD0",
-          "tris": 4400
+          "tris": 4740
         },
         {
           "node": "beech_v2_LOD1",
@@ -49,91 +73,104 @@
         }
       ],
       "variants": 3,
-      "notes": "LOD2 is a rendered crossed-quad imposter (2 planes, shared 2x2 atlas)",
-      "originNote": "base of trunk on the ground, centred in XY, +Z up"
+      "variantNames": [
+        "v0",
+        "v1",
+        "v2"
+      ],
+      "originNote": "base of trunk on the ground, centred in XY, +Z up",
+      "notes": "LOD2 is a rendered crossed-quad imposter (2 planes, shared 2x2 atlas)"
     },
     {
       "name": "boulder-set",
       "file": "boulder-set.glb",
-      "bytes": 158860,
-      "tris": 8820,
+      "bytes": 145164,
+      "tris": 8520,
       "lods": [
         {
           "node": "boulder-set_v0_LOD0",
-          "tris": 1470
+          "tris": 1420
         },
         {
           "node": "boulder-set_v0_LOD1",
-          "tris": 588
+          "tris": 568
         },
         {
           "node": "boulder-set_v0_LOD2",
-          "tris": 146
+          "tris": 142
         },
         {
           "node": "boulder-set_v1_LOD0",
-          "tris": 1470
+          "tris": 1420
         },
         {
           "node": "boulder-set_v1_LOD1",
-          "tris": 588
+          "tris": 568
         },
         {
           "node": "boulder-set_v1_LOD2",
-          "tris": 146
+          "tris": 142
         },
         {
           "node": "boulder-set_v2_LOD0",
-          "tris": 1470
+          "tris": 1420
         },
         {
           "node": "boulder-set_v2_LOD1",
-          "tris": 588
+          "tris": 568
         },
         {
           "node": "boulder-set_v2_LOD2",
-          "tris": 146
+          "tris": 142
         },
         {
           "node": "boulder-set_v3_LOD0",
-          "tris": 1470
+          "tris": 1420
         },
         {
           "node": "boulder-set_v3_LOD1",
-          "tris": 588
+          "tris": 568
         },
         {
           "node": "boulder-set_v3_LOD2",
-          "tris": 146
+          "tris": 142
         },
         {
           "node": "boulder-set_v4_LOD0",
-          "tris": 1470
+          "tris": 1420
         },
         {
           "node": "boulder-set_v4_LOD1",
-          "tris": 588
+          "tris": 568
         },
         {
           "node": "boulder-set_v4_LOD2",
-          "tris": 146
+          "tris": 142
         },
         {
           "node": "boulder-set_v5_LOD0",
-          "tris": 1470
+          "tris": 1420
         },
         {
           "node": "boulder-set_v5_LOD1",
-          "tris": 588
+          "tris": 568
         },
         {
           "node": "boulder-set_v5_LOD2",
-          "tris": 146
+          "tris": 142
         }
       ],
       "variants": 6,
-      "notes": "wool-sack weathered Sumava granite, 3 palette tones + sage lichen",
-      "originNote": "every variant XY-centred on the origin, base at z=0 (bottom dips slightly under); no layout offset baked in"
+      "sizesM": [
+        2.6,
+        1.2,
+        3.6,
+        2,
+        4,
+        1.65
+      ],
+      "originNote": "every variant XY-centred on the origin, base at z=0 (bottom dips slightly under); no layout offset baked in",
+      "notes": "wool-sack weathered Sumava granite, 3 palette tones + sage lichen"
     },
     {
       "name": "control-flag",
@@ -160,66 +197,71 @@
     {
       "name": "control-stand",
       "file": "control-stand.glb",
-      "bytes": 40948,
-      "tris": 740,
+      "bytes": 41248,
+      "tris": 756,
       "lods": [
         {
           "node": "control-stand_LOD0",
-          "tris": 740
+          "tris": 756
         },
         {
           "node": "control-stand_LOD1",
-          "tris": 296
+          "tris": 302
         },
         {
           "node": "control-stand_LOD2",
-          "tris": 87
+          "tris": 88
         }
       ],
-      "notes": "hang control-flag so its hookTopZ meets flagHangZ at x=flagHangX; sit si-unit's foot on siMountZ",
-      "originNote": "ground level, centre of the tripod footprint, +Z up"
+      "flagHangZ": 1.2172,
+      "flagHangX": 0.16,
+      "siMountZ": 0.85,
+      "height": 1.2555,
+      "footprintRadius": 0.42,
+      "originNote": "ground level, centre of the tripod footprint, +Z up",
+      "notes": "hang control-flag so its hookTopZ meets flagHangZ at x=flagHangX; sit si-unit's foot on siMountZ"
     },
     {
       "name": "deadwood",
       "file": "deadwood.glb",
-      "bytes": 79968,
-      "tris": 2956,
+      "bytes": 80584,
+      "tris": 3046,
       "lods": [
         {
           "node": "deadwood_v0_LOD0",
-          "tris": 912
+          "tris": 816
         },
         {
           "node": "deadwood_v0_LOD1",
-          "tris": 364
+          "tris": 326
         },
         {
           "node": "deadwood_v0_LOD2",
-          "tris": 107
+          "tris": 94
         },
         {
           "node": "deadwood_v1_LOD0",
-          "tris": 892
+          "tris": 848
         },
         {
           "node": "deadwood_v1_LOD1",
-          "tris": 356
+          "tris": 338
         },
         {
           "node": "deadwood_v1_LOD2",
-          "tris": 99
+          "tris": 93
         },
         {
           "node": "deadwood_v2_LOD0",
-          "tris": 1152
+          "tris": 1382
         },
         {
           "node": "deadwood_v2_LOD1",
-          "tris": 460
+          "tris": 552
         },
         {
           "node": "deadwood_v2_LOD2",
-          "tris": 130
+          "tris": 147
         }
       ],
       "variants": [
@@ -227,40 +269,117 @@
         "v1_stump",
         "v2_root_plate"
       ],
-      "notes": "Sumava bark-beetle deadwood: fallen log, snapped stump, windthrow root plate",
-      "originNote": "every variant is XY-centred on the origin and sits on the ground at z=0 (buried undersides dip below); no layout offset is baked in"
+      "originNote": "every variant is XY-centred on the origin and sits on the ground at z=0 (buried undersides dip below); no layout offset is baked in",
+      "notes": "Sumava bark-beetle deadwood: fallen log, snapped stump, windthrow root plate"
     },
     {
       "name": "finish-gantry",
       "file": "finish-gantry.glb",
-      "bytes": 21304,
-      "tris": 1636,
+      "bytes": 37288,
+      "tris": 1728,
       "lods": [
         {
           "node": "finish-gantry_LOD0",
-          "tris": 1636
+          "tris": 1728
         },
         {
           "node": "finish-gantry_LOD1",
-          "tris": 637
+          "tris": 676
         }
       ],
-      "originNote": "ground level at mid-span, arch along +X, +Z up",
-      "brandUV": "BRAND_BANNER material, UV island fills 0..1"
+      "brandUV": "BRAND_BANNER material, UV island fills 0..1",
+      "spanM": 6,
+      "clearHeightM": 4.5,
+      "bannerSizeM": [
+        5.6,
+        1.1
+      ],
+      "originNote": "ground level at mid-span, arch along +X, +Z up"
+    },
+    {
+      "name": "race-belt",
+      "file": "race-belt.glb",
+      "bytes": 39248,
+      "tris": 880,
+      "lods": [
+        {
+          "node": "race-belt_LOD0",
+          "tris": 880
+        }
+      ],
+      "originNote": "centre of the waist loop, band in the XY plane, +Y forward -- parent straight to a waist bone",
+      "notes": "elliptical elastic band 0.30 x 0.22 m (~0.82 m round), 30 x 3 mm webbing, side-release buckle at the front, 4 elastic gel loops, race-number tab"
+    },
+    {
+      "name": "si-unit",
+      "file": "si-unit.glb",
+      "bytes": 37932,
+      "tris": 450,
+      "lods": [
+        {
+          "node": "si-unit_LOD0",
+          "tris": 450
+        },
+        {
+          "node": "si-unit_LOD1",
+          "tris": 180
+        },
+        {
+          "node": "si-unit_LOD2",
+          "tris": 54
+        }
+      ],
+      "size": [
+        0.145,
+        0.065,
+        0.04
+      ],
+      "footHeight": 0.012,
+      "punchHoleZ": 0.052,
+      "punchHoleXY": [
+        -0.03,
+        0
+      ],
+      "originNote": "bottom of the mounting foot, centred, +Z up",
+      "notes": "sit the foot on control-stand's siMountZ; unbranded by design -- no logo, lettering or decals"
+    },
+    {
+      "name": "spectator-fence",
+      "file": "spectator-fence.glb",
+      "bytes": 49376,
+      "tris": 480,
+      "lods": [
+        {
+          "node": "spectator-fence_LOD0",
+          "tris": 480
+        },
+        {
+          "node": "spectator-fence_LOD1",
+          "tris": 191
+        },
+        {
+          "node": "spectator-fence_LOD2",
+          "tris": 50
+        }
+      ],
+      "repeatPitchX": 2.5,
+      "heightM": 1.1,
+      "originNote": "ground level at the -X end of the segment; segment runs along +X, feet project to +Y",
+      "notes": "repeatPitchX = 2.50 m: instance at that spacing along +X for a seamless run"
     },
     {
       "name": "spruce",
       "file": "spruce.glb",
-      "bytes": 649708,
-      "tris": 9202,
+      "bytes": 473620,
+      "tris": 11840,
       "lods": [
         {
           "node": "spruce_v0_LOD0",
-          "tris": 2622
+          "tris": 2584
         },
         {
           "node": "spruce_v0_LOD1",
-          "tris": 810
+          "tris": 830
         },
         {
           "node": "spruce_v0_LOD2",
@@ -268,11 +387,11 @@
         },
         {
           "node": "spruce_v1_LOD0",
-          "tris": 3750
+          "tris": 5560
         },
         {
           "node": "spruce_v1_LOD1",
-          "tris": 1072
+          "tris": 1578
         },
         {
           "node": "spruce_v1_LOD2",
@@ -280,11 +399,11 @@
         },
         {
           "node": "spruce_v2_LOD0",
-          "tris": 2830
+          "tris": 3696
         },
         {
           "node": "spruce_v2_LOD1",
-          "tris": 750
+          "tris": 998
         },
         {
           "node": "spruce_v2_LOD2",
@@ -292,8 +411,40 @@
         }
       ],
       "variants": 3,
+      "originNote": "base of trunk on the ground, +Z up; every variant is centred on its own origin (no baked offsets)",
       "notes": "v0 young / v1 mature / v2 old-with-dead-branches; LOD1 rebuilt not decimated, LOD2 crossed-quad imposter baked from each variant's own LOD0",
-      "originNote": "base of trunk on the ground, +Z up; every variant is centred on its own origin (no baked offsets)"
+      "variantDetail": [
+        {
+          "variant": "v0",
+          "label": "young",
+          "heightM": 6.1,
+          "tris": [
+            2584,
+            830,
+            4
+          ]
+        },
+        {
+          "variant": "v1",
+          "label": "mature",
+          "heightM": 27.6,
+          "tris": [
+            5560,
+            1578,
+            4
+          ]
+        },
+        {
+          "variant": "v2",
+          "label": "old",
+          "heightM": 31.6,
+          "tris": [
+            3696,
+            998,
+            4
+          ]
+        }
+      ]
     }
   ]
 }

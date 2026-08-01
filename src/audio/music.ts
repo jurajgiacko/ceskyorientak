@@ -102,7 +102,7 @@ export class Music {
     this.droneLp = ctx.createBiquadFilter();
     this.droneLp.type = 'lowpass';
     this.droneLp.frequency.value = 210;
-    this.droneLp.Q.value = 1.4;
+    this.droneLp.Q.value = 0.85;
     this.droneGain = ctx.createGain();
     this.droneGain.gain.value = 0;
     this.droneLp.connect(this.droneGain).connect(this.out);
@@ -119,7 +119,7 @@ export class Music {
       o.frequency.value = freq;
       o.detune.value = cents;
       const g = ctx.createGain();
-      g.gain.value = type === 'triangle' ? 0.5 : 0.22;
+      g.gain.value = type === 'triangle' ? 0.3 : 0.12;
       o.connect(g).connect(this.droneLp);
       this.droneOscs.push(o);
     }
@@ -162,7 +162,7 @@ export class Music {
     this.started = true;
     for (const o of this.droneOscs) o.start(when);
     this.bowOsc.start(when);
-    this.droneGain.gain.setTargetAtTime(0.22, when, 4);
+    this.droneGain.gain.setTargetAtTime(0.2, when, 4);
     this.tNext = when + rand(this.rng, 6, 16);
     this.tDrift = when + 3;
   }
@@ -190,7 +190,7 @@ export class Music {
       // The drone opens up under tension — more harmonic, less sub. It is the
       // only thing here that responds continuously rather than in events.
       this.droneLp.frequency.setTargetAtTime(rand(r, 150, 260) * (1 + T * 0.9), t, rand(r, 3, 8));
-      this.droneGain.gain.setTargetAtTime(rand(r, 0.16, 0.28) * (0.8 + 0.3 * T), t, rand(r, 4, 10));
+      this.droneGain.gain.setTargetAtTime(rand(r, 0.14, 0.24) * (0.8 + 0.3 * T), t, rand(r, 4, 10));
       // The bowed voice comes and goes on its own slow schedule.
       if (r() < 0.35 + 0.3 * T) {
         const dur = rand(r, 6, 16);

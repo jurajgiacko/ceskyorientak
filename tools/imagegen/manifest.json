@@ -309,7 +309,7 @@
       "seed": 10503,
       "tileable": true,
       "pbr": true,
-      "prompt": "Old Bohemian red clay bonnet roof tiles seen straight down from directly above, filling the entire frame. Overlapping curved half-round terracotta tiles in courses, colour varying from faded orange-red to dark brown and grey-green with age, dusty chalky surface, lichen and moss spotting along the lower edges of the tiles, a few tiles chipped and slightly out of line. Uniform coverage across the frame, no ridge, no chimney, no gutter, no roof outline.",
+      "prompt": "Old Bohemian red clay bonnet roof tiles seen straight down from directly above, filling the entire frame. Exactly eight horizontal courses of overlapping curved half-round terracotta tiles evenly spaced from the very top edge of the frame to the very bottom edge, and about twelve tiles across each course, so the rows and columns run edge to edge with no partial course cut off at the border. Colour varies tile to tile from faded orange-red to dark brown and grey-green with age, dusty chalky surface, lichen and moss spotting along the lower lip of each tile, a few tiles chipped and slightly out of line. No battens, no dark vertical lines, no ridge, no chimney, no gutter, no roof outline, no perspective.",
       "material": {
         "heightStrength": 1.4,
         "roughRange": [
@@ -317,7 +317,8 @@
           0.82
         ],
         "aoStrength": 0.95,
-        "heightBlur": 0.55
+        "heightBlur": 0.55,
+        "mirrorBand": 0.03
       },
       "notes": "Krumlov / Vyšší Brod rooftops seen from the sprint-leg camera. Genuinely periodic material: the ACF peaks at the tile-course spacing (~152px at 1024, ~38px at 256). That rhythm is the roof, not a tiling defect, so acfPeak is relaxed for this asset only.",
       "validate": {

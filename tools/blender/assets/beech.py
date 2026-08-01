@@ -45,12 +45,19 @@ NAME = "beech"
 TAU = math.pi * 2.0
 
 ATLAS_CELLS = 2
-IMPOSTER_CELL = 512          # px per variant in the imposter atlas
-IMPOSTER_ATLAS = 1024        # 2x2 cells, one spare
+# LOD2 is only ever seen at distance, and a rendered canopy is pure high
+# frequency noise, so every pixel here costs real bytes in the .glb.  256 px
+# per variant in one 512 px atlas keeps the whole imposter under ~60 KB.
+IMPOSTER_CELL = 256          # px per variant in the imposter atlas
+IMPOSTER_ATLAS = 512         # 2x2 cells, one spare
+
+BARK_TEX = os.path.join(cli.ROOT, "public", "textures", "bark-beech",
+                        "albedo@256.webp")
+BARK_TILE = 1.05             # metres of trunk per bark texture repeat
 
 # LOD0 triangle budget is 11000 for the whole file; keep a margin so a tweak
 # to one variant cannot silently fail validate.mjs.
-BUDGET_LOD0 = (1250, 4650, 4800)
+BUDGET_LOD0 = (1420, 4680, 4740)
 BUDGET_LOD1 = (620, 1200, 1250)
 
 # mat.BARK_BEECH straight out of the palette renders close to white under the
@@ -83,8 +90,8 @@ VARIANTS = [
         "depth": 1,
         "crown_c": (0.0, 0.0, 4.9),
         "crown_r": (1.80, 1.62, 2.30),
-        "card": 0.44,
-        "card_lod1": 0.90,
+        "card": 0.80,
+        "card_lod1": 1.45,
         "shell_frac": 0.48,
     },
     {   # mature: clean bole then the classic wide dome
@@ -97,8 +104,8 @@ VARIANTS = [
         "depth": 2,
         "crown_c": (0.0, 0.0, 20.4),
         "crown_r": (12.6, 11.7, 9.3),
-        "card": 2.35,
-        "card_lod1": 4.6,
+        "card": 2.80,
+        "card_lod1": 5.2,
         "shell_frac": 0.50,
     },
     {   # old: massive bole, heavy low limbs, lopsided crown
@@ -111,8 +118,8 @@ VARIANTS = [
         "depth": 2,
         "crown_c": (1.6, -1.0, 22.6),
         "crown_r": (16.2, 14.0, 10.7),
-        "card": 2.75,
-        "card_lod1": 5.4,
+        "card": 3.15,
+        "card_lod1": 6.0,
         "shell_frac": 0.52,
     },
 ]
@@ -162,6 +169,43 @@ def card_basis(normal, roll=0.0):
         ca, sa = math.cos(roll), math.sin(roll)
         x, z = (x * ca + z * sa).normalized(), (z * ca - x * sa).normalized()
     return Matrix((x, n, z)).transposed().to_4x4()
+
+
+def tube_tiled(name, points, radii, sides, caps, tile=BARK_TILE):
+    """`M.tube` with UVs that tile the bark texture instead of stretching it.
+
+    `M.tube` writes one UV per *vertex*, so the quad that closes the ring gets
+    a reversed, squashed island -- with a flat colour that is invisible, with a
+    bark photo it is a visible band down the trunk.  UVs are per-loop, so the
+    seam is fixed here by pushing the wrap column out to u = sides instead of
+    folding it back to 0.  Indices are read off the mesh rather than assumed,
+    because `M.tube` runs a bmesh normal-recalc that may rotate a face's loops.
+    """
+    obj = M.tube(name, points, radii, sides=sides, caps=caps)
+    me = obj.data
+    layer = me.uv_layers[0]
+    pts = [Vector(p) for p in points]
+    arc = [0.0]
+    for i in range(1, len(pts)):
+        arc.append(arc[-1] + (pts[i] - pts[i - 1]).length)
+    ring = len(pts) * sides
+    ravg = sum(radii) / float(len(radii))
+    du = (TAU * ravg / tile) / sides
+
+    for poly in me.polygons:
+        vids = [me.loops[li].vertex_index for li in poly.loop_indices]
+        if any(v >= ring for v in vids):       # end cap: no sensible tiling
+            for li in poly.loop_indices:
+                layer.data[li].uv = (0.5, 0.5)
+            continue
+        js = [v % sides for v in vids]
+        wrap = 0 in js and (sides - 1) in js
+        for li in poly.loop_indices:
+            i, j = divmod(me.loops[li].vertex_index, sides)
+            if wrap and j == 0:
+                j = sides
+            layer.data[li].uv = (j * du, arc[i] / tile)
+    return obj
 
 
 def merge(name, sources):
@@ -242,22 +286,12 @@ def build_cards(name, specs):
 
 
 def envelope(cfg):
-    c = Vector(cfg["crown_c"])
-    r = Vector(cfg["crown_r"])
-    return c, r
-
-
-def env_value(p, c, r):
-    """<1 inside the crown envelope, 1 on its surface, >1 outside.
-
-    The envelope is an ellipsoid on top and a longer taper underneath (an egg
-    standing on its narrow end, upside down).  That asymmetry is the beech
-    crown profile: a flattish dome above, a skirt of foliage sweeping down the
-    flanks, and enough horizontal room low down for the heavy old-tree limbs.
-    """
-    d = Vector(p) - c
-    rz = r.z * (SKIRT if d.z < 0.0 else 1.0)
-    return math.sqrt((d.x / r.x) ** 2 + (d.y / r.y) ** 2 + (d.z / rz) ** 2)
+    """Crown envelope: an ellipsoid on top, a longer taper underneath (an egg
+    standing on its narrow end, upside down -- see SKIRT).  That asymmetry is
+    the beech crown profile: a flattish dome above, a skirt of foliage
+    sweeping down the flanks, and enough horizontal room low down for the
+    heavy limbs of the old tree."""
+    return Vector(cfg["crown_c"]), Vector(cfg["crown_r"])
 
 
 def clamp_to_crown(p, c, r, reach=TWIG_REACH):
@@ -358,8 +392,8 @@ def grow(tubes, tips, start, direction, length, radius, level, cfg, rng,
         # taper hard: a beech limb loses most of its girth over its own length
         radii.append(max(0.008, radius * (1.0 - 0.72 * t)))
 
-    tubes.append(M.tube("%s_br%d_%d" % (name, level, len(tubes)), pts, radii,
-                        sides=sides, caps=(level == 0 and quality == 0)))
+    tubes.append(tube_tiled("%s_br%d_%d" % (name, level, len(tubes)), pts,
+                            radii, sides, caps=(level == 0 and quality == 0)))
 
     if level >= depth:
         tips.append((p.copy(), d.copy(), radius))
@@ -387,8 +421,8 @@ def build_skeleton(cfg, rng, quality, name):
     """Bole + every limb generation.  Returns (objects, terminal tips)."""
     tpts, tradii = trunk_curve(cfg, rng.sub("trunk"),
                                n=7 if quality == 0 else 4)
-    tubes = [M.tube("%s_bole" % name, tpts, tradii,
-                    sides=8 if quality == 0 else 5, caps=True)]
+    tubes = [tube_tiled("%s_bole" % name, tpts, tradii,
+                        sides=8 if quality == 0 else 5, caps=True)]
     tips = []
 
     c, r = envelope(cfg)
@@ -449,7 +483,7 @@ def foliage_specs(cfg, tips, rng, n_cards, card_w, quality):
     # of the fine shoots and leave shadowed hollows between the bunches.
     trng = rng.sub("tips")
     per = max(1, int(math.ceil(tip_n / float(len(tips)))))
-    spread = card_w * (1.5 if quality == 0 else 1.15)
+    spread = card_w * (1.7 if quality == 0 else 1.2)
     for ti, (tp, td, _rad) in enumerate(tips):
         sub = trng.sub("t%d" % ti)
         for _ in range(per):
@@ -627,7 +661,16 @@ def pack_imposter_atlas(cell_paths, out_path):
         ix, iy = i % n, (i // n) % n
         atlas[iy * IMPOSTER_CELL:(iy + 1) * IMPOSTER_CELL,
               ix * IMPOSTER_CELL:(ix + 1) * IMPOSTER_CELL] = arr
+    # The material clips at alpha 0.5, so anything between is wasted entropy:
+    # hard-thresholding the alpha and flattening the fully transparent pixels
+    # to a constant roughly halves the PNG for an identical result on screen.
+    a = atlas[..., 3]
+    solid = a >= 0.5
+    atlas[..., 3] = np.where(solid, 1.0, 0.0)
+    atlas[..., :3] *= solid[..., None]
     u8 = (np.clip(atlas, 0.0, 1.0) * 255.0 + 0.5).astype(np.uint8)
+    # 6-bit colour: invisible on a billboard, and much friendlier to zlib.
+    u8[..., :3] = u8[..., :3] & 0xFC
     return tex.write_png(out_path, u8)
 
 
@@ -653,8 +696,19 @@ def main():
     leaf_img = tex.load_image(atlas_path, name="beech_leaves")
     foliage_mat = mat.image_material("beech_leaves", leaf_img, alpha_mode="CLIP",
                                      backface_culling=False, roughness=0.80)
-    bark = mat.principled("beech_bark", mat.BARK_BEECH, roughness=0.70,
-                          specular=0.32)
+    # Real bark albedo beats any flat colour for the "pale but not birch-white"
+    # problem.  Only the 256 px albedo is embedded -- the runtime binds the rest
+    # of the PBR set by material name, which is why this must stay `beech_bark`.
+    if os.path.exists(BARK_TEX):
+        bark_img = tex.load_image(BARK_TEX, name="bark_beech_albedo")
+        bark = mat.image_material("beech_bark", bark_img, alpha_mode="OPAQUE",
+                                  roughness=0.74, use_alpha=False)
+        node = bark.node_tree.nodes.get("BASE_TEX")
+        if node is not None:
+            node.extension = "REPEAT"   # image_material defaults to CLIP
+    else:
+        print("beech: %s missing, falling back to a flat bark colour" % BARK_TEX)
+        bark = mat.principled("beech_bark", BARK, roughness=0.74, specular=0.28)
     # EEVEE Next drives alpha off surface_render_method, not blend_method, so
     # the imposter render below would come out as opaque grey rectangles
     # without this.  glTF export still reads blend_method (set by mat.py).

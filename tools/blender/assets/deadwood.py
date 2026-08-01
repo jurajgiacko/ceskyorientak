@@ -70,7 +70,7 @@ def bumps(angle, spec):
 
 
 def patch_predicate(scale, threshold, offset=(0.0, 0.0, 0.0), octaves=3,
-                    aniso=(1.0, 1.0, 1.0)):
+                    aniso=(1.0, 1.0, 1.0), gain=0.5):
     """Ragged material boundary: True where fbm(face centre) clears threshold.
 
     Used instead of a clean split so the bark/bare-wood edge wanders across
@@ -200,7 +200,7 @@ def broken_branch(name, base, direction, length, r0, r1, rng, sides=6,
 def build_fallen_log(rng, mats):
     length = 6.9
     rings = 24
-    sides = 14
+    sides = 12
 
     pts, radii = [], []
     for i in range(rings):
@@ -222,9 +222,9 @@ def build_fallen_log(rng, mats):
 
     log = M.tube("dw_log", pts, radii, sides=sides, caps=True)
     splinter_tube_end(log, sides, rings, rng.sub("butt"), True,
-                      depth=0.42, pinch=0.06)
+                      depth=0.55, pinch=0.02)
     splinter_tube_end(log, sides, rings, rng.sub("top"), False,
-                      depth=0.34, pinch=0.10)
+                      depth=0.46, pinch=0.05)
 
     # bark relief: one coarse pass for the trunk's own irregularity, one at
     # roughly the vertex spacing so the ridges actually resolve
@@ -258,12 +258,15 @@ def build_fallen_log(rng, mats):
     obj = M.join(parts, "deadwood_v0")
     M.merge_doubles(obj, 8e-4)
 
-    # bark in ragged patches over pale weathered wood; the lattice is squashed
-    # along the trunk so the patches run as strips, not blobs
+    # Bark clings in a few LARGE zones over pale weathered wood -- the noise
+    # wavelength is deliberately longer than the face size (metres, not
+    # centimetres), because a boundary that turns over every couple of faces
+    # reads as camouflage rather than as bark, and per-face assignment cannot
+    # resolve anything finer than a face anyway.
     mat.assign_all(obj, mats["wood"])
     mat.assign_faces(obj, mats["bark"],
-                     patch_predicate(2.0, -0.05, offset=(3.1, 8.4, 1.7),
-                                     aniso=(0.30, 0.55, 0.55), octaves=2))
+                     patch_predicate(1.05, 0.02, offset=(3.1, 8.4, 1.7),
+                                     aniso=(0.28, 0.50, 0.50), octaves=1))
     uvtools.cube_project(obj, 0.6)
     M.shade_smooth(obj, SMOOTH)
     return obj
@@ -275,7 +278,7 @@ def build_fallen_log(rng, mats):
 
 def build_stump(rng, mats):
     height = 1.24
-    segments = 22
+    segments = 20
     profile = [
         (0.000, -0.150),
         (0.400, -0.120),
@@ -384,8 +387,8 @@ def build_stump(rng, mats):
 
     mat.assign_all(obj, mats["bark"])
     mat.assign_faces(obj, mats["wood"],
-                     patch_predicate(2.4, -0.02, offset=(1.4, 2.9, 6.2),
-                                     aniso=(0.9, 0.9, 0.30), octaves=2))
+                     patch_predicate(1.35, -0.02, offset=(1.4, 2.9, 6.2),
+                                     aniso=(0.9, 0.9, 0.30), octaves=1))
     uvtools.cube_project(obj, 0.5)
     M.shade_smooth(obj, SMOOTH)
     return obj
@@ -397,7 +400,7 @@ def build_stump(rng, mats):
 
 def build_root_plate(rng, mats):
     radius = 1.30
-    half = 0.155
+    half = 0.200
 
     profile = [
         (0.00 * radius, -half),
@@ -419,9 +422,14 @@ def build_root_plate(rng, mats):
     lobes = [(edge.uniform(0.0, TAU), edge.uniform(-0.36, 0.30),
               edge.uniform(0.22, 0.75)) for _ in range(8)]
 
+    # Thickness is what separates a root pan from a pancake: the real thing is
+    # 20-50 cm of matted soil and root, and wildly uneven across its face.
+    tseed = Vector(rng.sub("thick").offset3(11.0))
+
     def outline(co, _n, _i):
         p = co.copy()
         r = math.hypot(p.x, p.y)
+        p.z *= 1.0 + 0.70 * fbm(Vector((p.x, p.y, 0.0)) * 1.35 + tseed, 2)
         if r < 1e-5:
             return p
         ang = math.atan2(p.y, p.x)
@@ -464,6 +472,25 @@ def build_root_plate(rng, mats):
         M.noise_displace(r_obj, 0.011, scale=4.5, offset=roots.offset3(7.0))
         parts.append(r_obj)
 
+        # roots fork; a fan of straight uniform spikes is the giveaway of a
+        # procedural asset, so the thicker ones branch once
+        if thick > 0.055:
+            bp = Vector(pts[1])
+            bd = (d * 0.75 + lat * roots.choice((-1.0, 1.0)) * 0.9).normalized()
+            bl = ln * roots.uniform(0.40, 0.70)
+            bpts, bradii = [], []
+            for i in range(3):
+                t = i * 0.5
+                bpts.append(tuple(bp + bd * (bl * t)
+                                  + Vector((0.0, 0.0,
+                                            roots.uniform(-0.06, 0.06) * t))))
+                bradii.append(thick * 0.55 * (1.0 - t) + 0.010 * t)
+            fork = M.tube("dw_plate_fork%d" % k, bpts, bradii, sides=5,
+                          caps=True)
+            splinter_tube_end(fork, 5, 3, roots.sub("f%d" % k), False,
+                              0.05, 0.25)
+            parts.append(fork)
+
     # roots bursting out of the *face* of the pan -- this is what stops the
     # silhouette reading as a spiky disc from the front
     face = rng.sub("face")
@@ -488,16 +515,30 @@ def build_root_plate(rng, mats):
         splinter_tube_end(f_obj, 5, n, face.sub("f%d" % k), False, 0.06, 0.25)
         parts.append(f_obj)
 
+    # clods of soil and the odd stone still gripped by the root mat
+    clods = rng.sub("clods")
+    for k in range(4):
+        a = clods.uniform(-0.10 * math.pi, 1.10 * math.pi)
+        rr = clods.uniform(0.20, 0.88) * radius
+        side = 1.0 if clods.chance(0.5) else -1.0
+        clod = M.icosphere(
+            "dw_plate_clod%d" % k, radius=clods.uniform(0.085, 0.165),
+            subdivisions=1,
+            location=(math.cos(a) * rr * 1.16, math.sin(a) * rr * 0.86,
+                      side * half * 0.62))
+        M.noise_displace(clod, 0.040, scale=5.5, offset=clods.offset3(4.0))
+        parts.append(clod)
+
     plate = M.join(parts, "dw_plate_asm")
 
     # soil / stone clinging to the pan, before the plate is tipped upright
     mat.assign_all(plate, mats["soil"])
     mat.assign_faces(plate, mats["wood"],
-                     patch_predicate(1.9, 0.02, offset=(5.5, 1.2, 3.3),
-                                     octaves=2))
+                     patch_predicate(1.15, 0.14, offset=(5.5, 1.2, 3.3),
+                                     octaves=1))
     mat.assign_faces(plate, mats["stone"],
-                     patch_predicate(4.2, 0.34, offset=(0.7, 4.4, 9.1),
-                                     octaves=2))
+                     patch_predicate(2.6, 0.42, offset=(0.7, 4.4, 9.1),
+                                     octaves=1))
 
     # tip the pan onto its edge (a windthrow plate leans back over its hole)
     tip = (Matrix.Rotation(math.radians(9.0), 4, "Z")
@@ -524,8 +565,8 @@ def build_root_plate(rng, mats):
     M.noise_displace(stem, 0.012, scale=4.4, offset=trunk.offset3(2.0))
     mat.assign_all(stem, mats["bark"])
     mat.assign_faces(stem, mats["wood"],
-                     patch_predicate(2.1, 0.0, offset=(8.8, 0.4, 2.6),
-                                     aniso=(0.6, 0.30, 0.6), octaves=2))
+                     patch_predicate(1.25, 0.02, offset=(8.8, 0.4, 2.6),
+                                     aniso=(0.6, 0.30, 0.6), octaves=1))
 
     obj = M.join([plate, stem], "deadwood_v2")
     M.merge_doubles(obj, 8e-4)
@@ -541,16 +582,21 @@ def main():
     args = cli.parse({"draco": True})
     rng = cli.setup(args.seed, NAME)
 
+    # The whole asset lives or dies on the VALUE contrast between the two wood
+    # surfaces: near-black bark against pale silver-grey weathered timber is
+    # what makes a dead spruce readable at 30 m.  mat.WOOD_DEAD is a warm tan,
+    # which reads as driftwood rather than standing deadwood, so the bare wood
+    # gets a desaturated, much lighter grey of its own.
     mats = {
-        "bark": mat.principled("dw_bark", mat.BARK_SPRUCE, roughness=0.93,
-                               specular=0.20),
-        "wood": mat.principled("dw_wood", mat.WOOD_DEAD, roughness=0.86,
-                               specular=0.24),
-        "soil": mat.principled("dw_soil", (0.072, 0.056, 0.040),
+        "bark": mat.principled("dw_bark", mat.BARK_SPRUCE, roughness=0.94,
+                               specular=0.18),
+        "wood": mat.principled("dw_wood", (0.228, 0.222, 0.206),
+                               roughness=0.84, specular=0.26),
+        "soil": mat.principled("dw_soil", (0.058, 0.045, 0.032),
                                roughness=0.98, specular=0.12),
         "stone": mat.principled("dw_stone",
-                                tuple(c * 0.62 for c in mat.GRANITE_MID),
-                                roughness=0.78, specular=0.35),
+                                tuple(c * 0.85 for c in mat.GRANITE_MID),
+                                roughness=0.74, specular=0.38),
     }
 
     builders = (build_fallen_log, build_stump, build_root_plate)

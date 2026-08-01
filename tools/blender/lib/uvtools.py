@@ -57,12 +57,12 @@ def cylinder_project(obj, scale=1.0, axis="Z", name="UVMap", u_repeat=1.0):
     layer = ensure_layer(obj, name)
     mn, mx = M.bounds(obj)
     if axis == "Z":
-        lo, hi = mn.z, mx.z
+        lo = mn.z
     elif axis == "Y":
-        lo, hi = mn.y, mx.y
+        lo = mn.y
     else:
-        lo, hi = mn.x, mx.x
-    span = (hi - lo) or 1.0
+        lo = mn.x
+    inv_scale = 1.0 / (scale or 1.0)
 
     for poly in me.polygons:
         for li in poly.loop_indices:
@@ -74,7 +74,9 @@ def cylinder_project(obj, scale=1.0, axis="Z", name="UVMap", u_repeat=1.0):
             else:
                 a, h = math.atan2(co.z, co.y), co.x
             u = (a / (2.0 * math.pi) + 0.5) * u_repeat
-            layer.data[li].uv = (u, ((h - lo) / span) * span * (1.0 / (scale or 1.0)))
+            # V is world height above the base divided by `scale`, i.e. the
+            # texture tiles every `scale` metres along the axis.
+            layer.data[li].uv = (u, (h - lo) * inv_scale)
     return obj
 
 
