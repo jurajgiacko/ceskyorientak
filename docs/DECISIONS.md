@@ -475,3 +475,53 @@ or out-of-bounds**, against roughly half that for the original point.
 picked by reading a place name off a map. Once the terrain pipeline exists, the
 pipeline's own output is a better source of truth about the terrain than any
 map is — and it is cheap to ask it.
+
+---
+
+## D-019 — A skipped check is not a passed check
+
+**Incident.** A shader-compile regression shipped to production. The shared
+canopy-light GLSL was injected repeatedly into the same shader, so
+`varying vec3 vGroundWorld;` was declared up to seventeen times and the vertex
+shader failed to compile. **Boulders and deadwood did not render at all.**
+
+Throughout, `tsc` was clean, `npm run build` succeeded, and all three CI gates
+were green. The perf gate reported `skip (window.__perf not exposed)` — and a
+skip was being counted as a pass.
+
+**Two things made it invisible:**
+
+1. **A failed shader makes an object vanish, not misdraw.** There is no error
+   state to see. An emptier forest reads as an art regression, or as nothing at
+   all, so the usual "does it look wrong?" check does not fire.
+2. **The gate could not tell "not built yet" from "built and broken".** Both
+   present as an absent `window.__perf`, so the honest early-development state
+   and a hard failure were indistinguishable.
+
+**Fixes.**
+
+- `tools/perf/budget.mjs` now separates the two: if a `<canvas>` exists, a
+  renderer was constructed, and a constructed renderer that never publishes a
+  frame monitor is a **failure**, not a skip. Only "no canvas *and* no monitor"
+  is a legitimate skip.
+- `src/main.ts` captures shader and WebGL `console.error` output into
+  `window.__renderErrors`, so the gate reports *what* broke rather than only
+  that something did.
+- The GLSL injection is guarded on the **shader source itself**, not on a flag.
+  A `userData` marker stops one material being patched twice, but glTF
+  materials are cloned per variant and per LOD, and a clone copies
+  `onBeforeCompile` with its handler chain attached — so the chain can still
+  run twice over one source. Checking the source cannot be defeated by how the
+  material got there.
+
+**The general rule**, which is why this is written down rather than just fixed:
+**any check that can silently not-run must report the difference between
+"nothing to check" and "could not check".** Otherwise the absence of a signal
+reads as a good signal, which is worse than having no gate at all — a missing
+gate is at least known to be missing.
+
+**Also worth remembering:** two alarming readings during this investigation were
+measurement artefacts, not faults. `drawCalls: 0` was a background-tab
+`requestAnimationFrame` throttle, and `window.__perf` appearing undefined was
+the browser tool evaluating in an isolated world. Both would have sent a fix in
+the wrong direction. Confirm the instrument before trusting the reading.

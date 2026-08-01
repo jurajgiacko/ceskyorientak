@@ -237,9 +237,31 @@ async function measureScene(cdpPort, base, scene, mobile) {
   await new Promise((r) => setTimeout(r, scene.settleMs));
   const has = await evaluate('typeof window.__perf === "object"');
   if (!has) {
+    // Distinguish "this scene does not exist yet" from "this scene exists and
+    // is broken". Both look identical from the outside, and treating them the
+    // same is how a shader-compile regression once shipped: every gate stayed
+    // green while boulders and deadwood silently failed to render.
+    //
+    // A canvas on the page means a renderer was constructed. If it constructed
+    // one and still never published a frame monitor, the scene is not missing —
+    // it is failing, and that must fail the build rather than be skipped.
+    const built = await evaluate('!!document.querySelector("canvas")');
+    const errors = await evaluate(
+      'JSON.stringify((window.__renderErrors||[]).slice(0,3))',
+    );
     sock.close();
     await fetch(`http://127.0.0.1:${cdpPort}/json/close/${target.id}`);
-    return { skipped: true, reason: 'window.__perf not exposed (scene not built yet)' };
+    if (built) {
+      return {
+        skipped: false,
+        broken: true,
+        reason:
+          'a canvas exists but window.__perf was never published — the scene ' +
+          'constructed a renderer and then failed to run a frame' +
+          (errors && errors !== '[]' ? `\n     ${errors}` : ''),
+      };
+    }
+    return { skipped: true, reason: 'no canvas and no __perf — scene not built yet' };
   }
   await evaluate('window.__perf.reset()');
   await new Promise((r) => setTimeout(r, scene.measureMs));
@@ -278,6 +300,11 @@ async function main() {
         const key = `${scene.id}.${mobile ? 'mobile' : 'desktop'}`;
         process.stdout.write(`▶ ${key} … `);
         const r = await measureScene(cdpPort, base, scene, mobile);
+        if (r.broken) {
+          console.log(`✗ BROKEN\n     ${r.reason}`);
+          failed = true;
+          continue;
+        }
         if (r.skipped) {
           console.log(`skip (${r.reason})`);
           continue;
