@@ -1,0 +1,337 @@
+{
+  "_": "Build-time image generation manifest for ORIENTAK: VYŠŠÍ BROD. Source of truth for tools/imagegen/generate.mjs. The shipped game NEVER calls an image API — everything here runs offline at build time and is committed as static WebP under public/.",
+  "model": "gemini-2.5-flash-image",
+
+  "styleAnchor": {
+    "texture": "Photographic material surface scan. Perfectly orthographic straight-down camera, sensor plane exactly parallel to the surface, zero perspective, zero convergence. Completely flat even diffuse illumination from a large overhead softbox dome — light is identical in every corner of the frame, exposure is uniform edge to edge. Albedo-only surface colour: no cast shadows, no self-shadowing, no specular highlights, no glare, no vignette, no gradient across the frame. Entire frame in sharp focus, no depth of field, no blur. Uniform physical scale across the whole frame, roughly a 1.5 metre by 1.5 metre patch of ground or surface. Natural desaturated Central European colour, overcast-daylight white balance around 6000K. Dense uniform natural detail filling the frame with no single dominant feature and no compositional focal point. High resolution, fine micro-detail, photographic grain, shot for use as a repeating game texture.",
+    "art": "Photoreal cinematic digital matte painting, Central European Bohemian landscape photography aesthetic, natural colour grading, physically plausible atmospheric perspective and haze, restrained contrast, no HDR halos, no oversaturation. Composition balanced for use as a game background behind UI."
+  },
+
+  "negativePrompt": {
+    "texture": "no text, no lettering, no numbers, no watermark, no logo, no signage, no label, no colour chart, no scale bar, no ruler, no swatch grid, no collage, no border, no frame, no rounded corners, no people, no faces, no hands, no animals, no tools, no man-made objects, no litter, no footprints, no tyre tracks, no perspective, no horizon, no sky, no background, no cast shadow, no drop shadow, no directional light, no sunbeam, no dappled light, no spotlight, no specular highlight, no wet glossy reflection, no vignette, no lens flare, no bokeh, no depth of field, no tilt shift, no motion blur, no illustration, no painting, no drawing, no 3D render, no CGI, no cartoon, no seamless-pattern preview mosaic",
+
+    "art": "no text, no lettering, no numbers, no watermark, no logo, no signage, no brand mark, no product packaging, no jersey sponsor, no bib number, no recognisable real person, no identifiable face, no portrait, no cartoon, no anime, no oversaturated fantasy colour, no lens flare, no HDR halo, no distorted anatomy, no extra limbs"
+  },
+
+  "defaults": {
+    "texture": { "aspect": "1:1", "tileable": true, "pbr": true },
+    "art": { "tileable": false, "pbr": false }
+  },
+
+  "assets": [
+    {
+      "id": "bark-spruce",
+      "kind": "texture",
+      "category": "bark",
+      "aspect": "1:1",
+      "seed": 10101,
+      "tileable": true,
+      "pbr": true,
+      "prompt": "Extreme close-up of Norway spruce (Picea abies) bark from a mature Šumava forest tree, filling the entire frame. Thin irregular reddish-brown to grey-brown scaly plates flaking apart, narrow dark fissures between the scales, small patches of pale grey-green crustose lichen and a little dried resin. Bark surface flattened out and photographed straight on, no trunk curvature, no silhouette, no edges of the trunk visible.",
+      "material": { "heightStrength": 1.5, "roughRange": [0.62, 0.94], "aoStrength": 0.85, "heightBlur": 0.7 },
+      "notes": "Trunk imposters and close-LOD tree bark. Vertical grain is intentional and survives the 50% offset."
+    },
+    {
+      "id": "bark-beech",
+      "kind": "texture",
+      "category": "bark",
+      "aspect": "1:1",
+      "seed": 10102,
+      "tileable": true,
+      "pbr": true,
+      "prompt": "Extreme close-up of European beech (Fagus sylvatica) bark filling the entire frame. Smooth taut silvery-grey skin with faint horizontal lenticel bands, subtle shallow undulations, small dark olive and pale sage lichen blotches and a few tiny healed scars. Bark surface flattened out and photographed straight on, no trunk curvature, no silhouette, no edges of the trunk visible.",
+      "material": { "heightStrength": 0.7, "roughRange": [0.42, 0.72], "aoStrength": 0.5, "heightBlur": 1.0 },
+      "notes": "Smooth material — deliberately low normal strength and lower roughness than spruce."
+    },
+    {
+      "id": "granite-boulder",
+      "kind": "texture",
+      "category": "rock",
+      "aspect": "1:1",
+      "seed": 10201,
+      "tileable": true,
+      "pbr": true,
+      "prompt": "Weathered Šumava granite rock surface filling the entire frame, seen straight down. Coarse-grained grey granite with visible quartz, feldspar and biotite crystals, speckled salt-and-pepper mineral texture, shallow weathering pits and fine hairline cracks, patches of pale grey-green and rusty-orange crustose lichen creeping across the stone. Flat rock face, no boulder outline, no edges, no ground around it.",
+      "material": { "heightStrength": 1.2, "roughRange": [0.55, 0.88], "aoStrength": 0.8, "heightBlur": 0.6 },
+      "notes": "Šumava is a granite/gneiss massif — this is the dominant rock across the whole map."
+    },
+    {
+      "id": "granite-lichen",
+      "kind": "texture",
+      "category": "rock",
+      "aspect": "1:1",
+      "seed": 10202,
+      "tileable": true,
+      "pbr": true,
+      "prompt": "Heavily lichen-covered granite surface filling the entire frame, seen straight down. Roughly seventy percent of the stone is overgrown by overlapping crustose and foliose lichen colonies in chalky mint green, sulphur yellow, bone white and rust orange, with irregular scalloped colony margins; bare grey speckled granite shows through only in gaps. Flat rock face, no boulder outline, no edges, no ground around it.",
+      "material": { "heightStrength": 0.9, "roughRange": [0.7, 0.95], "aoStrength": 0.7, "heightBlur": 0.8 },
+      "notes": "Detail/variation layer blended over granite-boulder to break repetition on large rock faces."
+    },
+    {
+      "id": "forest-floor-needles",
+      "kind": "texture",
+      "category": "ground",
+      "aspect": "1:1",
+      "seed": 10301,
+      "tileable": true,
+      "pbr": true,
+      "prompt": "Spruce forest floor seen straight down from above, filling the entire frame. A deep dense litter of fallen brown spruce needles in every direction, a scatter of small dry twigs, a few spent spruce cones and cone scales, fragments of bark, and small tufts of dark green moss and haircap moss pushing through. Damp dark humus visible in the gaps between needles. Uniform coverage across the frame.",
+      "material": { "heightStrength": 1.1, "roughRange": [0.72, 0.96], "aoStrength": 0.9, "heightBlur": 0.5 },
+      "notes": "Runnable-forest ground plane, the single most-seen texture in the game."
+    },
+    {
+      "id": "forest-floor-leaf",
+      "kind": "texture",
+      "category": "ground",
+      "aspect": "1:1",
+      "seed": 10302,
+      "tileable": true,
+      "pbr": true,
+      "prompt": "Deciduous forest floor seen straight down from above, filling the entire frame. A dense layer of fallen beech and hornbeam leaves in tan, ochre, russet and faded brown, overlapping at all angles, some curled and skeletonised, mixed with dark leaf mould, a few small twigs and beech mast husks. Uniform coverage across the frame.",
+      "material": { "heightStrength": 1.0, "roughRange": [0.6, 0.9], "aoStrength": 0.9, "heightBlur": 0.6 },
+      "notes": "Beech stands on the warmer south-facing Vyšší Brod slopes."
+    },
+    {
+      "id": "moss",
+      "kind": "texture",
+      "category": "ground",
+      "aspect": "1:1",
+      "seed": 10303,
+      "tileable": true,
+      "pbr": true,
+      "prompt": "Thick carpet of forest moss seen straight down from above, filling the entire frame. Dense cushions of vivid and dark green feather moss and haircap moss with fine upright shoots, subtle variation between yellow-green and deep bottle-green cushions, a few dry spruce needles and a tiny fallen twig caught in the pile. Soft velvety micro-structure, uniform coverage across the frame.",
+      "material": { "heightStrength": 0.85, "roughRange": [0.78, 0.98], "aoStrength": 1.0, "heightBlur": 0.9 },
+      "notes": "Very rough, very high AO — moss eats light. Never let this read glossy."
+    },
+    {
+      "id": "marsh-grass",
+      "kind": "texture",
+      "category": "ground",
+      "aspect": "1:1",
+      "seed": 10304,
+      "tileable": true,
+      "pbr": true,
+      "prompt": "Šumava peat bog vegetation seen straight down from above, filling the entire frame. Tussocks of purple moor grass and sedge in olive, straw and rust tones lying in tangled mats, pale bleached dead stems from last season, rusty red sphagnum bog moss between the tussocks, dark peaty water-soaked ground barely visible in the gaps. Uniform coverage across the frame.",
+      "material": { "heightStrength": 1.0, "roughRange": [0.6, 0.9], "aoStrength": 0.95, "heightBlur": 0.7 },
+      "notes": "Slow/marsh terrain class. Colour must stay olive-rust, not lush green."
+    },
+    {
+      "id": "heather-rough-open",
+      "kind": "texture",
+      "category": "ground",
+      "aspect": "1:1",
+      "seed": 10305,
+      "tileable": true,
+      "pbr": true,
+      "prompt": "Rough open moorland ground seen straight down from above, filling the entire frame. Low woody heather and bilberry scrub with small dark green leaves and wiry stems, dry brown heather twigs, patches of coarse tussock grass, pale reindeer lichen and scattered small granite grit. Tangled uneven low vegetation, uniform coverage across the frame.",
+      "material": { "heightStrength": 1.15, "roughRange": [0.7, 0.95], "aoStrength": 0.95, "heightBlur": 0.6 },
+      "notes": "IOF 'rough open' terrain class — slower running than meadow."
+    },
+    {
+      "id": "meadow-grass",
+      "kind": "texture",
+      "category": "ground",
+      "aspect": "1:1",
+      "seed": 10306,
+      "tileable": true,
+      "pbr": true,
+      "prompt": "Mown Central European hay meadow seen straight down from above, filling the entire frame. Fine short grass blades at mixed angles in mid green with straw-yellow and olive variation, a scattering of small dried stems and clover leaves, thatch and soil faintly visible at the roots. Even natural density, uniform coverage across the frame.",
+      "material": { "heightStrength": 0.8, "roughRange": [0.55, 0.85], "aoStrength": 0.8, "heightBlur": 0.8 },
+      "notes": "Fast open terrain. Keep saturation restrained — Czech August meadow, not golf turf."
+    },
+    {
+      "id": "gravel-path",
+      "kind": "texture",
+      "category": "path",
+      "aspect": "1:1",
+      "seed": 10401,
+      "tileable": true,
+      "pbr": true,
+      "prompt": "Compacted forest gravel track surface seen straight down from above, filling the entire frame. Angular crushed granite chippings from fine grit up to two centimetres across, grey and buff with a few pale quartz and rusty iron-stained pieces, bedded into pale compacted dust, a few tiny dry needles caught between stones. Dense even packing, uniform coverage across the frame.",
+      "material": { "heightStrength": 1.3, "roughRange": [0.62, 0.9], "aoStrength": 0.9, "heightBlur": 0.45 },
+      "notes": "Forest road / ride surface."
+    },
+    {
+      "id": "dirt-path",
+      "kind": "texture",
+      "category": "path",
+      "aspect": "1:1",
+      "seed": 10402,
+      "tileable": true,
+      "pbr": true,
+      "prompt": "Bare packed earth forest footpath surface seen straight down from above, filling the entire frame. Fine mid-brown compacted soil with a slightly cracked crust, scattered small stones and grit pressed into it, a few exposed thin tree roots and stray dry needles, subtle patches of darker damp soil. Uniform coverage across the frame.",
+      "material": { "heightStrength": 0.9, "roughRange": [0.68, 0.93], "aoStrength": 0.85, "heightBlur": 0.7 },
+      "notes": "Small path / trodden line."
+    },
+    {
+      "id": "cobble-krumlov",
+      "kind": "texture",
+      "category": "urban",
+      "aspect": "1:1",
+      "seed": 10501,
+      "tileable": true,
+      "pbr": true,
+      "prompt": "Historic Bohemian old-town cobblestone paving seen straight down from above, filling the entire frame. Irregular hand-cut granite setts of uneven size and shape, worn smooth and slightly rounded on top by centuries of use, laid in loose organic courses, joints packed with grey sand and a little moss creeping in the cracks. Muted grey, warm buff and faint pink granite tones. Uniform coverage across the frame, no kerb, no drain, no road markings.",
+      "material": { "heightStrength": 1.6, "roughRange": [0.4, 0.78], "aoStrength": 1.0, "heightBlur": 0.5 },
+      "notes": "Český Krumlov sprint-leg streets. Strong AO in the joints is what sells this."
+    },
+    {
+      "id": "plaster-renaissance",
+      "kind": "texture",
+      "category": "urban",
+      "aspect": "1:1",
+      "seed": 10502,
+      "tileable": true,
+      "pbr": true,
+      "prompt": "Weathered Renaissance lime plaster wall surface seen straight on, filling the entire frame. Hand-floated warm cream and pale ochre limewash over rough render, faint incised sgraffito diamond-rustication scoring showing through as shallow soft-edged geometric lines, patches where the top coat has flaked to reveal grey-brown render underneath, hairline craquelure, light grime and water staining. No windows, no mouldings, no ornament, no figures, no pattern that reads as printed.",
+      "material": { "heightStrength": 0.6, "roughRange": [0.5, 0.82], "aoStrength": 0.55, "heightBlur": 1.1 },
+      "notes": "Krumlov facades. Sgraffito is geometric scoring only — must NOT become figurative or a repeating printed motif."
+    },
+    {
+      "id": "roof-tile-bohemian",
+      "kind": "texture",
+      "category": "urban",
+      "aspect": "1:1",
+      "seed": 10503,
+      "tileable": true,
+      "pbr": true,
+      "prompt": "Old Bohemian red clay bonnet roof tiles seen straight down from directly above, filling the entire frame. Overlapping curved half-round terracotta tiles in courses, colour varying from faded orange-red to dark brown and grey-green with age, dusty chalky surface, lichen and moss spotting along the lower edges of the tiles, a few tiles chipped and slightly out of line. Uniform coverage across the frame, no ridge, no chimney, no gutter, no roof outline.",
+      "material": { "heightStrength": 1.4, "roughRange": [0.5, 0.82], "aoStrength": 0.95, "heightBlur": 0.55 },
+      "notes": "Krumlov / Vyšší Brod rooftops seen from the sprint-leg camera."
+    },
+    {
+      "id": "stone-wall-castle",
+      "kind": "texture",
+      "category": "urban",
+      "aspect": "1:1",
+      "seed": 10504,
+      "tileable": true,
+      "pbr": true,
+      "prompt": "Medieval Bohemian castle wall masonry seen straight on, filling the entire frame. Roughly squared granite and gneiss blocks of mixed sizes laid in irregular courses, faces pitted and weathered, deep recessed lime mortar joints with a coarse aggregate, streaks of grey and rust staining, small patches of moss and lichen in the joints. Uniform coverage across the frame, no arch, no window, no corner, no ground, no sky.",
+      "material": { "heightStrength": 1.5, "roughRange": [0.6, 0.9], "aoStrength": 1.0, "heightBlur": 0.5 },
+      "notes": "Vyšší Brod monastery / Krumlov castle walls."
+    },
+
+    {
+      "id": "menu-backdrop-sumava",
+      "kind": "art",
+      "category": "backdrop",
+      "aspect": "16:9",
+      "seed": 20001,
+      "tileable": false,
+      "pbr": false,
+      "prompt": "Photoreal wide view deep inside a mature Šumava spruce forest at ten in the morning in early August. Tall straight Norway spruce trunks receding into layered depth, low ground mist still hanging between them, shafts of warm sunlight cutting diagonally through the canopy from the upper right and picking out floating dust and pollen, forest floor of moss and needle litter with a scatter of lichen-covered granite boulders, a faint trodden path leading into the distance on the left third. Cool blue-green shadow tones against warm gold light beams, calm and reverent mood, generous darker forest mass across the right side for UI text to sit on.",
+      "notes": "Main menu. Composition intentionally leaves the right side dark and quiet for the title/menu column."
+    },
+    {
+      "id": "menu-backdrop-krumlov",
+      "kind": "art",
+      "category": "backdrop",
+      "aspect": "16:9",
+      "seed": 20002,
+      "tileable": false,
+      "pbr": false,
+      "prompt": "Photoreal elevated morning view over the rooftops of a historic South Bohemian old town in a tight river meander. A dense mass of steep red clay tile roofs and cream and ochre plastered facades, a tall pale round castle tower with a painted arcaded gallery rising on the left, a slim church spire on the right, the green river looping around the town, wooded hills behind, thin river mist in the valley and soft early sunlight raking the rooftops from the east. Clear pale morning sky in the upper third. Generic historic Bohemian architecture, no signage, no banners, no modern vehicles.",
+      "notes": "Krumlov sprint-leg menu/backdrop. Deliberately 'generic Bohemian town' — no landmark branding."
+    },
+    {
+      "id": "loading-forest-run",
+      "kind": "art",
+      "category": "loading",
+      "aspect": "16:9",
+      "seed": 20101,
+      "tileable": false,
+      "pbr": false,
+      "prompt": "Photoreal low wide shot along a narrow trodden orienteering line through dense Šumava spruce forest, seen from knee height, bilberry undergrowth and moss brushing in from both sides, granite boulders half buried to the left, dappled green light and depth haze fading the trunks into the distance. Empty trail, no runner in frame, sense of forward motion and anticipation.",
+      "notes": "Loading screen 1 of 3."
+    },
+    {
+      "id": "loading-marsh-crossing",
+      "kind": "art",
+      "category": "loading",
+      "aspect": "16:9",
+      "seed": 20102,
+      "tileable": false,
+      "pbr": false,
+      "prompt": "Photoreal wide view across an open Šumava peat bog clearing under flat overcast light, rust and olive tussocks of moor grass and sphagnum, dark peaty pools reflecting a pale sky, skeletal dead spruce snags standing at the margin, the dark wall of living forest closing the far side, thin mist over the far treeline. Desolate, quiet, cold-toned.",
+      "notes": "Loading screen 2 of 3."
+    },
+    {
+      "id": "loading-krumlov-street",
+      "kind": "art",
+      "category": "loading",
+      "aspect": "16:9",
+      "seed": 20103,
+      "tileable": false,
+      "pbr": false,
+      "prompt": "Photoreal view down a narrow empty cobbled lane in a historic South Bohemian old town at early morning, weathered cream and ochre lime-plastered walls on both sides, deep-set arched doorways and small wooden shutters, the lane bending out of sight, warm sunlight touching only the upper storeys while the street stays in cool shadow, worn granite setts underfoot. No people, no shop fronts, no signs, no banners, no vehicles.",
+      "notes": "Loading screen 3 of 3."
+    },
+    {
+      "id": "badge-first-control",
+      "kind": "art",
+      "category": "badge",
+      "aspect": "1:1",
+      "seed": 20201,
+      "tileable": false,
+      "pbr": false,
+      "prompt": "Circular game achievement badge illustration. A generic orange and white orienteering control flag — a three-panel fabric prism hanging from a slim stake — standing on mossy forest floor, centred in the frame, dense dark spruce forest softly blurred behind it, warm morning light. Painterly semi-realistic style, rich but restrained colour, strong silhouette, subject centred with clear margin, plain dark vignette-free background at the edges of the circle. No text, no numerals, no ribbon, no crest, no medal, no electronic device.",
+      "notes": "Achievement: punch your first control."
+    },
+    {
+      "id": "badge-clean-run",
+      "kind": "art",
+      "category": "badge",
+      "aspect": "1:1",
+      "seed": 20202,
+      "tileable": false,
+      "pbr": false,
+      "prompt": "Circular game achievement badge illustration. A folded orienteering-style topographic map lying on green moss with a plain thumb compass resting on it, seen from above, centred in the frame, soft forest light. The map shows only abstract unreadable contour lines and green and white shading with no text, no numbers, no legend and no control circles. Painterly semi-realistic style, rich but restrained colour, subject centred with clear margin.",
+      "notes": "Achievement: complete a course with no mistakes."
+    },
+    {
+      "id": "badge-night-owl",
+      "kind": "art",
+      "category": "badge",
+      "aspect": "1:1",
+      "seed": 20203,
+      "tileable": false,
+      "pbr": false,
+      "prompt": "Circular game achievement badge illustration. A headlamp beam cutting through night forest — a cone of pale light picking spruce trunks and drifting mist out of deep blue-black darkness, centred in the frame, cool moonlit blues against the warm lamp beam. Painterly semi-realistic style, strong tonal contrast, subject centred with clear margin. No person visible, no face, no text.",
+      "notes": "Achievement: finish a night leg."
+    },
+    {
+      "id": "badge-marsh-runner",
+      "kind": "art",
+      "category": "badge",
+      "aspect": "1:1",
+      "seed": 20204,
+      "tileable": false,
+      "pbr": false,
+      "prompt": "Circular game achievement badge illustration. A pair of muddy orienteering shoes and gaiters mid-stride through a peat bog, splashing dark water among rust-coloured sphagnum tussocks, seen from low and close, legs cropped at the knee so no person and no face is visible, centred in the frame. Painterly semi-realistic style, earthy olive and rust palette, subject centred with clear margin. No text, no brand marks on the shoes, plain unbranded footwear.",
+      "notes": "Achievement: cross the bog without losing time."
+    },
+    {
+      "id": "badge-sprint-krumlov",
+      "kind": "art",
+      "category": "badge",
+      "aspect": "1:1",
+      "seed": 20205,
+      "tileable": false,
+      "pbr": false,
+      "prompt": "Circular game achievement badge illustration. A narrow historic Bohemian cobbled alley opening between two weathered ochre plastered walls, a stone archway framing bright daylight beyond, seen straight down the alley and centred in the frame. Painterly semi-realistic style, warm stone and cream palette against cool shadow. No people, no text, no signs, no banners, no shop fronts.",
+      "notes": "Achievement: win a sprint stage."
+    },
+    {
+      "id": "badge-summit-boulder",
+      "kind": "art",
+      "category": "badge",
+      "aspect": "1:1",
+      "seed": 20206,
+      "tileable": false,
+      "pbr": false,
+      "prompt": "Circular game achievement badge illustration. A large lichen-crusted granite boulder crowning a forested Šumava ridge, mint-green and rust lichen mottling the grey stone, bilberry scrub at its base, spruce tops and layered blue ridgelines falling away behind it in morning haze, centred in the frame. Painterly semi-realistic style, restrained natural colour, subject centred with clear margin. No text, no flag, no marker, no person.",
+      "notes": "Achievement: reach the highest control on the course."
+    }
+  ]
+}
