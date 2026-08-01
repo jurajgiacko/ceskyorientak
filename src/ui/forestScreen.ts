@@ -4,20 +4,32 @@
  * A `Screen` like any other, so it goes through `transitionTo` and cross-fades
  * rather than cutting. It owns the canvas, the loading state and the debug
  * overlay; everything below the canvas lives in `src/world/`.
+ *
+ * With a `race` in the options it also hosts an actual competition: the scene
+ * becomes a puppet of `Race`, and `RaceController` mounts the HUD, the map and
+ * the touch controls over the canvas. Without one it is still the free-run
+ * sandbox the perf gate drives at `?scene=forest&bench=1`, unchanged.
  */
 
 import type { Screen } from '@/ui/shell';
-import { getCapabilities } from '@/ui/shell';
+import { getCapabilities, transitionTo } from '@/ui/shell';
 import type { ForestScene } from '@/world/scene';
+import type { RaceController } from '@/race/controller';
+import type { ScreenRaceSetup } from './beforeScreen';
+import { getSettings } from '@/core/settings';
+import { getVenue } from '@/core/venues';
+import { t } from '@/i18n';
 
 export interface ForestScreenOptions {
   bench: boolean;
   weather: 'sunny' | 'overcast';
   debug: boolean;
+  race?: ScreenRaceSetup;
 }
 
 export function makeForestScreen(opts: ForestScreenOptions): Screen {
   let scene: ForestScene | null = null;
+  let race: RaceController | null = null;
   let onResize: (() => void) | null = null;
   let overlayTimer = 0;
 
@@ -25,6 +37,7 @@ export function makeForestScreen(opts: ForestScreenOptions): Screen {
     id: 'forest',
 
     async mount(host: HTMLElement): Promise<void> {
+      const settings = getSettings();
       host.innerHTML = `
         <div class="world">
           <canvas class="world__canvas"></canvas>
@@ -35,9 +48,9 @@ export function makeForestScreen(opts: ForestScreenOptions): Screen {
           </div>
           ${opts.debug ? '<pre class="world__debug" data-role="debug"></pre>' : ''}
           ${
-            opts.bench
+            opts.bench || opts.race
               ? ''
-              : '<p class="world__hint">WASD move · mouse look (click to capture) · Q/E turn · R/F pitch · Shift sprint · <b>V camera</b> · M map</p>'
+              : `<p class="world__hint">${escapeHtml(t('hint.freeRun'))}</p>`
           }
         </div>`;
 
@@ -58,6 +71,7 @@ export function makeForestScreen(opts: ForestScreenOptions): Screen {
           venue: 'martinkov',
           weather: opts.weather,
           bench: opts.bench,
+          viewmodel: opts.bench || settings.showHands,
           onProgress: (f, label) => {
             if (bar) bar.style.width = `${Math.round(f * 100)}%`;
             if (step) step.textContent = label;
@@ -78,9 +92,43 @@ export function makeForestScreen(opts: ForestScreenOptions): Screen {
       onResize = size;
       window.addEventListener('resize', onResize);
 
-      scene.attachInput(canvas);
-      scene.start();
+      if (opts.race) {
+        if (step) step.textContent = 'course';
+        const { RaceController } = await import('@/race/controller');
+        const setup = opts.race;
+        race = new RaceController(
+          scene,
+          {
+            anchor: getVenue('martinkov'),
+            discipline: setup.request.discipline,
+            seed: setup.request.seed,
+            heat: setup.request.heat,
+            preRace: setup.preRace,
+            belt: setup.belt,
+            startStats: setup.startStats,
+            environment: 'forest',
+            touch: caps.touch,
+            onFinish: (result, course) => {
+              void (async () => {
+                const { makeResultsScreen } = await import('./resultsScreen');
+                await transitionTo(makeResultsScreen(result, course, setup.request));
+              })();
+            },
+            onQuit: () => {
+              void (async () => {
+                const { makeMenuScreen } = await import('./menuScreen');
+                await transitionTo(makeMenuScreen());
+              })();
+            },
+          },
+          canvas,
+        );
+        host.querySelector('.world')?.appendChild(race.root);
+      } else {
+        scene.attachInput(canvas);
+      }
 
+      scene.start();
       loading?.classList.add('is-done');
 
       if (debug && scene) {
@@ -99,8 +147,16 @@ export function makeForestScreen(opts: ForestScreenOptions): Screen {
     unmount(): void {
       if (overlayTimer) window.clearInterval(overlayTimer);
       if (onResize) window.removeEventListener('resize', onResize);
+      race?.dispose();
+      race = null;
       scene?.dispose();
       scene = null;
     },
   };
+}
+
+function escapeHtml(s: string): string {
+  return s.replace(/[&<>"]/g, (c) =>
+    c === '&' ? '&amp;' : c === '<' ? '&lt;' : c === '>' ? '&gt;' : '&quot;',
+  );
 }

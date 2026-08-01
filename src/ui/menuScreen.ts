@@ -17,6 +17,16 @@ import { transitionTo } from './shell';
 import { t, getLocale, setLocale } from '@/i18n';
 import { LOCALES } from '@/core/types';
 import type { Locale } from '@/core/types';
+import { getSettings, setSetting } from '@/core/settings';
+
+/**
+ * A fresh course every few minutes, and the same course for everyone who starts
+ * within the same minute. Deterministic per seed, so a shared link would be a
+ * shared race — which is what the daily challenge will be built on.
+ */
+function seedNow(): number {
+  return (Date.now() / 60000) | 0;
+}
 
 interface MenuEntry {
   id: string;
@@ -33,8 +43,17 @@ const ENTRIES: MenuEntry[] = [
     labelKey: 'menu.forestRun',
     sublabelKey: 'menu.forestRunSub',
     go: async () => {
-      const { makeForestScreen } = await import('@/ui/forestScreen');
-      await transitionTo(makeForestScreen({ bench: false, weather: 'sunny', debug: false }));
+      const { makeBeforeScreen } = await import('@/ui/beforeScreen');
+      await transitionTo(
+        makeBeforeScreen({
+          venue: 'martinkov',
+          discipline: 'middle',
+          seed: seedNow(),
+          // An August morning in the Vltava valley. Warm, not brutal.
+          heat: 0.4,
+          startInMin: 60,
+        }),
+      );
     },
   },
   {
@@ -42,8 +61,16 @@ const ENTRIES: MenuEntry[] = [
     labelKey: 'menu.sprint',
     sublabelKey: 'menu.sprintSub',
     go: async () => {
-      const { makeSprintScreen } = await import('@/ui/sprintScreen');
-      await transitionTo(makeSprintScreen({ bench: false, weather: 'sunny', debug: false }));
+      const { makeBeforeScreen } = await import('@/ui/beforeScreen');
+      await transitionTo(
+        makeBeforeScreen({
+          venue: 'krumlov',
+          discipline: 'sprint',
+          seed: seedNow(),
+          heat: 0.45,
+          startInMin: 45,
+        }),
+      );
     },
   },
   { id: 'career', labelKey: 'menu.career', sublabelKey: 'menu.careerSub', soon: true },
@@ -89,6 +116,11 @@ export function makeMenuScreen(): Screen {
         </div>
 
         <footer class="menu__foot">
+          <button class="menu__toggle${getSettings().showHands ? ' is-on' : ''}"
+                  data-toggle="showHands"
+                  aria-pressed="${getSettings().showHands ? 'true' : 'false'}">
+            ${t('settings.showHands')}
+          </button>
           <div class="menu__locales" role="group" aria-label="${t('menu.language')}">
             ${LOCALES.map(
               (l) =>
@@ -115,6 +147,17 @@ export function makeMenuScreen(): Screen {
           // Re-render in place: cheaper and less jarring than a screen
           // transition for what is only a language change.
           void transitionTo(makeMenuScreen());
+          return;
+        }
+
+        // The hands are off by default now that the map is a 2D overlay; this
+        // is the way back to them. See src/core/settings.ts.
+        if (target.dataset.toggle === 'showHands') {
+          const next = !getSettings().showHands;
+          setSetting('showHands', next);
+          setSetting('thirdPerson', next);
+          target.classList.toggle('is-on', next);
+          target.setAttribute('aria-pressed', next ? 'true' : 'false');
           return;
         }
 

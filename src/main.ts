@@ -9,6 +9,7 @@
 import './styles/base.css';
 import { initI18n, t } from '@/i18n';
 import { detectCapabilities } from '@/core/capabilities';
+import { initAudio } from '@/audio';
 
 /**
  * Capture render-time errors somewhere the CI harness can read them.
@@ -48,6 +49,12 @@ async function boot(): Promise<void> {
 
   document.documentElement.dataset.tier = caps.tier;
   document.documentElement.dataset.input = caps.touch ? 'touch' : 'pointer';
+
+  // Creates no AudioContext and costs nothing until the player's first gesture,
+  // which is exactly what every browser — and iOS Safari strictly — requires.
+  // Registering it here means the SI beep is armed before the first punch
+  // rather than being missed because the graph was still being built.
+  initAudio({ lean: caps.tier === 'low' });
 
   const { mountShell } = await import('@/ui/shell');
   await mountShell(app, caps);

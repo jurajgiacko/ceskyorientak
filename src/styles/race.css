@@ -1,0 +1,969 @@
+/*
+ * Race UI: HUD, map overlay, touch controls, BEFORE screen, results.
+ *
+ * One reader drives every choice in here — someone standing in an arena in
+ * August sunlight, holding a phone at arm's length, glancing between the screen
+ * and the finish chute. That means opaque plates rather than translucent glass
+ * (a scrim over a bright forest is not readable), type that is heavy rather
+ * than elegant, and touch targets no smaller than 56 px.
+ *
+ * Colours come from the tokens in base.css. Nothing here defines a new one.
+ */
+
+/* --- the race layer ----------------------------------------------------- */
+
+.race {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  pointer-events: none;
+}
+
+.race > * {
+  pointer-events: auto;
+}
+
+/* --- HUD ---------------------------------------------------------------- */
+
+.hud {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  font-variant-numeric: tabular-nums;
+}
+
+.hud > * {
+  pointer-events: auto;
+}
+
+.hud__bar {
+  position: absolute;
+  top: var(--safe-t);
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.5rem calc(0.7rem + var(--safe-r)) 0.5rem calc(0.7rem + var(--safe-l));
+}
+
+.hud__quit {
+  appearance: none;
+  border: 0;
+  width: 44px;
+  height: 44px;
+  border-radius: var(--r-md);
+  background: rgba(10, 20, 16, 0.82);
+  color: var(--c-paper-dim);
+  font: inherit;
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+  flex: none;
+}
+
+.hud__clock {
+  flex: 1;
+  font-family: var(--font-num);
+  font-size: clamp(2rem, 8vw, 3.1rem);
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  color: var(--c-paper);
+  /* Sunlight. A shadow is cheaper than a plate and keeps the world visible. */
+  text-shadow:
+    0 2px 0 rgba(0, 0, 0, 0.55),
+    0 0 18px rgba(0, 0, 0, 0.75);
+}
+
+.hud__compass {
+  flex: none;
+  display: grid;
+  justify-items: center;
+  gap: 0.1rem;
+  padding: 0.35rem 0.4rem;
+  border-radius: var(--r-md);
+  background: rgba(10, 20, 16, 0.82);
+}
+
+.hud__rose {
+  width: 52px;
+  height: 52px;
+  color: var(--c-paper);
+  transition: transform 90ms linear;
+}
+
+.hud__roseRing {
+  fill: none;
+  stroke: rgba(244, 241, 232, 0.28);
+  stroke-width: 2;
+}
+
+.hud__roseN {
+  fill: var(--c-flag);
+}
+
+.hud__roseS {
+  fill: rgba(244, 241, 232, 0.75);
+}
+
+.hud__bearing {
+  font-family: var(--font-num);
+  font-size: 0.72rem;
+  color: var(--c-paper-dim);
+}
+
+/* The next control. The single most-looked-at object on the screen. */
+.hud__target {
+  position: absolute;
+  top: calc(var(--safe-t) + 4.6rem);
+  left: calc(0.7rem + var(--safe-l));
+  display: grid;
+  gap: 0.35rem;
+  padding: 0.55rem 0.7rem;
+  border-radius: var(--r-md);
+  background: rgba(10, 20, 16, 0.86);
+  border-left: 4px solid var(--c-purple);
+}
+
+.hud__targetHead {
+  display: flex;
+  align-items: baseline;
+  gap: 0.55rem;
+}
+
+.hud__ctrlNo {
+  font-family: var(--font-num);
+  font-size: 0.82rem;
+  color: var(--c-paper-dim);
+}
+
+.hud__ctrlCode {
+  font-family: var(--font-num);
+  font-size: 1.7rem;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--c-paper);
+}
+
+.hud__picto {
+  display: flex;
+  gap: 0.3rem;
+}
+
+/* The IOF symbols are pure black on white by specification, so they get a
+   white tile — recolouring them would stop them being the real symbols. */
+.hud__symbol {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  background: var(--c-paper);
+  border-radius: var(--r-sm);
+}
+
+.hud__flash {
+  position: absolute;
+  top: calc(var(--safe-t) + 5rem);
+  left: 50%;
+  transform: translateX(-50%);
+  margin: 0;
+  padding: 0.6rem 1.1rem;
+  border-radius: var(--r-md);
+  background: var(--c-lime);
+  color: var(--c-ink);
+  font-family: var(--font-num);
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  animation: punchIn 220ms cubic-bezier(0.2, 0.8, 0.3, 1);
+}
+
+@keyframes punchIn {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) scale(0.9);
+  }
+}
+
+/* The whole screen acknowledges a punch for a beat. */
+.hud[data-punch='1']::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  box-shadow: inset 0 0 0 6px var(--c-lime);
+  opacity: 0.55;
+  animation: punchFade 700ms ease-out forwards;
+}
+
+@keyframes punchFade {
+  to {
+    opacity: 0;
+  }
+}
+
+.hud__belt {
+  position: absolute;
+  right: calc(0.7rem + var(--safe-r));
+  bottom: calc(6.6rem + var(--safe-b));
+  display: grid;
+  gap: 0.4rem;
+  justify-items: end;
+}
+
+.hud__beltItem {
+  appearance: none;
+  border: 0;
+  border-radius: var(--r-md);
+  background: rgba(10, 20, 16, 0.86);
+  color: var(--c-paper);
+  font: inherit;
+  font-size: 0.62rem;
+  display: grid;
+  grid-template-columns: 34px 1fr;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.35rem 0.6rem 0.35rem 0.35rem;
+  min-height: 46px;
+  max-width: 46vw;
+  text-align: left;
+  cursor: pointer;
+}
+
+.hud__beltItem img {
+  width: 34px;
+  height: 34px;
+  object-fit: contain;
+}
+
+.hud__beltItem span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hud__beltItem:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+/* The map button. Large, because it is pressed more than anything else. */
+.hud__map {
+  position: absolute;
+  right: calc(0.7rem + var(--safe-r));
+  bottom: calc(1rem + var(--safe-b));
+  appearance: none;
+  border: 0;
+  min-width: 108px;
+  min-height: 64px;
+  border-radius: var(--r-lg);
+  background: var(--c-event);
+  color: #fff;
+  font: inherit;
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+  display: grid;
+  gap: 0.15rem;
+  justify-items: center;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
+}
+
+.hud__mapKey {
+  font-family: var(--font-num);
+  font-size: 0.6rem;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  opacity: 0.75;
+}
+
+.hud[data-touch='1'] .hud__mapKey {
+  display: none;
+}
+
+/* --- touch controls ------------------------------------------------------ */
+
+.rcontrols {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.rcontrols[data-touch='0'] {
+  display: none;
+}
+
+.rcontrols__look {
+  position: absolute;
+  inset: 0 0 0 40%;
+  pointer-events: auto;
+  touch-action: none;
+}
+
+.rcontrols__stick {
+  position: absolute;
+  left: calc(1.4rem + var(--safe-l));
+  bottom: calc(1.6rem + var(--safe-b));
+  width: 148px;
+  height: 148px;
+  border-radius: 50%;
+  background: rgba(10, 20, 16, 0.4);
+  border: 2px solid rgba(244, 241, 232, 0.22);
+  pointer-events: auto;
+  touch-action: none;
+}
+
+.rcontrols__knob {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 62px;
+  height: 62px;
+  border-radius: 50%;
+  background: rgba(244, 241, 232, 0.72);
+  transform: translate(-50%, -50%);
+}
+
+/* --- the map ------------------------------------------------------------- */
+
+.racemap__mini {
+  position: absolute;
+  left: calc(0.7rem + var(--safe-l));
+  bottom: calc(1rem + var(--safe-b));
+  width: 132px;
+  height: 132px;
+  border-radius: var(--r-md);
+  overflow: hidden;
+  border: 2px solid rgba(10, 20, 16, 0.8);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
+  background: var(--c-paper);
+  pointer-events: none;
+}
+
+/* On touch the left corner belongs to the thumb stick, so the minimap moves. */
+.race[data-touch='1'] .racemap__mini {
+  bottom: calc(11.5rem + var(--safe-b));
+  left: auto;
+  right: calc(0.7rem + var(--safe-r));
+}
+
+.racemap__mini canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.racemap__overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  background: var(--c-ink);
+  display: grid;
+}
+
+.racemap__overlay[hidden] {
+  display: none;
+}
+
+/* The sheet itself. It fills the screen: this is a map held to your face. */
+.racemap__canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  touch-action: none;
+  cursor: grab;
+}
+
+.racemap__north {
+  position: absolute;
+  top: calc(0.8rem + var(--safe-t));
+  left: calc(0.9rem + var(--safe-l));
+  display: grid;
+  justify-items: center;
+  color: var(--c-ink);
+  pointer-events: none;
+  transition: transform 120ms linear;
+}
+
+.racemap__north b {
+  font-size: 0.72rem;
+  letter-spacing: 0.1em;
+}
+
+.racemap__tools {
+  position: absolute;
+  right: calc(0.8rem + var(--safe-r));
+  top: calc(0.8rem + var(--safe-t));
+  display: grid;
+  gap: 0.4rem;
+  justify-items: stretch;
+}
+
+/* Opaque, not translucent: these sit over a printed map that is mostly yellow
+   and white, and a scrim over that is unreadable in sunlight. */
+.racemap__tool {
+  appearance: none;
+  border: 0;
+  min-width: 92px;
+  min-height: 48px;
+  border-radius: var(--r-md);
+  background: var(--c-ink-2);
+  color: var(--c-paper);
+  font: inherit;
+  font-size: 0.84rem;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+}
+
+.racemap__tool[aria-pressed='true'] {
+  background: var(--c-purple);
+  color: #fff;
+}
+
+.racemap__close {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: calc(1rem + var(--safe-b));
+  appearance: none;
+  border: 0;
+  min-width: 180px;
+  min-height: 64px;
+  border-radius: var(--r-lg);
+  background: var(--c-event);
+  color: #fff;
+  font: inherit;
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
+}
+
+.racemap__scale {
+  position: absolute;
+  left: calc(0.9rem + var(--safe-l));
+  bottom: calc(1.1rem + var(--safe-b));
+  margin: 0;
+  font-family: var(--font-num);
+  font-size: 0.66rem;
+  color: var(--c-ink);
+  background: rgba(244, 241, 232, 0.78);
+  padding: 0.25rem 0.45rem;
+  border-radius: var(--r-sm);
+  pointer-events: none;
+}
+
+/* --- prestart / in-race panel -------------------------------------------- */
+
+.racepanel {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: grid;
+  place-items: center;
+  padding: 1.2rem;
+  background: rgba(6, 12, 8, 0.72);
+}
+
+.racepanel[hidden] {
+  display: none;
+}
+
+.racepanel__card {
+  width: min(94vw, 30rem);
+  padding: 1.4rem 1.3rem calc(1.3rem + var(--safe-b));
+  border-radius: var(--r-lg);
+  background: var(--c-ink-2);
+  border-top: 4px solid var(--c-event);
+  display: grid;
+  gap: 0.7rem;
+}
+
+.racepanel__kicker {
+  margin: 0;
+  font-size: 0.62rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--c-lime);
+}
+
+.racepanel__title {
+  margin: 0;
+  font-size: 1.3rem;
+  line-height: 1.15;
+}
+
+.racepanel__facts {
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.5rem 1rem;
+}
+
+.racepanel__facts div {
+  display: grid;
+  gap: 0.1rem;
+}
+
+.racepanel__facts dt {
+  font-size: 0.62rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--c-paper-dim);
+}
+
+.racepanel__facts dd {
+  margin: 0;
+  font-family: var(--font-num);
+  font-size: 1.1rem;
+  font-weight: 700;
+}
+
+.racepanel__note {
+  margin: 0;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  color: var(--c-paper-dim);
+}
+
+.racepanel__go {
+  appearance: none;
+  border: 0;
+  min-height: 64px;
+  border-radius: var(--r-md);
+  background: var(--c-event);
+  color: #fff;
+  font: inherit;
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+/* --- BEFORE screen -------------------------------------------------------- */
+
+.before {
+  grid-row: 1 / -1;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: calc(0.8rem + var(--safe-t)) calc(1rem + var(--safe-r))
+    calc(1.4rem + var(--safe-b)) calc(1rem + var(--safe-l));
+  background: var(--c-ink);
+}
+
+.before__head {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 0.8rem;
+  margin-bottom: 0.9rem;
+}
+
+.before__back {
+  appearance: none;
+  border: 0;
+  min-height: 44px;
+  padding: 0 0.8rem;
+  border-radius: var(--r-md);
+  background: var(--c-ink-3);
+  color: var(--c-paper);
+  font: inherit;
+  font-size: 0.78rem;
+  cursor: pointer;
+}
+
+.before__kicker {
+  margin: 0;
+  font-size: 0.6rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--c-lime);
+}
+
+.before__title {
+  margin: 0.15rem 0 0;
+  font-size: 1.15rem;
+  line-height: 1.15;
+}
+
+.before__clock {
+  margin: 0;
+  font-family: var(--font-num);
+  font-size: 0.86rem;
+  font-weight: 700;
+  color: var(--c-event);
+  white-space: nowrap;
+}
+
+.before__profile,
+.before__advice {
+  margin: 0 0 0.5rem;
+  font-size: 0.84rem;
+  line-height: 1.5;
+  color: var(--c-paper-dim);
+}
+
+.before__advice {
+  margin-bottom: 1.2rem;
+  padding-left: 0.7rem;
+  border-left: 3px solid var(--c-lime);
+  color: var(--c-paper);
+}
+
+.before__section {
+  margin-bottom: 1.4rem;
+}
+
+.before__section h2 {
+  margin: 0 0 0.5rem;
+  font-size: 0.68rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--c-paper-dim);
+  display: flex;
+  gap: 0.6rem;
+  align-items: baseline;
+}
+
+.before__slots {
+  font-family: var(--font-num);
+  color: var(--c-event);
+}
+
+.before__hint {
+  margin: 0 0 0.6rem;
+  font-size: 0.72rem;
+  color: var(--c-paper-dim);
+}
+
+.before__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr));
+  gap: 0.6rem;
+}
+
+.skucard {
+  display: grid;
+  gap: 0.35rem;
+  justify-items: center;
+  padding: 0.7rem 0.5rem 0.5rem;
+  border-radius: var(--r-md);
+  background: var(--c-ink-2);
+  border: 2px solid transparent;
+  text-align: center;
+}
+
+.skucard.is-on {
+  border-color: var(--c-lime);
+}
+
+.skucard__shot {
+  height: 74px;
+  width: auto;
+  max-width: 100%;
+  object-fit: contain;
+}
+
+.skucard__name {
+  margin: 0;
+  font-size: 0.72rem;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.skucard__facts {
+  margin: 0;
+  font-family: var(--font-num);
+  font-size: 0.64rem;
+  color: var(--c-paper-dim);
+}
+
+.skucard__ctl {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-top: 0.2rem;
+}
+
+.skucard__ctl button {
+  appearance: none;
+  border: 0;
+  width: 44px;
+  height: 44px;
+  border-radius: var(--r-sm);
+  background: var(--c-ink-3);
+  color: var(--c-paper);
+  font: inherit;
+  font-size: 1.2rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.skucard__ctl button:disabled {
+  opacity: 0.32;
+  cursor: default;
+}
+
+.skucard__ctl b {
+  font-family: var(--font-num);
+  font-size: 1rem;
+  min-width: 1ch;
+}
+
+.before__foot {
+  display: grid;
+  gap: 0.6rem;
+  padding-top: 0.6rem;
+  border-top: 1px solid var(--c-line);
+}
+
+.before__verdict {
+  margin: 0;
+  font-size: 0.92rem;
+  font-weight: 600;
+}
+
+.before__verdict[data-tone='ok'] {
+  color: var(--c-good);
+}
+
+.before__verdict[data-tone='warn'] {
+  color: var(--c-warn);
+}
+
+.before__sum {
+  margin: 0;
+  font-family: var(--font-num);
+  font-size: 0.78rem;
+  color: var(--c-paper-dim);
+}
+
+.before__go {
+  appearance: none;
+  border: 0;
+  min-height: 64px;
+  border-radius: var(--r-md);
+  background: var(--c-event);
+  color: #fff;
+  font: inherit;
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+/* Composition data and the partner credit. Deliberately quiet, and
+   deliberately present: see the header of src/ui/beforeScreen.ts. */
+.before__legal {
+  margin: 0;
+  font-size: 0.64rem;
+  line-height: 1.5;
+  color: var(--c-paper-dim);
+}
+
+.before__partner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.8rem;
+  padding: 0.7rem 1rem;
+  border-radius: var(--r-sm);
+  background: var(--c-beige);
+}
+
+.before__partner span {
+  font-size: 0.56rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #6b6b60;
+}
+
+.before__partner img {
+  height: 26px;
+  width: auto;
+}
+
+/* --- results -------------------------------------------------------------- */
+
+.results {
+  grid-row: 1 / -1;
+  overflow-y: auto;
+  display: grid;
+  place-items: start center;
+  padding: calc(1rem + var(--safe-t)) 1rem calc(1.4rem + var(--safe-b));
+  background: var(--c-ink);
+}
+
+.results__card {
+  width: min(94vw, 32rem);
+  display: grid;
+  gap: 0.5rem;
+}
+
+.results__kicker {
+  margin: 0;
+  font-size: 0.6rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--c-lime);
+}
+
+.results__title {
+  margin: 0;
+  font-size: 1.5rem;
+}
+
+.results__card[data-dsq='1'] .results__title {
+  color: var(--c-bad);
+}
+
+.results__time {
+  margin: 0;
+  font-family: var(--font-num);
+  font-size: clamp(2.6rem, 12vw, 4rem);
+  font-weight: 700;
+  line-height: 1;
+}
+
+.results__card[data-dsq='1'] .results__time {
+  text-decoration: line-through;
+  color: var(--c-paper-dim);
+}
+
+.results__dsq {
+  margin: 0;
+  color: var(--c-bad);
+  font-size: 0.86rem;
+}
+
+.results__meta {
+  margin: 0 0 0.6rem;
+  font-family: var(--font-num);
+  font-size: 0.78rem;
+  color: var(--c-paper-dim);
+}
+
+.results__splits {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--font-num);
+  font-size: 0.84rem;
+}
+
+.results__splits th {
+  text-align: left;
+  font-family: var(--font-ui);
+  font-size: 0.58rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--c-paper-dim);
+  padding: 0 0.4rem 0.35rem 0;
+  font-weight: 500;
+}
+
+.results__splits td {
+  padding: 0.32rem 0.4rem 0.32rem 0;
+  border-top: 1px solid var(--c-line);
+}
+
+.results__no,
+.results__code {
+  color: var(--c-paper-dim);
+}
+
+.results__elapsed {
+  font-weight: 700;
+}
+
+.results__pb {
+  margin: 0.6rem 0 0;
+  font-family: var(--font-num);
+  font-size: 0.8rem;
+  color: var(--c-lime);
+}
+
+.results__actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.6rem;
+  margin-top: 1rem;
+}
+
+.results__actions button {
+  appearance: none;
+  border: 0;
+  min-height: 60px;
+  border-radius: var(--r-md);
+  background: var(--c-ink-3);
+  color: var(--c-paper);
+  font: inherit;
+  font-size: 0.92rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.results__actions button[data-act='retry'] {
+  background: var(--c-event);
+  color: #fff;
+}
+
+/* --- menu settings toggle -------------------------------------------------- */
+
+.menu__toggle {
+  appearance: none;
+  border: 1px solid var(--c-line);
+  background: transparent;
+  color: var(--c-paper-dim);
+  font: inherit;
+  font-size: 0.62rem;
+  letter-spacing: 0.08em;
+  border-radius: var(--r-sm);
+  padding: 0 0.7rem;
+  min-height: 40px;
+  margin-right: auto;
+  cursor: pointer;
+}
+
+.menu__toggle.is-on {
+  color: var(--c-lime);
+  border-color: var(--c-lime);
+}
+
+.menu__foot {
+  justify-content: space-between;
+  align-items: center;
+}
+
+/* --- narrow phones --------------------------------------------------------- */
+
+@media (max-width: 480px) {
+  /* The close button is centred and full-width-ish here, so the scale legend
+     has to get out of its way rather than sit under it. */
+  .racemap__scale {
+    bottom: calc(5.8rem + var(--safe-b));
+  }
+}
+
+@media (max-width: 420px) {
+  .hud__target {
+    top: calc(var(--safe-t) + 4.2rem);
+  }
+  .racemap__mini {
+    width: 108px;
+    height: 108px;
+  }
+  .before__grid {
+    grid-template-columns: repeat(auto-fill, minmax(8rem, 1fr));
+  }
+}

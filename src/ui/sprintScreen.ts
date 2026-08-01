@@ -3,7 +3,10 @@
  *
  * Structurally identical to `forestScreen.ts` — a `Screen`, so it goes through
  * `transitionTo` and cross-fades rather than cutting — with the venue's own
- * loading label, hint line and attribution.
+ * loading label, hint line and attribution, and with `blockedAt` handed to the
+ * race so the walls, railings and the Vltava are out of bounds in the
+ * simulation exactly as they are in the geometry. In a sprint that is IOF Rule
+ * 17.2, not physics.
  *
  * The attribution line is not decoration: the footprints are OpenStreetMap
  * under ODbL 1.0, which requires it wherever the derived work is shown, and the
@@ -12,17 +15,23 @@
  */
 
 import type { Screen } from '@/ui/shell';
-import { getCapabilities } from '@/ui/shell';
+import { getCapabilities, transitionTo } from '@/ui/shell';
 import type { SprintScene } from '@/world/sprintScene';
+import type { RaceController } from '@/race/controller';
+import type { ScreenRaceSetup } from './beforeScreen';
+import { getVenue } from '@/core/venues';
+import { t } from '@/i18n';
 
 export interface SprintScreenOptions {
   bench: boolean;
   weather: 'sunny' | 'overcast';
   debug: boolean;
+  race?: ScreenRaceSetup;
 }
 
 export function makeSprintScreen(opts: SprintScreenOptions): Screen {
   let scene: SprintScene | null = null;
+  let race: RaceController | null = null;
   let onResize: (() => void) | null = null;
   let overlayTimer = 0;
 
@@ -40,10 +49,14 @@ export function makeSprintScreen(opts: SprintScreenOptions): Screen {
           </div>
           ${opts.debug ? '<pre class="world__debug" data-role="debug"></pre>' : ''}
           ${
+            opts.bench || opts.race
+              ? ''
+              : `<p class="world__hint">${escapeHtml(t('hint.freeRunSprint'))}</p>`
+          }
+          ${
             opts.bench
               ? ''
-              : '<p class="world__hint">WASD move · mouse look (click to capture) · Q/E turn · R/F pitch · Shift sprint · N noclip</p>' +
-                '<p class="world__credit">Budovy © přispěvatelé OpenStreetMap (ODbL) · výšky © ČÚZK (CC BY 4.0)</p>'
+              : '<p class="world__credit">Budovy © přispěvatelé OpenStreetMap (ODbL) · výšky © ČÚZK (CC BY 4.0)</p>'
           }
         </div>`;
 
@@ -83,9 +96,44 @@ export function makeSprintScreen(opts: SprintScreenOptions): Screen {
       onResize = size;
       window.addEventListener('resize', onResize);
 
-      scene.attachInput(canvas);
-      scene.start();
+      if (opts.race) {
+        if (step) step.textContent = 'course';
+        const { RaceController } = await import('@/race/controller');
+        const setup = opts.race;
+        const s = scene;
+        race = new RaceController(
+          s,
+          {
+            anchor: getVenue('krumlov'),
+            discipline: setup.request.discipline,
+            seed: setup.request.seed,
+            heat: setup.request.heat,
+            preRace: setup.preRace,
+            belt: setup.belt,
+            startStats: setup.startStats,
+            environment: 'town',
+            touch: caps.touch,
+            onFinish: (result, course) => {
+              void (async () => {
+                const { makeResultsScreen } = await import('./resultsScreen');
+                await transitionTo(makeResultsScreen(result, course, setup.request));
+              })();
+            },
+            onQuit: () => {
+              void (async () => {
+                const { makeMenuScreen } = await import('./menuScreen');
+                await transitionTo(makeMenuScreen());
+              })();
+            },
+          },
+          canvas,
+        );
+        host.querySelector('.world')?.appendChild(race.root);
+      } else {
+        scene.attachInput(canvas);
+      }
 
+      scene.start();
       loading?.classList.add('is-done');
 
       if (debug && scene) {
@@ -102,8 +150,16 @@ export function makeSprintScreen(opts: SprintScreenOptions): Screen {
     unmount(): void {
       if (overlayTimer) window.clearInterval(overlayTimer);
       if (onResize) window.removeEventListener('resize', onResize);
+      race?.dispose();
+      race = null;
       scene?.dispose();
       scene = null;
     },
   };
+}
+
+function escapeHtml(s: string): string {
+  return s.replace(/[&<>"]/g, (c) =>
+    c === '&' ? '&amp;' : c === '<' ? '&lt;' : c === '>' ? '&gt;' : '&quot;',
+  );
 }

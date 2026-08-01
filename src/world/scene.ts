@@ -36,6 +36,14 @@ export interface ForestSceneOptions {
   weather?: Weather;
   /** Benchmark mode: deterministic camera path, no input, for the perf gate. */
   bench?: boolean;
+  /**
+   * Render the first-person arms and let V switch to third person.
+   *
+   * Off by default now that the map is a full-screen 2D overlay — see
+   * `src/core/settings.ts`. Always on in bench, because the perf gate has to
+   * keep measuring the skinned draw it has always measured.
+   */
+  viewmodel?: boolean;
   onProgress?: (fraction: number, label: string) => void;
 }
 
@@ -47,7 +55,8 @@ export class ForestScene {
   readonly camera: THREE.PerspectiveCamera;
   readonly renderer: WorldRenderer;
 
-  private field!: TerrainField;
+  /** Public: the race controller samples it through a thin adapter. */
+  field!: TerrainField;
   private terrain!: TerrainMesh;
   private vegetation!: Vegetation;
   private sky!: SkyRig;
@@ -58,6 +67,20 @@ export class ForestScene {
   private readonly bench: boolean;
   private readonly weather: Weather;
   private readonly venueId: VenueId;
+  private readonly wantViewmodel: boolean;
+
+  /**
+   * Called at the top of every frame, before anything reads the camera.
+   *
+   * This is how the race controller gets a defined place to step the
+   * simulation and push the athlete's position in. Two independent
+   * `requestAnimationFrame` loops would work too, and would leave the camera
+   * one frame behind the athlete for reasons nobody could see.
+   */
+  beforeFrame: ((dtS: number) => void) | null = null;
+
+  /** Set while the race owns the camera. Free movement is then off. */
+  private external: { x: number; z: number; yaw: number; pitch: number } | null = null;
 
   private raf = 0;
   private lastTime = 0;
@@ -102,6 +125,7 @@ export class ForestScene {
     this.bench = opts.bench ?? false;
     this.weather = opts.weather ?? 'sunny';
     this.venueId = opts.venue ?? 'martinkov';
+    this.wantViewmodel = opts.viewmodel ?? this.bench;
 
     this.camera = new THREE.PerspectiveCamera(
       // 46° vertical — about 28 mm full-frame at 16:9, which is where the
@@ -246,6 +270,10 @@ export class ForestScene {
     // nowhere. This is the only reason `scene.add(camera)` is here.
     this.camera.add(this.viewmodel.group);
     this.scene.add(this.camera);
+    // Off unless asked for. The model, the gait blend and the map-texture
+    // binding all stay loaded and working — this is a visibility switch, not a
+    // removal, so turning it back on in settings costs nothing.
+    this.viewmodel.setVisible(this.wantViewmodel);
 
     // --- post ---
     if (this.tier !== 'low' && this.sky.isSunny) {
@@ -276,7 +304,12 @@ export class ForestScene {
     const onKey = (e: KeyboardEvent, down: boolean) => {
       if (down) this.keys.add(e.code);
       else this.keys.delete(e.code);
-      if (down && e.code === 'KeyV' && !e.repeat) this.toggleCameraMode();
+      // V is behind the same switch as the hands: the chase camera exists to
+      // look at the athlete, and the athlete is only worth looking at when the
+      // player has opted into seeing themselves.
+      if (down && e.code === 'KeyV' && !e.repeat && this.wantViewmodel) {
+        this.toggleCameraMode();
+      }
       if (down && (e.code === 'KeyW' || e.code === 'KeyS' || e.code === 'Space')) {
         e.preventDefault();
       }
@@ -376,7 +409,11 @@ export class ForestScene {
   }
 
   private frame(now: number, dt: number): void {
-    if (this.bench) {
+    this.beforeFrame?.(dt);
+
+    if (this.external) {
+      this.applyExternal(dt);
+    } else if (this.bench) {
       this.benchCamera();
       this.settleEye(dt);
       this.benchRunner(dt);
@@ -403,6 +440,37 @@ export class ForestScene {
       exposeForHarness(this.renderer.perf);
       (window as unknown as Record<string, unknown>).__world = this;
     }
+  }
+
+  /**
+   * Where the arena is, for course setting. The spawn clearing doubles as it.
+   */
+  get arena(): { x: number; z: number } {
+    return { x: this.spawn.x, z: this.spawn.y };
+  }
+
+  /**
+   * Hand the camera to the race.
+   *
+   * The athlete's true position comes from `Race`, which owns the physics,
+   * the runnability speed model and the impassable-ground sliding. Having the
+   * scene move itself as well would give two authorities on one body.
+   */
+  setExternalPose(x: number, z: number, yaw: number, pitch: number): void {
+    this.external = { x, z, yaw, pitch };
+  }
+
+  private applyExternal(dt: number): void {
+    const e = this.external;
+    if (!e) return;
+    this.camera.position.x = e.x;
+    this.camera.position.z = e.z;
+    this.yaw = e.yaw;
+    this.pitch = e.pitch;
+    this.applyLook();
+    this.settleEye(dt);
+    this.mirrorRunner(dt);
+    this.viewmodel.update(dt, this.runner.speed, false, this.yaw, this.pitch);
   }
 
   /**

@@ -66,7 +66,8 @@ export class SprintScene {
   readonly camera: THREE.PerspectiveCamera;
   readonly renderer: WorldRenderer;
 
-  private field!: TerrainField;
+  /** Public: the race controller samples it through a thin adapter. */
+  field!: TerrainField;
   private terrain!: TerrainMesh;
   private sky!: SkyRig;
   private ground!: GroundTextures;
@@ -86,6 +87,10 @@ export class SprintScene {
   private elapsed = 0;
   private exposed = false;
   private running = false;
+
+  /** See the same field on `ForestScene` — one defined place to step the race. */
+  beforeFrame: ((dtS: number) => void) | null = null;
+  private external: { x: number; z: number; yaw: number; pitch: number } | null = null;
 
   readonly warnings: string[] = [];
 
@@ -410,18 +415,23 @@ export class SprintScene {
     }
 
     for (const k of marked) r[k] = Runnability.Impassable;
-    // One dilation step, so the scatter keeps a metre off the walls.
-    const w = m.width;
-    for (const k of marked) {
-      for (const d of [-1, 1, -w, w]) {
-        const q = k + d;
-        if (q < 0 || q >= r.length) continue;
-        const v = r[q] as number;
-        if (v === Runnability.Road || v === Runnability.Path) continue;
-        if (v === Runnability.Impassable) continue;
-        r[q] = Runnability.Impassable;
-      }
-    }
+
+    // There used to be a one-cell dilation here, "so the scatter keeps a metre
+    // off the walls". It has been removed, and the reason matters.
+    //
+    // The raster is 1 m and Krumlov's alleys are 2–3 m wide. Growing every one
+    // of 1739 footprints by a metre on each side takes a 3 m alley down to 1 m
+    // and a 2 m alley to nothing. Measured on the finished raster, only **30%
+    // of the runnable cells in this AOI were connected to Náměstí Svornosti**,
+    // and requiring so much as a metre of running room in each direction cut
+    // that to 1%: the old town was, navigationally, a hairline maze. Course
+    // setting then produced sprints with an unreachable finish.
+    //
+    // What the dilation bought was cosmetic — a spruce standing flush against
+    // plaster. What it cost was the venue. The footprints themselves are still
+    // stamped, so the scatter still never plants *inside* a building, and
+    // `blockedAt` still tests the real footprint polygons for collision, so
+    // nobody runs through a wall either.
     return marked.length;
   }
 
@@ -521,6 +531,19 @@ export class SprintScene {
     return this.field.runnabilityAt(x, z) === Runnability.Impassable;
   }
 
+  /**
+   * The sprint arena: Náměstí Svornosti, where the O-Tour prologue starts.
+   * Course setting hangs the start and finish off this point.
+   */
+  get arena(): { x: number; z: number } {
+    return { x: START.x, z: START.z };
+  }
+
+  /** Hand the camera to the race. See `ForestScene.setExternalPose`. */
+  setExternalPose(x: number, z: number, yaw: number, pitch: number): void {
+    this.external = { x, z, yaw, pitch };
+  }
+
   // -------------------------------------------------------------------------
   // Input
   // -------------------------------------------------------------------------
@@ -583,7 +606,15 @@ export class SprintScene {
   }
 
   private frame(now: number, dt: number): void {
-    if (this.bench) this.benchCamera();
+    this.beforeFrame?.(dt);
+
+    if (this.external) {
+      this.camera.position.x = this.external.x;
+      this.camera.position.z = this.external.z;
+      this.yaw = this.external.yaw;
+      this.pitch = this.external.pitch;
+      this.applyLook();
+    } else if (this.bench) this.benchCamera();
     else this.freeMove(dt);
 
     if (!this.noclip) {

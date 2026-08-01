@@ -40,6 +40,26 @@ export interface MapView {
 export interface MapRenderOptions {
   anchor: VenueAnchor;
   raster: RunnabilityRaster;
+  /**
+   * Render impassable cells as ISSprOM 521 *buildings* (black) rather than
+   * ISOM 520 out-of-bounds (olive).
+   *
+   * This is not a style preference — it is what makes a sprint map legible.
+   * In a town almost every impassable cell is a building, and a sprint map's
+   * entire visual language is solid black blocks against light open space; that
+   * contrast is how you read a route through a street network at a glance.
+   * Painting them olive instead produced a map that was 38% out-of-bounds by
+   * area and effectively unreadable, which is exactly what the client reported.
+   *
+   * Solid black, not black-50: ISSprOM reserves the 50% tint for buildings
+   * over 75x75 m, and Krumlov's burgher houses are nowhere near that. Drawing
+   * them all in the tint produced an undifferentiated grey mush in which the
+   * street network was unreadable — the opposite of what a sprint map is for.
+   *
+   * Olive stays correct for the forest, where impassable really does mean
+   * private land you must not enter.
+   */
+  buildingsAsBlack?: boolean;
   contours: Contour[];
   course?: Course;
   /** Where the athlete *believes* they are. There is no true-position marker. */
@@ -135,7 +155,10 @@ function drawRunnability(ctx: CanvasRenderingContext2D, o: MapRenderOptions): vo
       // White is already the paper colour — skipping it is a large saving,
       // since white is over half of a typical forest map.
       if (spanClass !== Runnability.ForestOpen) {
-        const colour = RUNNABILITY_COLOUR[spanClass as Runnability];
+        const colour =
+          o.buildingsAsBlack && spanClass === Runnability.Impassable
+            ? ISOM.black
+            : RUNNABILITY_COLOUR[spanClass as Runnability];
         if (colour) {
           ctx.fillStyle = colour.hex;
           ctx.fillRect(

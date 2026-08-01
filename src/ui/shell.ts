@@ -11,6 +11,9 @@
  */
 
 import type { Capabilities } from '@/core/capabilities';
+import type { Discipline } from '@/core/types';
+import type { RaceRequest, ScreenRaceSetup } from '@/ui/beforeScreen';
+import { applyPreRace } from '@/nutrition/protocol';
 
 export interface Screen {
   readonly id: string;
@@ -45,6 +48,9 @@ export async function mountShell(root: HTMLElement, capabilities: Capabilities):
     if (tierOverride === 'low' || tierOverride === 'medium' || tierOverride === 'high') {
       caps = { ...caps, tier: tierOverride };
     }
+    // The touch HUD is the layout most players will see and the hardest to
+    // check on a desktop, so it is forceable. Same reasoning as `tier`.
+    if (params.get('touch') === '1') caps = { ...caps, touch: true };
 
     const sceneOpts = {
       bench: params.get('bench') === '1',
@@ -54,14 +60,20 @@ export async function mountShell(root: HTMLElement, capabilities: Capabilities):
       debug: params.get('debug') !== '0',
     };
 
+    // `&race=1` drops straight into a competition with an empty belt and a
+    // default pre-race plan, skipping the menu and the BEFORE screen. This is
+    // how a race is reachable for QA and for a scripted smoke run; the
+    // player's route in is always the menu.
+    const race = params.get('race') === '1' ? deepLinkRace(scene, params) : undefined;
+
     if (scene === 'sprint') {
       const { makeSprintScreen } = await import('@/ui/sprintScreen');
-      await transitionTo(makeSprintScreen(sceneOpts));
+      await transitionTo(makeSprintScreen({ ...sceneOpts, ...(race ? { race } : {}) }));
       return;
     }
 
     const { makeForestScreen } = await import('@/ui/forestScreen');
-    await transitionTo(makeForestScreen(sceneOpts));
+    await transitionTo(makeForestScreen({ ...sceneOpts, ...(race ? { race } : {}) }));
     return;
   }
 
@@ -71,6 +83,25 @@ export async function mountShell(root: HTMLElement, capabilities: Capabilities):
 
 export function getCapabilities(): Capabilities {
   return caps;
+}
+
+/** Build the setup a `&race=1` deep link implies. Nothing is consumed. */
+function deepLinkRace(scene: 'forest' | 'sprint', params: URLSearchParams): ScreenRaceSetup {
+  const discipline: Discipline = scene === 'sprint' ? 'sprint' : 'middle';
+  const heat = scene === 'sprint' ? 0.45 : 0.4;
+  const request: RaceRequest = {
+    venue: scene === 'sprint' ? 'krumlov' : 'martinkov',
+    discipline,
+    seed: Number(params.get('seed') ?? 7) || 7,
+    heat,
+    startInMin: 60,
+  };
+  return {
+    request,
+    preRace: [],
+    belt: [],
+    startStats: applyPreRace([], discipline, { heat }).stats,
+  };
 }
 
 /** Cross-fade from the current screen to the next. Never cut. */
