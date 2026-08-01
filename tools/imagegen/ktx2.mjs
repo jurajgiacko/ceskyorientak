@@ -83,6 +83,11 @@ const ONLY = onlyArg ? new Set(onlyArg.slice(7).split(',').map((s) => s.trim()))
 const sizesArg = args.find((a) => a.startsWith('--sizes='));
 const USE_SIZES = sizesArg ? sizesArg.slice(8).split(',').map(Number) : SIZES;
 const MEASURE = args.includes('--measure');
+/* Re-print the summary from the last run's JSON without re-encoding (~7 min). */
+const REPORT_ONLY = args.includes('--report');
+/* Rebuild the report by reading the .ktx2 files already on disk. Use after a
+   partial --only run, or when the report and the files have drifted apart. */
+const SCAN = args.includes('--scan');
 
 const manifest = JSON.parse(readFileSync(MANIFEST_PATH, 'utf8'));
 const KTX2_CFG = manifest.ktx2 || {};
@@ -158,14 +163,46 @@ function measure(inPng, ktx2Path) {
 
 /* -------------------------------------------------------------------- main */
 
+const REPORT_PATH = resolve(__dirname, 'ktx2-report.json');
+
+let rows = [];
+let totalWebp = 0, totalKtx2 = 0;
+
+if (REPORT_ONLY || SCAN) {
+  if (SCAN) {
+    for (const asset of targets) {
+      for (const name of MAP_NAMES) {
+        const cfg = { ...(KTX2_CFG[name] || {}), ...((asset.ktx2 || {})[name] || {}) };
+        for (const size of USE_SIZES) {
+          const base = size === SIZES[0] ? name : `${name}@${size}`;
+          const k = resolve(TEX_DIR, asset.id, `${base}.ktx2`);
+          const wp = resolve(TEX_DIR, asset.id, `${base}.webp`);
+          if (!existsSync(k)) continue;
+          const parsed = readKTX2(new Uint8Array(readFileSync(k)));
+          rows.push({
+            id: asset.id, map: name, size, mode: cfg.mode,
+            levels: parsed.levels.length, w: parsed.pixelWidth, h: parsed.pixelHeight,
+            supercompression: parsed.supercompressionScheme,
+            webpBytes: existsSync(wp) ? statSync(wp).size : 0,
+            ktx2Bytes: statSync(k).size, psnr: null, maxErr: null
+          });
+        }
+      }
+    }
+    rows.sort((a, b) => a.id.localeCompare(b.id) || a.map.localeCompare(b.map) || b.size - a.size);
+    writeFileSync(REPORT_PATH, JSON.stringify({ rows, generatedAt: new Date().toISOString(), scanned: true }, null, 2) + '\n');
+    console.log(`▶ scanned ${rows.length} existing .ktx2 files`);
+  } else {
+    rows = JSON.parse(readFileSync(REPORT_PATH, 'utf8')).rows;
+  }
+  for (const r of rows) { totalWebp += r.webpBytes; totalKtx2 += r.ktx2Bytes; }
+} else {
+
 mkdirSync(TMP, { recursive: true });
 console.log(
   `▶ ktx2 · ${targets.length} texture(s) · tiers ${USE_SIZES.join('/')} · ` +
   `${relative(ROOT, BASISU)}${MEASURE ? ' · measuring' : ''}`
 );
-
-const rows = [];
-let totalWebp = 0, totalKtx2 = 0;
 
 for (const asset of targets) {
   const t0 = Date.now();
@@ -215,6 +252,20 @@ for (const asset of targets) {
 
 rmSync(TMP, { recursive: true, force: true });
 
+/* Merge into the previous report, keyed by id/map/size, so a --only run does
+   not silently reduce the summary to whatever subset was just encoded. */
+let merged = [];
+if (existsSync(REPORT_PATH)) {
+  try { merged = JSON.parse(readFileSync(REPORT_PATH, 'utf8')).rows || []; } catch { /* rewrite */ }
+}
+const key = (r) => `${r.id}|${r.map}|${r.size}`;
+const index = new Map(merged.map((r) => [key(r), r]));
+for (const r of rows) index.set(key(r), r);
+const all = [...index.values()].sort((a, b) =>
+  a.id.localeCompare(b.id) || a.map.localeCompare(b.map) || b.size - a.size);
+writeFileSync(REPORT_PATH, JSON.stringify({ rows: all, generatedAt: new Date().toISOString() }, null, 2) + '\n');
+}
+
 /* ------------------------------------------------------------------ report */
 
 const byMap = {};
@@ -246,21 +297,31 @@ console.log(
   (totalWebp / totalKtx2).toFixed(2).concat('x').padStart(8)
 );
 
-/* Per-tier download budget: a device fetches exactly one tier. */
-console.log('\nper-tier payload (what one device actually downloads, all 16 materials):');
+/*
+ * Per-tier budget. A device fetches exactly ONE tier, so these rows — not the
+ * TOTAL above — are what the 4G and VRAM budgets are judged against.
+ *
+ * VRAM accounting, both sides on the same terms:
+ *   WebP  decodes to RGBA8 (4 B/px) whatever the source channel count, because
+ *         the browser hands three.js an ImageBitmap; mips are then generated on
+ *         the GPU, so both paths carry the same 4/3 mip tail.
+ *   KTX2  transcodes to BC7/ASTC 4x4 (1 B/px) for UASTC and BC1/ETC1
+ *         (0.5 B/px) for ETC1S, and ships the mip chain already built.
+ * On a device with no compressed-texture support at all the transcoder falls
+ * back to RGBA8 and the saving is zero, but that is not a device this ships to.
+ */
+const MIP_TAIL = 4 / 3;
+console.log('\nper-tier budget (one device downloads exactly one of these rows, all 16 materials):');
 for (const size of USE_SIZES) {
   const t = rows.filter((r) => r.size === size);
   const wb = t.reduce((a, r) => a + r.webpBytes, 0);
   const kb = t.reduce((a, r) => a + r.ktx2Bytes, 0);
-  /* GPU-resident cost: WebP decodes to RGBA8; KTX2 stays compressed.
-     UASTC -> BC7/ASTC 4x4 = 1 B/px, ETC1S -> BC1/ETC1 = 0.5 B/px, +33% mips. */
-  const rgba = t.reduce((a, r) => a + r.w * r.h * 4, 0);
-  const gpu = t.reduce((a, r) => a + r.w * r.h * (r.mode === 'uastc' ? 1 : 0.5) * 1.333, 0);
+  const rgba = t.reduce((a, r) => a + r.w * r.h * 4, 0) * MIP_TAIL;
+  const gpu = t.reduce((a, r) => a + r.w * r.h * (r.mode === 'uastc' ? 1 : 0.5), 0) * MIP_TAIL;
   console.log(
-    `  ${String(size).padStart(4)}px   download ${mb(wb)} MB WebP -> ${mb(kb)} MB KTX2` +
-    `   VRAM ${mb(rgba)} MB RGBA8 -> ${mb(gpu)} MB GPU-compressed`
+    `  ${String(size).padStart(4)}px  download ${mb(wb)} -> ${mb(kb)} MB` +
+    `   VRAM ${mb(rgba)} -> ${mb(gpu)} MB  (${(rgba / gpu).toFixed(1)}x less)`
   );
 }
 
-writeFileSync(resolve(__dirname, 'ktx2-report.json'), JSON.stringify({ rows, generatedAt: new Date().toISOString() }, null, 2) + '\n');
-console.log(`\n▶ wrote ${relative(ROOT, resolve(__dirname, 'ktx2-report.json'))}`);
+console.log(`\n▶ ${relative(ROOT, REPORT_PATH)}`);

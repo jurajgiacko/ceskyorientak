@@ -31,6 +31,24 @@ export async function mountShell(root: HTMLElement, capabilities: Capabilities):
   host.className = 'screen-host';
   root.appendChild(host);
 
+  // Deep links. `?scene=forest` is how the 3D world is reachable before the
+  // menu exists, and `?scene=forest&bench=1` is what tools/perf/budget.mjs
+  // drives. Routing through transitionTo keeps the no-abrupt-cuts rule intact
+  // even for a debug entry point.
+  const params = new URLSearchParams(location.search);
+  const scene = params.get('scene');
+  if (scene === 'forest') {
+    const { makeForestScreen } = await import('@/ui/forestScreen');
+    await transitionTo(
+      makeForestScreen({
+        bench: params.get('bench') === '1',
+        weather: params.get('weather') === 'overcast' ? 'overcast' : 'sunny',
+        debug: params.get('debug') !== '0',
+      }),
+    );
+    return;
+  }
+
   await transitionTo(makeBootScreen());
 }
 

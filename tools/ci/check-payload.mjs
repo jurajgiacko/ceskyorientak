@@ -27,12 +27,33 @@ const BUDGETS = {
   entryBrotliKb: 350,
   /** Everything fetched before first play, uncompressed on disk. */
   initialMb: 15,
-  /** Streamed content — not in the initial budget, but not unbounded either. */
-  streamedMb: 120,
+  /**
+   * Everything on the origin that is not fetched before first play.
+   *
+   * This is a *hosting* bound, not a per-device one, and the distinction
+   * matters now that we ship textures in two formats: `dist/` carries both
+   * WebP and KTX2 for all 16 materials, plus three resolution tiers of each,
+   * and a device fetches exactly one format at one tier. The number that
+   * governs the player's experience is `deviceFetchMb` below.
+   */
+  streamedMb: 160,
+  /**
+   * What a single device actually pulls for a race: one texture format, one
+   * tier, one venue's terrain, plus models and audio. This is the figure that
+   * has to hold on 4G, and the one to defend.
+   */
+  deviceFetchMb: 25,
 };
 
-/** Paths under dist/ that stream in after the menu is interactive. */
-const STREAMED = ['data/', 'models/', 'textures/', 'audio/'];
+/**
+ * Paths under dist/ that stream in after the menu is interactive.
+ *
+ * `vendor/` is here because DRACOLoader fetches its decoder on demand, when the
+ * first compressed model loads — never during boot. It also holds a JS decoder
+ * that exists purely as a fallback for browsers without WASM, so counting it
+ * against time-to-first-play would penalise us for a file almost nobody fetches.
+ */
+const STREAMED = ['data/', 'models/', 'textures/', 'audio/', 'vendor/'];
 
 if (!existsSync(DIST)) {
   console.error('✗ dist/ not found. Run `npm run build` first.');
@@ -85,10 +106,34 @@ const row = (label, value, budget, unit) => {
   );
 };
 
+/**
+ * Estimate what one mid-range phone actually downloads for one race:
+ * the 512px tier, KTX2 only, one venue's low-detail terrain, models and audio.
+ *
+ * Measured from the files themselves rather than assumed, so it tracks reality
+ * as the asset set grows.
+ */
+function deviceFetchBytes() {
+  const oneOf = (pred) => streamed.filter(pred).reduce((a, f) => a + f.bytes, 0);
+  const textures = oneOf(
+    (f) => f.rel.startsWith('textures/') && f.rel.includes('@512') && f.rel.endsWith('.ktx2'),
+  );
+  // A phone gets the downsampled terrain, and only the venue it is racing.
+  const terrainAll = streamed.filter((f) => f.rel.startsWith('data/') && f.rel.includes('-low'));
+  const venues = new Set(terrainAll.map((f) => f.rel.split('/')[1]));
+  const terrain = venues.size
+    ? terrainAll.reduce((a, f) => a + f.bytes, 0) / venues.size
+    : 0;
+  const models = oneOf((f) => f.rel.startsWith('models/'));
+  const audio = oneOf((f) => f.rel.startsWith('audio/'));
+  return textures + terrain + models + audio;
+}
+
 console.log('Payload budget\n');
 row('entry (brotli)', entryBrotli / 1024, BUDGETS.entryBrotliKb, 'kB');
 row('initial load', initialBytes / MB, BUDGETS.initialMb, 'MB');
-row('streamed content', streamedBytes / MB, BUDGETS.streamedMb, 'MB');
+row('device fetch (1 race)', deviceFetchBytes() / MB, BUDGETS.deviceFetchMb, 'MB');
+row('total on origin', streamedBytes / MB, BUDGETS.streamedMb, 'MB');
 
 console.log('\nLargest initial files:');
 for (const f of [...initial].sort((a, b) => b.bytes - a.bytes).slice(0, 10)) {

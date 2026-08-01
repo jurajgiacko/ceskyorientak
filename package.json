@@ -17,7 +17,8 @@
     "perf": "node tools/perf/budget.mjs",
     "gen:pbr": "node tools/imagegen/pbr.mjs",
     "gen:validate": "node tools/imagegen/validate.mjs",
-    "audio:render": "node tools/audio/render.mjs"
+    "audio:render": "node tools/audio/render.mjs",
+    "gen:ktx2": "node tools/imagegen/ktx2.mjs"
   },
   "dependencies": {
     "three": "^0.180.0"
@@ -27,6 +28,7 @@
     "@gltf-transform/extensions": "^4.4.2",
     "@gltf-transform/functions": "^4.4.2",
     "@gpu-tex-enc/basis": "^1.16.4",
+    "@types/three": "^0.180.0",
     "draco3dgltf": "^1.5.7",
     "node-web-audio-api": "^2.1.0",
     "sharp": "^0.35.3",

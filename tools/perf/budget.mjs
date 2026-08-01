@@ -19,8 +19,9 @@
  * Exit codes: 0 pass, 1 regression, 2 harness failure.
  */
 
-import { readFileSync, writeFileSync, existsSync } from 'node:fs';
-import { resolve, dirname } from 'node:path';
+import { readFileSync, writeFileSync, existsSync, mkdtempSync, rmSync } from 'node:fs';
+import { resolve, dirname, join } from 'node:path';
+import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { createServer } from 'node:http';
 import { spawn } from 'node:child_process';
@@ -54,7 +55,9 @@ const REGRESSION_TOLERANCE = 0.1;
 /** Scenes to measure. Each is a URL the built game can be deep-linked to. */
 const SCENES = [
   { id: 'menu', url: '/?scene=menu', settleMs: 2000, measureMs: 4000 },
-  { id: 'forest', url: '/?scene=forest&bench=1', settleMs: 4000, measureMs: 6000 },
+  // The forest streams ~20 MB of terrain, textures and models and then builds
+  // its first ring of chunks, so 4 s of settle was measuring the loading screen.
+  { id: 'forest', url: '/?scene=forest&bench=1', settleMs: 12000, measureMs: 6000 },
   { id: 'sprint', url: '/?scene=sprint&bench=1', settleMs: 4000, measureMs: 6000 },
 ];
 
@@ -126,9 +129,16 @@ async function withChrome(fn) {
     process.exit(2);
   }
   const port = 9222 + Math.floor(Math.random() * 500);
+  // A dedicated profile is not optional. With the default one, if the developer
+  // already has Chrome open the new process just hands the URL to the running
+  // instance and exits, the debugging port never appears, and the gate fails
+  // with "endpoint never came up" for reasons that have nothing to do with the
+  // build.
+  const profile = mkdtempSync(join(tmpdir(), 'orientak-perf-'));
   const proc = spawn(bin, [
     '--headless=new',
     `--remote-debugging-port=${port}`,
+    `--user-data-dir=${profile}`,
     '--disable-gpu-vsync',
     '--disable-frame-rate-limit',
     // We want real GPU rasterisation; SwiftShader numbers are meaningless here.
@@ -165,6 +175,11 @@ async function withChrome(fn) {
     return await fn(port);
   } finally {
     proc.kill();
+    try {
+      rmSync(profile, { recursive: true, force: true });
+    } catch {
+      /* the profile is in tmp; losing the race with Chrome's own teardown is fine */
+    }
   }
 }
 

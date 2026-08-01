@@ -15,9 +15,11 @@ are committed. Nothing under `src/` may import anything from this directory.
 | `manifest.json` | Source of truth. Every asset, its prompt, aspect, seed and per-material PBR tuning. |
 | `generate.mjs` | Fetches missing images from Gemini, then derives outputs. Writes the lock. |
 | `pbr.mjs` | Albedo → tileable albedo + normal + roughness + AO, at 1024/512/256. Also a library. |
+| `ktx2.mjs` | GPU-compressed `.ktx2` emission (UASTC / ETC1S) alongside the WebP. |
 | `validate.mjs` | Numeric tiling / baked-lighting validation. The build gate. |
 | `inspect.mjs` | Dev-only contact sheets for eyeballing. No API calls. |
 | `manifest.lock.json` | Provenance: prompt hash, seed, model, and a sha256 per output file. **Committed.** |
+| `ktx2-report.json` | Per-file KTX2 size / format / mip-count record from the last run. **Committed.** |
 | `.cache/` | Raw model output, one PNG per asset. **Gitignored.** Re-runs are free while it exists. |
 
 ```
@@ -25,6 +27,10 @@ npm run gen:images                                  # fetch what is missing, der
 npm run gen:images -- --only=moss,granite-boulder   # a subset
 npm run gen:images -- --force                       # re-fetch (spends API calls)
 npm run gen:pbr                                     # re-derive from .cache only, no API calls
+npm run gen:ktx2                                    # GPU-compressed .ktx2 (~7 min, no API calls)
+npm run gen:ktx2 -- --measure                       # + PSNR / angular error per file
+npm run gen:ktx2 -- --report                        # re-print the summary, no re-encode
+npm run gen:ktx2 -- --scan                          # rebuild the report from files on disk
 npm run gen:validate                                # the gate
 node tools/imagegen/validate.mjs --selftest         # prove derived maps wrap
 node tools/imagegen/inspect.mjs                     # contact sheets into .cache/_inspect/
@@ -158,6 +164,123 @@ measurable discontinuity at the border. `nearLossless q60` halves the file for a
 
 ---
 
+## GPU-compressed textures (KTX2 / Basis)
+
+`ktx2.mjs` emits a `.ktx2` next to every `.webp`. Encoder is the official
+Binomial `basisu` 1.16.3, installed from npm as `@gpu-tex-enc/basis` (Apache-2.0,
+prebuilt binaries for macOS/Linux/Windows on x64 and arm64).
+
+### Why, when the WebP files are already small
+
+WebP is a *transfer* format. It decodes to uncompressed RGBA8 in GPU memory, so
+a 1024 map costs 4 MB of VRAM regardless of how small the file was. KTX2/Basis
+stays compressed on the GPU and ships its mip chain pre-built.
+
+### Format per map type
+
+| map | mode | why |
+|---|---|---|
+| `normal` | **UASTC** → BC7 / ASTC 4x4 | 1 B/px, high precision |
+| `albedo` | ETC1S → BC1 / ETC1 | 0.5 B/px, loss acceptable on colour |
+| `roughness`, `ao` | ETC1S → BC1 / ETC1 | 0.5 B/px, low-frequency scalar data |
+
+UASTC for normals is not a preference. Mean angular error of the decoded normal
+against the source, measured at 1024:
+
+| texture | UASTC (BC7) | ETC1S (BC1) |
+|---|---|---|
+| plaster-renaissance | **0.48°** | 1.13° |
+| moss | **1.72°** | 4.87° |
+| cobble-krumlov | **2.53°** | 7.73° |
+
+7.7° of mean angular error would visibly wreck specular response on the cobbles.
+
+Settings were swept, not guessed (1024, PSNR against the transcoded result):
+
+| albedo, ETC1S | size | moss | plaster | cobble |
+|---|---|---|---|---|
+| q128 c1 | 157–177 KB | 24.2 dB | 31.2 dB | 24.9 dB |
+| q200 c2 | 215–247 KB | 25.5 | 33.1 | 26.4 |
+| **q255 c2** | **243–276 KB** | **26.0** | **33.6** | **27.0** |
+| max_endpoints/selectors c4 | 227–249 KB | 25.8 | 33.2 | 26.8 |
+
+`max_endpoints`/`max_selectors` at comp_level 4 is no better than `q255 c2` and
+much slower. For normals, `-uastc_level 3 -uastc_rdo_l 0.5` beat
+`-uastc_level 2 -uastc_rdo_l 0.6` on all three textures for about 1% more bytes.
+
+### Tiling survives
+
+basisu generates mipmaps with **wrapping** addressing by default; `-mip_clamp`
+is opt-in. Never pass it — clamped mip filtering pulls the opposite edge in and
+would undo the seam work at every mip level. `-mip_renorm` is set for normals so
+the chain does not drift off the unit sphere and go flat at distance.
+
+KTX2 encodes from the raw maps out of `pbr.mjs`, never from the WebP files, so a
+`.ktx2` is never a lossy re-encode of a lossy encode.
+
+### Measured result
+
+```
+map (mode)           files  WebP MB  KTX2 MB   ratio  mips
+albedo (etc1s)          48    12.07     6.37   1.90x  11/10/9
+normal (uastc)          48    17.57    23.35   0.75x  11/10/9
+roughness (etc1s)       48     1.39     3.65   0.38x  11/10/9
+ao (etc1s)              48     7.92     4.82   1.64x  11/10/9
+TOTAL                  192    38.95    38.20   1.02x
+
+per-tier budget (a device downloads exactly one of these rows, 16 materials):
+  1024px  download 27.38 -> 27.50 MB   VRAM 341.33 -> 53.33 MB  (6.4x less)
+   512px  download  9.18 ->  8.44 MB   VRAM  85.33 -> 13.33 MB  (6.4x less)
+   256px  download  2.39 ->  2.25 MB   VRAM  21.33 ->  3.33 MB  (6.4x less)
+```
+
+**Read the per-tier rows, not the total.** The 39 MB figure is the whole build
+artefact across all three capability tiers; no device fetches more than one.
+`public/textures/` on disk is ~92 MB because it now holds both encodings — 39 MB
+of WebP plus 38 MB of KTX2 plus container overhead. That is a build artefact, not
+a payload. Once the loader settles on KTX2 for every tier the WebP set can be
+dropped, or kept only as the no-compressed-texture-support fallback.
+
+**The win is VRAM, not download — 6.4x at every tier.** On download KTX2 is a
+wash overall: albedo is 1.9x smaller and AO 1.6x, but UASTC normals are 1.3x
+*larger* than near-lossless WebP (8 bpp is fixed-rate) and ETC1S roughness is
+2.6x larger, because a smooth grayscale map is exactly what WebP is best at and
+exactly what a fixed-rate block codec is worst at. The KTX2 files also carry a
+mip chain the WebP files do not, which is a third of their size.
+
+The mobile budget is met by the 256 tier: **2.25 MB download, 3.3 MB VRAM** for
+all sixteen materials.
+
+### Visible artifacts
+
+Checked source against transcoded output at 1:1 and at 3x nearest-neighbour on
+the worst cases (`moss`, `granite-boulder` albedo; `cobble-krumlov` normal):
+
+- No block artifacts, banding or colour shift are visible at any zoom.
+- ETC1S loses some of the finest chroma detail. Most visible on `moss`, where
+  the fine yellow-green speckle softens slightly. Visible only at 3x on a
+  side-by-side; not visible at 1:1.
+- UASTC normals are essentially indistinguishable from source.
+
+The low albedo PSNR (26 dB on moss and cobble) reads worse than it looks: BC1's
+error on noise-like content is itself noise-like, so PSNR is a poor predictor of
+perceptual quality here. Trust the side-by-side over the number, and regenerate
+it with `--measure` plus a crop comparison if a texture ever looks wrong.
+
+### Not adopted
+
+- **RG-swizzled normals** (store x and y, reconstruct z in the shader) are the
+  usual way to shrink normal maps. Measured here it saved nothing —
+  1196 vs 1202 KB on cobble, and *larger* on moss and plaster — because the
+  UASTC block is fixed-rate and zstd was already exploiting the flat blue
+  channel. Not worth the shader change.
+- **Packing AO into R and roughness into G of one texture** (ORM style) would
+  halve the scalar-map count and take roughly 8.5 MB off the total. It is the
+  obvious next win, but it changes what the loader binds, so it belongs with the
+  material code rather than here.
+
+---
+
 ## Validation
 
 `validate.mjs` runs three real measurements. No eyeballing.
@@ -196,6 +319,7 @@ near zero.
 |---|---|---|
 | `seamRatio` | ≤ 1.25 | calibrated, see below |
 | `seamZ` | ≤ 2.5 | calibrated, see below |
+| `rank` | reported, not gated | non-parametric cross-check, see below |
 | `acfPeak` | ≤ 0.30 | above this the tile period is visible across a terrain patch |
 | `illumRamp` | ≤ 0.06 | 6% brightness swing across the tile |
 | `illumVignette` | ≤ 0.05 | 5% centre-to-corner falloff |
@@ -247,6 +371,16 @@ that asset in `manifest.json` and explain it in its `notes`:
 
 Overridden rows are marked `*` in the table, so an exception is always visible
 rather than silently folded into the thresholds.
+
+**`rank` is the statistic to trust when `ratio` and `z` disagree.** It is the
+fraction of all possible cut positions that are *better* than the wrap boundary,
+so 1.000 means the boundary is the single worst place you could have cut the
+image — the signature of an unhealed seam — and ~0.5 means it is an ordinary
+place to cut. It is immune to the heavy-tailed MAD distributions that strongly
+structured materials produce. `roof-tile-bohemian` at 256 reads `ratio` 1.43,
+which looks alarming, but `z` 0.9 and `rank` 0.86, which do not; the row-MAD
+spread is 2.0 to 30.7 because rows through the tile crowns are nothing like rows
+through the troughs. There is no seam there, confirmed visually.
 
 **`acf` rises as resolution falls, for any structured material.** Decimation
 averages away the uncorrelated high-frequency component that sits in the
@@ -350,9 +484,13 @@ the source of truth and only `--force` deliberately.
   `forest-floor-needles` the twigs read as rougher than the needle mat because
   they have higher local contrast, which is backwards physically. Acceptable at
   the scale these are viewed.
-- **Total size is ~39 MB across 192 texture files.** Fine for a build artefact,
-  too heavy to ship as-is. The obvious next step is transcoding to KTX2/Basis;
-  `@gltf-transform/functions` and `ktx-parse` are already in `devDependencies`.
+- **ETC1S albedo is genuinely lossy** at 26 dB PSNR on high-frequency textures.
+  It survives visual inspection at 3x, but a hero close-up material (the cobbles
+  underfoot on a sprint leg) may warrant a per-asset `ktx2` override to UASTC.
+  The override mechanism exists; nothing uses it yet.
+- **Roughness and AO ship as separate single-channel textures.** Packing them
+  into one RG texture is the biggest remaining size win (~8.5 MB) and halves the
+  scalar bindings, but it is a loader change.
 - The seam heal superimposes two independent samples in a ~12 px band. On
   noise-like materials this is invisible; on strongly structured ones it is a
   faint ghost. A min-error boundary cut (image-quilting style) would avoid it and

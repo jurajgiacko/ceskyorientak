@@ -29,6 +29,9 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: Repository hygiene
+        run: node tools/ci/check-hygiene.mjs
+
       - name: Locale completeness
         run: node tools/ci/check-locales.mjs
 

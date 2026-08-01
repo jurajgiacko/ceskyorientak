@@ -9,6 +9,7 @@
  *    MADs between every interior adjacent line pair. Reported as
  *      ratio = MAD(boundary) / mean(MAD(interior))
  *      z     = (MAD(boundary) - mean) / stddev
+ *      rank  = fraction of interior cut positions better than the boundary
  *    A perfectly tiling texture has ratio ~1.0: the wrap is statistically
  *    indistinguishable from any other place you could cut the image.
  *
@@ -227,7 +228,13 @@ function seamEnergy(L, w, h, axis) {
   const mean = mads.reduce((a, b) => a + b, 0) / mads.length;
   const varr = mads.reduce((a, b) => a + (b - mean) ** 2, 0) / mads.length;
   const sd = Math.sqrt(varr) || 1e-9;
-  return { boundary, mean, sd, ratio: boundary / (mean || 1e-9), z: (boundary - mean) / sd };
+  /* Non-parametric rank: the fraction of all possible cut positions that are
+     *better* than the wrap boundary. 1.000 means the boundary is the single
+     worst place you could have cut the image, which is what an unhealed seam
+     looks like. Immune to the heavy-tailed MAD distributions that strongly
+     structured materials produce, where `ratio` misleads and `z` does not. */
+  const rank = mads.filter((v) => v < boundary).length / mads.length;
+  return { boundary, mean, sd, rank, ratio: boundary / (mean || 1e-9), z: (boundary - mean) / sd };
 }
 
 /** B) dominant periodicity from averaged circular ACF. */
@@ -374,8 +381,8 @@ if (JSON_OUT) {
   );
   const head =
     'texture'.padEnd(24) + 'seamX'.padStart(7) + 'zX'.padStart(7) +
-    'seamY'.padStart(7) + 'zY'.padStart(7) + 'acf'.padStart(7) +
-    'lag'.padStart(6) + 'acfAll'.padStart(8) + 'lag'.padStart(6) +
+    'seamY'.padStart(7) + 'zY'.padStart(7) + 'rank'.padStart(7) +
+    'acf'.padStart(7) + 'lag'.padStart(6) + 'acfAll'.padStart(8) +
     'ramp'.padStart(7) + 'vign'.padStart(7) + '  result';
   console.log(head);
   console.log('-'.repeat(head.length + 6));
@@ -385,8 +392,9 @@ if (JSON_OUT) {
       r.id.padEnd(24) +
       f(r.sx.ratio).padStart(7) + f(r.sx.z, 1).padStart(7) +
       f(r.sy.ratio).padStart(7) + f(r.sy.z, 1).padStart(7) +
+      f(Math.max(r.sx.rank, r.sy.rank), 3).padStart(7) +
       f(r.rep.peak, 3).padStart(7) + String(r.rep.lag).padStart(6) +
-      f(r.rep.allPeak, 3).padStart(8) + String(r.rep.allLag).padStart(6) +
+      f(r.rep.allPeak, 3).padStart(8) +
       f(r.ill.ramp, 3).padStart(7) + f(r.ill.vignette, 3).padStart(7) +
       '  ' + (r.pass ? 'PASS' : 'FAIL ' + r.fail.join(',')) + (r.override ? ' *' : '')
     );
