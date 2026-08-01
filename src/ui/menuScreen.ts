@@ -37,7 +37,15 @@ const ENTRIES: MenuEntry[] = [
       await transitionTo(makeForestScreen({ bench: false, weather: 'sunny', debug: false }));
     },
   },
-  { id: 'sprint', labelKey: 'menu.sprint', sublabelKey: 'menu.sprintSub', soon: true },
+  {
+    id: 'sprint',
+    labelKey: 'menu.sprint',
+    sublabelKey: 'menu.sprintSub',
+    go: async () => {
+      const { makeSprintScreen } = await import('@/ui/sprintScreen');
+      await transitionTo(makeSprintScreen({ bench: false, weather: 'sunny', debug: false }));
+    },
+  },
   { id: 'career', labelKey: 'menu.career', sublabelKey: 'menu.careerSub', soon: true },
   { id: 'daily', labelKey: 'menu.daily', sublabelKey: 'menu.dailySub', soon: true },
 ];

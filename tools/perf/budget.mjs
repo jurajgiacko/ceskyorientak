@@ -58,7 +58,10 @@ const SCENES = [
   // The forest streams ~20 MB of terrain, textures and models and then builds
   // its first ring of chunks, so 4 s of settle was measuring the loading screen.
   { id: 'forest', url: '/?scene=forest&bench=1', settleMs: 12000, measureMs: 6000 },
-  { id: 'sprint', url: '/?scene=sprint&bench=1', settleMs: 4000, measureMs: 6000 },
+  // The sprint streams the same terrain and models as the forest plus a 515 kB
+  // townscape, and then builds 1738 buildings, 619 barriers and the paved-raster
+  // stamp before the first frame. 4 s of settle was measuring the loading screen.
+  { id: 'sprint', url: '/?scene=sprint&bench=1', settleMs: 14000, measureMs: 6000 },
 ];
 
 // ---------------------------------------------------------------------------

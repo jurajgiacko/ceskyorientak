@@ -85,6 +85,18 @@ function isIdentity(m: THREE.Matrix4): boolean {
 
 let sharedLoader: GLTFLoader | null = null;
 
+/**
+ * The shared, Draco-configured GLTF loader.
+ *
+ * Exported so the runner can load a *skinned* .glb without going through
+ * `loadAsset`, which deliberately throws the scene graph away and keeps only
+ * geometry and materials — that reduction is exactly right for instanced trees
+ * and destroys a skeleton. One loader, one Draco decoder module, either way.
+ */
+export function gltfLoader(): GLTFLoader {
+  return loader();
+}
+
 function loader(): GLTFLoader {
   if (sharedLoader) return sharedLoader;
   const draco = new DRACOLoader();
@@ -400,6 +412,22 @@ function mulberry32(seed: number): () => number {
     t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
+}
+
+/**
+ * A standing obstacle, as a vertical cylinder on the terrain.
+ *
+ * `y` is not carried: the base is the terrain height at (x, z), which every
+ * consumer can sample for itself, and carrying a stale one would be worse than
+ * not carrying it at all.
+ */
+export interface Obstacle {
+  x: number;
+  z: number;
+  /** Half-width in metres. For trees this is the *bole*, not the crown. */
+  radius: number;
+  /** Height above the terrain in metres. */
+  height: number;
 }
 
 export interface VegetationOptions {
@@ -1094,6 +1122,77 @@ export class Vegetation {
     this.stats.boulders = boulders;
     this.stats.deadwood = deadwood;
     this.stats.undergrowth = this.undergrowthCount;
+  }
+
+  // -------------------------------------------------------------------------
+  // Queries
+  // -------------------------------------------------------------------------
+
+  /**
+   * Vertical cylinders near a point, for the third-person camera's spring arm.
+   *
+   * The camera cannot raycast the vegetation: it is drawn as `InstancedMesh`
+   * with `frustumCulled = false` and instance matrices rewritten four times a
+   * second, so `THREE.Raycaster` would have to test every instance in the ring
+   * — tens of thousands of them — against a ray, every frame. The placements it
+   * would be testing are already sitting right here as plain numbers, so the arm
+   * tests those instead and does it in 2D.
+   *
+   * Trunk radius is derived, not stored. `AssetVariant.radiusM` is the *crown*
+   * half-width, which for a spruce is an order of magnitude too fat to collide a
+   * camera against — pushing the boom off a crown 4 m from the bole would make
+   * the camera lurch every time the player ran under a tree. A bole is roughly
+   * 1/45 of the tree's height at breast height, floored so a sapling still has
+   * something to hit. Boulders use their real half-width, which is what they
+   * are.
+   *
+   * Only chunks whose 40 m square is within `radius` are scanned, so this is a
+   * handful of chunks and a few hundred placements at the distances a 4 m boom
+   * cares about.
+   */
+  collectObstacles(x: number, z: number, radius: number, out: Obstacle[] = []): Obstacle[] {
+    out.length = 0;
+    const r2 = radius * radius;
+    const c0i = Math.floor((x - radius) / VEG_CHUNK_M);
+    const c1i = Math.floor((x + radius) / VEG_CHUNK_M);
+    const c0j = Math.floor((z - radius) / VEG_CHUNK_M);
+    const c1j = Math.floor((z + radius) / VEG_CHUNK_M);
+
+    for (let cj = c0j; cj <= c1j; cj++) {
+      for (let ci = c0i; ci <= c1i; ci++) {
+        const key = `${ci}|${cj}`;
+
+        const trees = this.cache.get(key);
+        if (trees) {
+          for (const p of trees) {
+            const dx = p.x - x;
+            const dz = p.z - z;
+            if (dx * dx + dz * dz > r2) continue;
+            const asset = (p.variant & 0x100) !== 0 ? this.beech : this.spruce;
+            const v = asset.variants[Math.min(p.variant & 0xff, asset.variants.length - 1)];
+            const height = (v?.heightM ?? 20) * p.scale;
+            out.push({ x: p.x, z: p.z, radius: Math.max(0.16, height / 45), height });
+          }
+        }
+
+        const scatter = this.scatterCache.get(key);
+        if (scatter) {
+          for (const p of scatter.boulders) {
+            const dx = p.x - x;
+            const dz = p.z - z;
+            if (dx * dx + dz * dz > r2) continue;
+            const v = this.boulder.variants[Math.min(p.variant, this.boulder.variants.length - 1)];
+            out.push({
+              x: p.x,
+              z: p.z,
+              radius: Math.max(0.3, (v?.radiusM ?? 1) * p.scale),
+              height: (v?.heightM ?? 1.2) * p.scale,
+            });
+          }
+        }
+      }
+    }
+    return out;
   }
 
   dispose(): void {

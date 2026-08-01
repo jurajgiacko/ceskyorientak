@@ -91,6 +91,20 @@ export function sunDirection(a: SunAngles, out = new THREE.Vector3()): THREE.Vec
 /** 10:00 local on the first Vyšší Brod forest race day. Forest races start at 10. */
 export const RACE_MORNING = new Date('2026-08-05T08:00:00Z'); // 10:00 CEST
 
+/**
+ * 08:00 local on the Krumlov prologue day.
+ *
+ * Two hours earlier than the forest and it changes everything about the frame.
+ * At 48.81 °N in early August the sun is ~26° up and ~85° east of north at
+ * 08:00, against ~45° up at 10:00 — so shadows are roughly twice as long, they
+ * run almost due west, and they fall *across* the streets rather than down
+ * them. In a town that is the whole look: the east faces are lit, the west
+ * faces are in full shade, and the gap between two buildings throws a bar of
+ * light right across the carriageway. It is also, for what it is worth, when
+ * sprint races actually start.
+ */
+export const SPRINT_MORNING = new Date('2026-08-08T06:00:00Z'); // 08:00 CEST
+
 // ---------------------------------------------------------------------------
 // Sky + lighting rig
 // ---------------------------------------------------------------------------
@@ -103,6 +117,20 @@ export interface SkyRigOptions {
   date?: Date;
   /** Half-extent of the shadow-casting region around the camera, metres. */
   shadowRadius?: number;
+  /**
+   * Lighting overrides.
+   *
+   * The defaults are measured against a shaded spruce floor (see the long note
+   * on the hemisphere below) and are not transferable: the same rig over a town
+   * puts sunlit plaster two stops into the shoulder. The sprint passes its own
+   * numbers rather than forking the class.
+   */
+  sunIntensity?: number;
+  hemiIntensity?: number;
+  hemiSky?: number;
+  hemiGround?: number;
+  ambientColour?: number;
+  ambientIntensity?: number;
 }
 
 /**
@@ -178,7 +206,10 @@ export class SkyRig {
     // it. The terrain material gates this through a canopy-gap field whose mean
     // is about 0.72, so the *average* lit fragment sees roughly the old 5.6
     // while an actual pool sees a little over twice that.
-    this.sun = new THREE.DirectionalLight(0xffeed2, opts.weather === 'sunny' ? 9.5 : 0.3);
+    this.sun = new THREE.DirectionalLight(
+      0xffeed2,
+      opts.sunIntensity ?? (opts.weather === 'sunny' ? 9.5 : 0.3),
+    );
     this.sun.position.copy(this.sunDir).multiplyScalar(400);
     this.sun.castShadow = opts.weather === 'sunny';
     this.sun.shadow.mapSize.set(shadowMapSize, shadowMapSize);
@@ -230,16 +261,19 @@ export class SkyRig {
     // Bounce off warm litter, arriving from below, is what actually models the
     // light in a shaded forest floor.
     this.hemi = new THREE.HemisphereLight(
-      opts.weather === 'sunny' ? 0xa7bcd2 : 0xedeae4,
-      opts.weather === 'sunny' ? 0x6b5636 : 0x5a5040,
-      opts.weather === 'sunny' ? 2.05 : 2.0,
+      opts.hemiSky ?? (opts.weather === 'sunny' ? 0xa7bcd2 : 0xedeae4),
+      opts.hemiGround ?? (opts.weather === 'sunny' ? 0x6b5636 : 0x5a5040),
+      opts.hemiIntensity ?? (opts.weather === 'sunny' ? 2.05 : 2.0),
     );
     this.group.add(this.hemi);
 
     // A whisper of ambient so the deepest canopy shadow keeps some colour
     // instead of clipping to black under AgX's very soft toe. Scaled with the
     // hemisphere above — it is a floor under the fill, not an independent look.
-    this.ambient = new THREE.AmbientLight(0x38412c, opts.weather === 'sunny' ? 0.5 : 0.45);
+    this.ambient = new THREE.AmbientLight(
+      opts.ambientColour ?? 0x38412c,
+      opts.ambientIntensity ?? (opts.weather === 'sunny' ? 0.5 : 0.45),
+    );
     this.group.add(this.ambient);
   }
 

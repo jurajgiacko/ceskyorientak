@@ -42,6 +42,18 @@ import { AdaptiveQuality, PerfMonitor } from '@/core/perf';
  */
 export const FOG_COLOUR_SUNNY = 0x4d5646;
 export const FOG_COLOUR_OVERCAST = 0x53523f;
+/**
+ * Town air, and it is a different substance from forest air.
+ *
+ * The forest fog is grey-olive because it is the colour of the mid-distance
+ * canopy — that is what you are actually seeing through. Over a town at 08:00
+ * you are seeing through cool valley haze against a blue sky, and the
+ * mid-distance is warm terracotta rather than green. A grey-olive veil laid
+ * over that turns the far roofs khaki, which is the one colour Krumlov never
+ * is. Density is also an order of magnitude lower: the castle has to be
+ * readable from the square, 400 m away, or the venue loses its subject.
+ */
+export const FOG_COLOUR_TOWN = 0x9fb0bd;
 
 export const EXPOSURE = 0.85;
 
@@ -120,6 +132,13 @@ export interface WorldRendererOptions {
   caps: Capabilities;
   /** Disable the post chain entirely. The `low` tier does this. */
   post?: boolean;
+  /**
+   * Composite saturation. The default 0.74 is the forest's, and it is part of
+   * the reference grade — a Šumava spruce stand really is that desaturated.
+   * A town is not: Krumlov is a field of terracotta against lime plaster and it
+   * is the *chroma* that identifies it, so the sprint runs closer to 1.
+   */
+  saturation?: number;
 }
 
 export class WorldRenderer {
@@ -132,6 +151,7 @@ export class WorldRenderer {
 
   private readonly caps: Capabilities;
   private readonly usePost: boolean;
+  private readonly saturation: number;
   private rt: THREE.WebGLRenderTarget | null = null;
   private composite: THREE.Mesh | null = null;
   private compositeScene: THREE.Scene | null = null;
@@ -151,6 +171,7 @@ export class WorldRenderer {
   constructor(opts: WorldRendererOptions) {
     this.caps = opts.caps;
     this.usePost = opts.post ?? opts.caps.tier !== 'low';
+    this.saturation = opts.saturation ?? 0.74;
 
     this.renderer = new THREE.WebGLRenderer({
       canvas: opts.canvas,
@@ -202,7 +223,7 @@ export class WorldRenderer {
         tGlow: { value: this.blackTexture },
         uGlowStrength: { value: 1 },
         uGrain: { value: 0.006 },
-        uSaturation: { value: 0.74 },
+        uSaturation: { value: this.saturation },
         uTime: { value: 0 },
         toneMappingExposure: { value: EXPOSURE },
       },
@@ -318,6 +339,13 @@ export class WorldRenderer {
  * has visibly gone by ~120 m, which is what the backdrop reference shows;
  * overcast closes to ~55 m, which is the video's much tighter wet-air look.
  */
+/** The sprint's fog. See `FOG_COLOUR_TOWN`. */
+export function makeTownFog(weather: 'sunny' | 'overcast'): THREE.FogExp2 {
+  return weather === 'sunny'
+    ? new THREE.FogExp2(FOG_COLOUR_TOWN, 0.00068)
+    : new THREE.FogExp2(0xb0b4b2, 0.0024);
+}
+
 export function makeFog(weather: 'sunny' | 'overcast'): THREE.FogExp2 {
   return weather === 'sunny'
     ? new THREE.FogExp2(FOG_COLOUR_SUNNY, 0.0092)

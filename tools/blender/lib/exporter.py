@@ -16,7 +16,8 @@ from . import mesh as M
 def export_glb(objects, path, draco=True, draco_level=6, position_bits=14,
                normal_bits=10, texcoord_bits=12, apply_modifiers=True,
                extras=True, vertex_color=None, vertex_color_name=None,
-               color_bits=10):
+               color_bits=10, animations=None, animation_mode=None,
+               skins=None):
     """Export exactly `objects` (and nothing else) to `path`.
 
     Draco is worth it for the high-poly natural assets and actively harmful
@@ -28,6 +29,15 @@ def export_glb(objects, path, draco=True, draco_level=6, position_bits=14,
     bake occlusion into a colour attribute should pass NAME plus the layer
     name: relying on MATERIAL means a refactor of the node graph can silently
     drop COLOR_0 and the model just gets flatter, with nothing to fail on.
+
+    `animations` / `animation_mode` / `skins` default to None, meaning "do not
+    pass the flag at all" -- the exporter's own defaults then apply and every
+    static asset exports exactly as it did before these arguments existed.
+    A rigged asset passes them explicitly (`animation_mode="NLA_TRACKS"` puts
+    one clip per track, which is the only arrangement that reliably names the
+    clips in the .glb), and must also pass `apply_modifiers=False`: baking an
+    Armature modifier into the mesh would freeze the bind pose and drop the
+    skin entirely.
     """
     objects = [o for o in objects if o is not None]
     os.makedirs(os.path.dirname(path), exist_ok=True)
@@ -78,6 +88,12 @@ def export_glb(objects, path, draco=True, draco_level=6, position_bits=14,
         kwargs["export_vertex_color"] = vertex_color
     if vertex_color_name is not None:
         kwargs["export_vertex_color_name"] = vertex_color_name
+    if animations is not None:
+        kwargs["export_animations"] = bool(animations)
+    if animation_mode is not None:
+        kwargs["export_animation_mode"] = animation_mode
+    if skins is not None:
+        kwargs["export_skins"] = bool(skins)
 
     bpy.ops.export_scene.gltf(**kwargs)
     return path

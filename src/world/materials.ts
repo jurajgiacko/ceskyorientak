@@ -78,6 +78,70 @@ const LAYER_TILING_M = [2.2, 2.6, 3.0, 2.6, 3.4, 1.9] as const;
  */
 const LAYER_GAIN = [0.5, 0.3, 0.3, 0.46, 0.5, 0.3] as const;
 
+// ---------------------------------------------------------------------------
+// Ground layer sets
+// ---------------------------------------------------------------------------
+
+/**
+ * One venue's ground: which textures fill the four splat channels, how they
+ * tile, and how light reaches them.
+ *
+ * Introduced for the sprint. Everything above this comment was written for a
+ * spruce forest and is right for one — but a town is not a dim place with
+ * pools of sun in it, it is an open place with hard shadows in it, and the
+ * canopy gate that makes the forest floor work would put Náměstí Svornosti at
+ * three per cent of the sun. The parts that genuinely are shared (triplanar
+ * splatting off the same runnability enum, the array textures, the macro
+ * variation, the curvature AO) stay shared; the two things that are not
+ * (the layer list and the light model) become a parameter.
+ *
+ * Channel 4 is always the implicit remainder — `1 − (w0+w1+w2+w3)`. A sixth
+ * layer, if present, has no channel of its own and is mixed in by the mosaic.
+ */
+export interface GroundLayerSet {
+  id: string;
+  layers: readonly string[];
+  tilingM: readonly number[];
+  gain: readonly number[];
+  /** Redistribute the channel-0/1 pool into litter, leaf and bare soil. */
+  mosaic: boolean;
+  /** `canopy`: dappled pools under a closed stand. `town`: open sun. */
+  light: 'canopy' | 'town';
+  /** Pull the remainder layer up on steep ground whatever the class says. */
+  slopeRock: boolean;
+}
+
+export const FOREST_GROUND: GroundLayerSet = {
+  id: 'forest',
+  layers: GROUND_LAYERS,
+  tilingM: LAYER_TILING_M,
+  gain: LAYER_GAIN,
+  mosaic: true,
+  light: 'canopy',
+  slopeRock: true,
+};
+
+/**
+ * Český Krumlov. Cobble is channel 0 because in this town the paved surface is
+ * the dominant ground — 267 k cells of Road against 108 k of forest — and it is
+ * also the surface the sprint is *about*.
+ *
+ * Gains sit far above the forest's. Those were a units correction for moss and
+ * needle litter, which are among the darkest natural surfaces there are; sett
+ * paving, lime plaster and mown grass in open morning sun are three to five
+ * times brighter, and carrying the forest numbers over would have produced a
+ * town lit like the inside of a spruce stand.
+ */
+export const TOWN_GROUND: GroundLayerSet = {
+  id: 'town',
+  layers: ['cobble-krumlov', 'gravel-path', 'meadow-grass', 'forest-floor-leaf', 'granite-lichen'],
+  tilingM: [3.1, 2.4, 3.4, 2.2, 3.4],
+  gain: [0.86, 0.72, 0.82, 0.58, 0.5],
+  mosaic: false,
+  light: 'town',
+  slopeRock: true,
+};
+
 function textureSize(tier: QualityTier): 256 | 512 | 1024 {
   return tier === 'low' ? 256 : tier === 'medium' ? 512 : 1024;
 }
@@ -117,12 +181,17 @@ export interface GroundTextures {
   normal: THREE.DataArrayTexture;
   roughness: THREE.DataArrayTexture;
   size: number;
+  /** Which set built this. The material must be compiled against the same one. */
+  set: GroundLayerSet;
   dispose(): void;
 }
 
-export async function loadGroundTextures(tier: QualityTier): Promise<GroundTextures> {
+export async function loadGroundTextures(
+  tier: QualityTier,
+  set: GroundLayerSet = FOREST_GROUND,
+): Promise<GroundTextures> {
   const size = textureSize(tier);
-  const n = GROUND_LAYERS.length;
+  const n = set.layers.length;
   const px = size * size;
 
   const albedoData = new Uint8Array(new ArrayBuffer(px * 4 * n));
@@ -130,7 +199,7 @@ export async function loadGroundTextures(tier: QualityTier): Promise<GroundTextu
   const roughData = new Uint8Array(new ArrayBuffer(px * 4 * n));
 
   for (let layer = 0; layer < n; layer++) {
-    const name = GROUND_LAYERS[layer] as string;
+    const name = set.layers[layer] as string;
     const [alb, nrm, rgh, ao] = await Promise.all([
       decode(texturePath(name, 'albedo', size)),
       decode(texturePath(name, 'normal', size)),
@@ -202,6 +271,7 @@ export async function loadGroundTextures(tier: QualityTier): Promise<GroundTextu
     normal,
     roughness,
     size,
+    set,
     dispose() {
       albedo.dispose();
       normal.dispose();
@@ -282,6 +352,7 @@ const SUN_POOL_TINT = 'vec3( 1.17, 1.0, 0.66 )';
 export function createTerrainMaterial(
   tex: GroundTextures,
   tier: QualityTier,
+  set: GroundLayerSet = tex.set ?? FOREST_GROUND,
 ): THREE.MeshStandardMaterial {
   const mat = new THREE.MeshStandardMaterial({
     color: 0xffffff,
@@ -292,15 +363,16 @@ export function createTerrainMaterial(
 
   const triplanar = tier !== 'low';
   const useNormals = tier !== 'low';
+  const nLayers = set.layers.length;
 
-  const scales = LAYER_TILING_M.map((m) => 1 / m);
+  const scales = set.tilingM.map((m) => 1 / m);
 
   mat.onBeforeCompile = (shader) => {
     shader.uniforms.tAlbedo = { value: tex.albedo };
     shader.uniforms.tNormalArr = { value: tex.normal };
     shader.uniforms.tRough = { value: tex.roughness };
     shader.uniforms.uLayerScale = { value: new Float32Array(scales) };
-    shader.uniforms.uLayerGain = { value: new Float32Array(LAYER_GAIN) };
+    shader.uniforms.uLayerGain = { value: new Float32Array(set.gain) };
 
     // --- vertex ---------------------------------------------------------
     shader.vertexShader = shader.vertexShader
@@ -337,14 +409,14 @@ export function createTerrainMaterial(
         uniform sampler2DArray tAlbedo;
         uniform sampler2DArray tNormalArr;
         uniform sampler2DArray tRough;
-        uniform float uLayerScale[ ${GROUND_LAYERS.length} ];
-        uniform float uLayerGain[ ${GROUND_LAYERS.length} ];
+        uniform float uLayerScale[ ${nLayers} ];
+        uniform float uLayerGain[ ${nLayers} ];
         varying vec4 vSplat;
         varying vec2 vGround;
         varying vec3 vWorldPos;
         varying vec3 vWorldNrm;
 
-        #define LAYERS ${GROUND_LAYERS.length}
+        #define LAYERS ${nLayers}
 
         ${CANOPY_LIGHT_GLSL}
 
@@ -467,7 +539,7 @@ export function createTerrainMaterial(
         // Weights: four stored, the fifth (granite) is the remainder. Steep
         // ground pulls granite up regardless of class — a 35 degree Sumava
         // slope is outcrop, whatever the vegetation raster says about it.
-        float slopeRock = smoothstep( 0.62, 0.94, 1.0 - wn.y );
+        float slopeRock = ${set.slopeRock ? 'smoothstep( 0.62, 0.94, 1.0 - wn.y )' : '0.0'};
         vec4 sw = vSplat * ( 1.0 - slopeRock );
         float wRock = max( 0.0, 1.0 - ( sw.x + sw.y + sw.z + sw.w ) );
         float wsum = sw.x + sw.y + sw.z + sw.w + wRock;
@@ -476,9 +548,10 @@ export function createTerrainMaterial(
         float w[ LAYERS ];
         w[0] = sw.x * inv; w[1] = sw.y * inv; w[2] = sw.z * inv;
         w[3] = sw.w * inv; w[4] = wRock * inv;
-        w[5] = 0.0;
+        ${nLayers > 5 ? 'w[5] = 0.0;' : ''}
 
         // --- mosaic ----------------------------------------------------------
+        ${set.mosaic ? /* glsl */ `
         {
           vec3 fn = floorNoise( vWorldPos.xz );
           float pool = w[0] + w[1];
@@ -513,6 +586,7 @@ export function createTerrainMaterial(
             w[2] += pool * bareFrac;
           }
         }
+        ` : ''}
 
         vec3 accAlbedo = vec3( 0.0 );
         vec3 accNormal = vec3( 0.0 );
@@ -543,7 +617,8 @@ export function createTerrainMaterial(
         // pools, where the warm direct term dominates, and puts the skylight
         // back into the shadows, which is where the eye reads "outdoors".
         vec3 groundAlbedo = mix(
-          vec3( dot( accAlbedo, vec3( 0.2126, 0.7152, 0.0722 ) ) ), accAlbedo, 0.88 );
+          vec3( dot( accAlbedo, vec3( 0.2126, 0.7152, 0.0722 ) ) ), accAlbedo,
+          ${set.light === 'town' ? '0.97' : '0.88'} );
 
         diffuseColor.rgb *= groundAlbedo * macroVariation( vWorldPos.xz ) * ao * aoTint;
         vec3 blendedNormal = normalize( accNormal );
@@ -619,9 +694,24 @@ export function createTerrainMaterial(
           //     Not a hard cut-off. A closed 24 m stand still passes about 45 %,
           //     because a spruce crown is not opaque and because a floor with no
           //     pools at all is as wrong as a floor that is all pool.
+          ${
+            set.light === 'town'
+              ? /* glsl */ `
+          // Town. The default is *full* sun — a square is not a clearing in a
+          // canopy, it is open ground, and the shadows in it come from the
+          // shadow map and from the buildings casting into it. The dapple field
+          // is still here, but it is blended in only where the LiDAR says there
+          // is a crown overhead, which in Krumlov means the castle gardens, the
+          // river bank and the wooded slope above Latran.
+          float underTree = smoothstep( 3.0, 14.0, vGround.y * 30.0 );
+          float canopyLight = mix( 1.0, ol_canopyLight( pp, 1.0 ) * 0.55 + 0.12, underTree );
+          reflectedLight.directDiffuse *= mix(
+            vec3( 1.0 ), ${SUN_POOL_TINT}, underTree ) * canopyLight;`
+              : /* glsl */ `
           float canopyOpen = 1.0 - 0.45 * smoothstep( 3.0, 20.0, vGround.y * 30.0 );
           float canopyLight = ol_canopyLight( pp, canopyOpen );
-          reflectedLight.directDiffuse *= ${SUN_POOL_TINT} * canopyLight;
+          reflectedLight.directDiffuse *= ${SUN_POOL_TINT} * canopyLight;`
+          }
 
           // The specular has to be gated by the *same* field, and damped hard.
           // Measured: a sunlit pool came out at rgb(105,101,91) — the right
@@ -634,14 +724,16 @@ export function createTerrainMaterial(
           //
           // Moss and needle litter are as close to Lambertian as natural
           // surfaces get. 0.3 is generous.
-          reflectedLight.directSpecular *= canopyLight * 0.3;
-          reflectedLight.indirectSpecular *= 0.3;
+          reflectedLight.directSpecular *= canopyLight * ${set.light === 'town' ? '0.55' : '0.3'};
+          reflectedLight.indirectSpecular *= ${set.light === 'town' ? '0.5' : '0.3'};
 
           // A pool lights its own surroundings. Feeding a little of the direct
           // term back as warm indirect is a one-line stand-in for the bounce
           // that makes sunlit moss glow rather than merely be bright.
           reflectedLight.indirectDiffuse +=
-            reflectedLight.directDiffuse * vec3( 0.26, 0.19, 0.08 );
+            reflectedLight.directDiffuse * ${
+              set.light === 'town' ? 'vec3( 0.10, 0.09, 0.07 )' : 'vec3( 0.26, 0.19, 0.08 )'
+            };
         }
         `,
       )
@@ -665,7 +757,7 @@ export function createTerrainMaterial(
   };
 
   // Force a distinct program from any other MeshStandardMaterial.
-  mat.customProgramCacheKey = () => `terrain-${tier}`;
+  mat.customProgramCacheKey = () => `terrain-${tier}-${set.id}`;
   return mat;
 }
 
@@ -1043,6 +1135,61 @@ export function conditionAssetMaterial(
       applyCanopyLight(m, 'wood');
       break;
   }
+  if (m.map) m.map.anisotropy = 8;
+  return m;
+}
+
+/**
+ * Condition the runner's own materials.
+ *
+ * Deliberately NOT `conditionAssetMaterial(mat, 'wood')`, which would bind the
+ * shared bark pack to every untextured surface and wrap the athlete in tree
+ * bark. The character is authored with flat base colours and needs none of
+ * that.
+ *
+ * What it *does* need is the canopy-gap gate. That is the whole reason this
+ * lives in materials.ts rather than in runner.ts: a third-person character is
+ * permanently in the near field, so if it takes the full 9.5 key while the moss
+ * under its feet takes a fifth of it, it reads as a lit action figure composited
+ * over a photograph. This is the same defect `applyCanopyLight` was written for
+ * on boulders, and the character is a far more obvious case of it — it is the
+ * thing the player is looking at.
+ *
+ * `kit` is the fabric of the singlet, tights, socks and bib: matte, no
+ * specular story worth telling. `skin` gets a slightly lower roughness so limbs
+ * catch a rim in a sun patch, which is most of what stops a stylised body
+ * reading as plasticine.
+ */
+export function conditionCharacterMaterial(
+  mat: THREE.Material,
+  kind: 'kit' | 'skin' | 'gear',
+): THREE.Material {
+  if (!(mat instanceof THREE.MeshStandardMaterial)) return mat;
+  const m = mat;
+
+  // Same idempotence contract as `conditionAssetMaterial` — glTF shares a
+  // material instance across primitives, so this is reached once per primitive.
+  const state = m.userData as { conditioned?: boolean };
+  if (state.conditioned) return m;
+  state.conditioned = true;
+
+  m.metalness = 0;
+  switch (kind) {
+    case 'skin':
+      m.roughness = 0.62;
+      m.envMapIntensity = 0.6;
+      break;
+    case 'gear':
+      // SI stick, shoe soles, map: slightly glossier than cloth.
+      m.roughness = 0.55;
+      m.envMapIntensity = 0.7;
+      break;
+    default:
+      m.roughness = Math.max(m.roughness, 0.88);
+      m.envMapIntensity = 0.5;
+      break;
+  }
+  applyCanopyLight(m, `character-${kind}`);
   if (m.map) m.map.anisotropy = 8;
   return m;
 }

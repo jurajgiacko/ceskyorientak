@@ -18,5 +18,6 @@ tools/blender/previews/*.blend
 *_unpacked_*.png
 
 tools/terrain/.cache/
+.cache/
 __pycache__/
 *.pyc

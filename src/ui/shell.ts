@@ -36,7 +36,7 @@ export async function mountShell(root: HTMLElement, capabilities: Capabilities):
   // even for a debug entry point.
   const params = new URLSearchParams(location.search);
   const scene = params.get('scene');
-  if (scene === 'forest') {
+  if (scene === 'forest' || scene === 'sprint') {
     // D-004 keeps the tier out of the player's hands, but QA and the perf gate
     // need to exercise the other two code paths on demand — the low tier takes
     // a different branch through the terrain shader, and an untested branch is
@@ -46,14 +46,22 @@ export async function mountShell(root: HTMLElement, capabilities: Capabilities):
       caps = { ...caps, tier: tierOverride };
     }
 
+    const sceneOpts = {
+      bench: params.get('bench') === '1',
+      weather: (params.get('weather') === 'overcast' ? 'overcast' : 'sunny') as
+        | 'overcast'
+        | 'sunny',
+      debug: params.get('debug') !== '0',
+    };
+
+    if (scene === 'sprint') {
+      const { makeSprintScreen } = await import('@/ui/sprintScreen');
+      await transitionTo(makeSprintScreen(sceneOpts));
+      return;
+    }
+
     const { makeForestScreen } = await import('@/ui/forestScreen');
-    await transitionTo(
-      makeForestScreen({
-        bench: params.get('bench') === '1',
-        weather: params.get('weather') === 'overcast' ? 'overcast' : 'sunny',
-        debug: params.get('debug') !== '0',
-      }),
-    );
+    await transitionTo(makeForestScreen(sceneOpts));
     return;
   }
 

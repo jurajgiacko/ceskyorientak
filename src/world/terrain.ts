@@ -285,8 +285,11 @@ const SKIRT_M = 2.5;
  * "no other surface claimed this vertex" mean bare rock, which is the right
  * default on a Šumava slope.
  */
-const SPLAT_FOR_RUNNABILITY: Readonly<Record<Runnability, readonly [number, number, number, number]>> =
-  {
+export type SplatTable = Readonly<
+  Record<Runnability, readonly [number, number, number, number]>
+>;
+
+const SPLAT_FOR_RUNNABILITY: SplatTable = {
     // moss, needles, dirt, meadow  (granite = remainder)
     [Runnability.Road]: [0, 0, 1, 0],
     [Runnability.Path]: [0, 0.15, 0.85, 0],
@@ -304,6 +307,37 @@ const SPLAT_FOR_RUNNABILITY: Readonly<Record<Runnability, readonly [number, numb
     [Runnability.Rock]: [0.18, 0, 0, 0],
     [Runnability.Impassable]: [0.2, 0.1, 0.2, 0.4],
   };
+
+/** The forest venue's table, exported so a caller can pick one explicitly. */
+export const FOREST_SPLAT: SplatTable = SPLAT_FOR_RUNNABILITY;
+
+/**
+ * Český Krumlov, against `TOWN_GROUND` in materials.ts:
+ * 0 cobble · 1 gravel · 2 meadow grass · 3 leaf litter · 4 (remainder) granite.
+ *
+ * The mapping is not a re-skin of the forest table, it is a different reading
+ * of the same enum. `Road` here means sett paving, not tarmac — Krumlov's old
+ * town is cobbled throughout and it is 267 k of the venue's 1.6 M cells, the
+ * single largest surface. And the forest classes, which in Šumava mean a
+ * spruce floor of moss and needles, here mean the deciduous slope above Latrán
+ * and the castle gardens, so they resolve to leaf litter instead.
+ */
+export const TOWN_SPLAT: SplatTable = {
+  [Runnability.Road]: [1, 0, 0, 0],
+  [Runnability.Path]: [0.12, 0.88, 0, 0],
+  [Runnability.OpenFast]: [0, 0, 1, 0],
+  [Runnability.OpenRough]: [0, 0.12, 0.8, 0.05],
+  [Runnability.ForestOpen]: [0, 0, 0.28, 0.68],
+  [Runnability.Green1]: [0, 0, 0.2, 0.76],
+  [Runnability.Green2]: [0, 0, 0.12, 0.84],
+  [Runnability.Green3]: [0, 0, 0.06, 0.9],
+  [Runnability.Marsh]: [0, 0, 0.6, 0.3],
+  // Bare rock: the cliffs the old town is built against, and the castle crag.
+  [Runnability.Rock]: [0, 0, 0, 0.06],
+  // Water and out-of-bounds. The river gets a real surface drawn over it by
+  // townscape.ts, so what matters here is that the bed under it is not grass.
+  [Runnability.Impassable]: [0, 0.1, 0.18, 0.3],
+};
 
 interface Chunk {
   cx: number;
@@ -340,13 +374,16 @@ export class TerrainMesh {
   visibleCount = 0;
   triangleCount = 0;
 
+  private readonly splat: SplatTable;
+
   constructor(
     field: TerrainField,
     material: THREE.Material,
-    opts: { viewRadius?: number; buildBudget?: number } = {},
+    opts: { viewRadius?: number; buildBudget?: number; splat?: SplatTable } = {},
   ) {
     this.field = field;
     this.material = material;
+    this.splat = opts.splat ?? SPLAT_FOR_RUNNABILITY;
     this.viewRadius = opts.viewRadius ?? 420;
     // One chunk per frame. An LOD0 chunk is 6 724 vertices, each needing five
     // bilinear heightfield samples for position and normal, so three per frame
@@ -549,7 +586,7 @@ export class TerrainMesh {
         uv[k * 2] = wx;
         uv[k * 2 + 1] = wz;
 
-        const w = SPLAT_FOR_RUNNABILITY[f.runnabilityAt(wx, wz)];
+        const w = this.splat[f.runnabilityAt(wx, wz)];
         splat[k * 4] = w[0];
         splat[k * 4 + 1] = w[1];
         splat[k * 4 + 2] = w[2];
