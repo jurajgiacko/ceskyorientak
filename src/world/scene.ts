@@ -64,6 +64,7 @@ export class ForestScene {
   private ground!: GroundTextures;
 
   private readonly tier: QualityTier;
+  private readonly touch: boolean;
   private readonly bench: boolean;
   private readonly weather: Weather;
   private readonly venueId: VenueId;
@@ -122,6 +123,7 @@ export class ForestScene {
 
   constructor(opts: ForestSceneOptions) {
     this.tier = opts.caps.tier;
+    this.touch = opts.caps.touch;
     this.bench = opts.bench ?? false;
     this.weather = opts.weather ?? 'sunny';
     this.venueId = opts.venue ?? 'martinkov';
@@ -234,7 +236,10 @@ export class ForestScene {
     this.scene.add(this.terrain.group);
 
     // --- vegetation ---
-    this.vegetation = new Vegetation(this.field, assets, { tier: this.tier });
+    this.vegetation = new Vegetation(this.field, assets, {
+      tier: this.tier,
+      touch: this.touch,
+    });
     // Trees are placed from a seeded scatter that does not know where the
     // player is, so without this the first frame is regularly the inside of a
     // spruce. A start clearing is also what a real arena looks like.

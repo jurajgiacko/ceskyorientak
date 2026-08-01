@@ -432,6 +432,12 @@ export interface Obstacle {
 
 export interface VegetationOptions {
   tier: QualityTier;
+  /**
+   * True on phones and tablets. Separate from `tier` on purpose: the tier probe
+   * reports `medium` for a mid-range phone, which is the right *visual* answer
+   * but the wrong *generation-cost* answer on a slow CPU.
+   */
+  touch?: boolean;
   /** Full-mesh radius. Past this, imposters. */
   nearRadius?: number;
   /** Everything is culled past this. Keep it inside the fog. */
@@ -514,17 +520,27 @@ export class Vegetation {
     this.group.name = 'vegetation';
 
     const tier = opts.tier;
-    this.nearRadius = opts.nearRadius ?? (tier === 'low' ? 70 : 120);
-    this.farRadius = opts.farRadius ?? (tier === 'low' ? 150 : 230);
+    // Touch devices take the tight radii regardless of tier.
+    //
+    // The tier probe puts a phone on `medium`, which was giving a 4x-throttled
+    // CPU nearly desktop-sized generation work: forest.mobile held a healthy
+    // ~8 ms median but spiked to 33-109 ms p95, intermittently, as chunks were
+    // generated. The median was never the problem; the hitch was. Chunk
+    // generation cost scales with the square of these radii, so halving the
+    // area is the cheapest lever that touches the spike rather than the
+    // average.
+    const tight = tier === 'low' || opts.touch === true;
+    this.nearRadius = opts.nearRadius ?? (tight ? 70 : 120);
+    this.farRadius = opts.farRadius ?? (tight ? 150 : 230);
     // Tightened from 27 m. The layer's job is to read as a *mat*, and a mat is
     // a question of instances per square metre, not of how far the ring
     // reaches. Trading 27 m at 10/m2 for 22 m at ~17/m2 costs about the same
     // triangles and is the difference between distinguishable tufts and ground
     // cover. Beyond the ring the mosaic in the terrain material carries it.
-    this.groundRadius = opts.groundRadius ?? (tier === 'low' ? 15 : 22);
-    this.densityScale = tier === 'low' ? 0.45 : tier === 'medium' ? 0.75 : 1;
+    this.groundRadius = opts.groundRadius ?? (tight ? 15 : 22);
+    this.densityScale = tight ? 0.45 : tier === 'medium' ? 0.75 : 1;
 
-    const capacity = tier === 'low' ? 2000 : 6000;
+    const capacity = tight ? 2000 : 6000;
 
     for (const asset of [this.spruce, this.beech]) {
       const buckets = asset.variants.map((v) =>

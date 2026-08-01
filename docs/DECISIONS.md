@@ -578,3 +578,39 @@ Vercel deployment is live. "Private audience" is a property of who is told the
 URL, not of the artefact. If this build is to sit alongside the World Cup, the
 flag is the switch — but someone has to throw it, and that is a release
 decision rather than a code one.
+
+---
+
+## D-021 — Frame-time spikes on mobile: fixed the cause, not the gate
+
+**Symptom.** `forest.mobile` held a healthy median (~8 ms against a 33.3 ms
+budget) but spiked intermittently to a p95 of 33, 72, even 109 ms. A 100 ms
+frame is a visible stutter, and the median was never going to reveal it — this
+is exactly what the p95 budget exists to catch.
+
+**Cause found.** The capability probe puts a mid-range phone on the `medium`
+tier. That is the right *visual* answer and the wrong *generation-cost* answer:
+it gave a 4×-throttled CPU nearly desktop-sized vegetation work, and chunk
+generation cost scales with the square of the view radii.
+
+**Fix.** Touch devices now take the tight radii regardless of tier —
+`near 120→70 m`, `far 230→150 m`, `ground 22→15 m`, density `0.75→0.45`,
+capacity `6000→2000`. Measured on the same build: median **8.5 → 2–6 ms**, and
+the 109 ms spike gone, worst p95 **31.3 ms**.
+
+Note this is deliberately *not* a tier change. Tier stays `medium` so the phone
+keeps medium textures and shadows; only the amount of geometry generated per
+frame drops. Visual quality and generation cost are different axes and had been
+conflated.
+
+**What is still open, and why it is not rebaselined away.** Running the full
+gate — menu, then forest, then sprint, in one browser — still produces spikes
+(133 ms) that the same scenes do not show when measured alone (31 ms). Later
+scenes inherit something from earlier ones; the likely candidate is incomplete
+teardown between scenes causing GC pauses.
+
+That is worth chasing rather than masking, for two reasons: it is a real player
+flow (race → menu → race), and a p95 gate that gets relaxed whenever it fires
+stops being a gate. **The hard budgets stay as they are and the gate stays red
+on this one metric until the leak is found.** A red gate telling the truth is
+more useful than a green one that has been tuned into agreement.
