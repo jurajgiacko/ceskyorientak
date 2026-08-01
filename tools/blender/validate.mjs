@@ -30,7 +30,18 @@ const MODELS = path.join(ROOT, 'public', 'models');
 /**
  * Total LOD0 triangles across the whole asset library.
  *
- * Raised from 40k to 60k deliberately. 40k was an initial guess, and it turned
+ * Raised again, 60k to 80k, to admit the third-person character. The original
+ * reasoning applies with more force to a character than to scatter: this budget
+ * governs VRAM, not frame time. The runner and the viewmodel are drawn ONCE
+ * each — they are not instanced at all — so together they add about 18.5k
+ * triangles to the library and about one draw call to the frame. At roughly
+ * 50 kB per 1000 tris that is under 1 MB of VRAM.
+ *
+ * Leaving the body parked to protect a number that does not govern frame time
+ * would have been the same mistake as the deadwood root plate, and this time
+ * the cost would have been a feature the client asked for.
+ *
+ * Originally raised from 40k to 60k deliberately. 40k was an initial guess, and it turned
  * out to be the wrong *kind* of budget: these assets are GPU-instanced, so what
  * costs frame time is instance count × the LOD actually drawn, not the size of
  * the source library. Library size costs VRAM — roughly 50 kB per 1000 tris
@@ -46,7 +57,7 @@ const MODELS = path.join(ROOT, 'public', 'models');
  * Per-frame cost is governed by the perf budget in tools/perf/, which measures
  * the thing that actually matters.
  */
-export const TOTAL_LOD0_BUDGET = 60000;
+export const TOTAL_LOD0_BUDGET = 80000;
 
 /** LOD0 triangle budget per asset (see README). */
 export const BUDGETS = {
@@ -65,6 +76,14 @@ export const BUDGETS = {
   // slightly looser allowance than a scatter asset. The global ceiling is the
   // real constraint here and there is room under it.
   'race-belt': 1000,
+  // First-person viewmodel: one instance, always on screen, always at ~0.45 m
+  // from the camera. It is the most closely inspected surface in the game, so
+  // it gets the loosest per-asset allowance in the library — and it is the
+  // only skinned asset, so its cost is a fixed one-off rather than per-instance.
+  'orienteer-hands': 9000,
+  // Drawn once, never instanced, and on screen constantly in third person.
+  // A character carries its cost in VRAM rather than in the frame.
+  orienteer: 14000,
   'finish-gantry': 2200,
   'arena-tent': 1400,
   'spectator-fence': 600,

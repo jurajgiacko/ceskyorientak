@@ -2,8 +2,8 @@
   "generator": "blender-asset-pipeline (Blender 4.5.12 LTS)",
   "generatedAt": "2026-08-01",
   "seed": 20260805,
-  "totalLod0Tris": 46972,
-  "totalBytes": 2030756,
+  "totalLod0Tris": 65476,
+  "totalBytes": 2911396,
   "assets": [
     {
       "name": "arena-tent",
@@ -295,6 +295,74 @@
         1.1
       ],
       "originNote": "ground level at mid-span, arch along +X, +Z up"
+    },
+    {
+      "name": "orienteer",
+      "file": "orienteer.glb",
+      "bytes": 593876,
+      "tris": 12736,
+      "lods": [
+        {
+          "node": "orienteer_LOD0",
+          "tris": 12736
+        }
+      ],
+      "originNote": "between the feet at ground level -- soles touch z=0, standing upright",
+      "forwardAxis": "+Y in Blender = -Z in glTF/three.js (three.js forward); +X in Blender is the character's right",
+      "heightM": 1.78,
+      "clips": [
+        "idle",
+        "jog",
+        "run",
+        "map"
+      ],
+      "clipSeconds": {
+        "idle": 4,
+        "jog": 0.8666666666666667,
+        "run": 0.6666666666666666,
+        "map": 3
+      },
+      "bones": 20,
+      "deformBones": 19,
+      "fps": 30,
+      "rootBone": "root",
+      "notes": "skinned, 4 looping clips; every clip's last frame equals its first. Bind pose carries the map in the left hand; clip 'map' raises it to reading height"
+    },
+    {
+      "name": "orienteer-hands",
+      "file": "orienteer-hands.glb",
+      "bytes": 286764,
+      "tris": 5768,
+      "lods": [
+        {
+          "node": "orienteer-hands_LOD0",
+          "tris": 5768
+        }
+      ],
+      "originNote": "origin at the eye/camera, viewmodel space",
+      "forwardAxis": "-Z (glTF)",
+      "clips": [
+        "idle",
+        "jog",
+        "run",
+        "read"
+      ],
+      "clipSeconds": {
+        "idle": 4,
+        "jog": 0.8666666666666667,
+        "run": 0.6666666666666666,
+        "read": 2
+      },
+      "bones": 9,
+      "deformBones": 8,
+      "fps": 30,
+      "mapMaterial": "map_face",
+      "mapUV": "UV(0,0) = map top-left seen from the front; +U -> +X, +V -> down. glTF top-left texture origin, no flip needed",
+      "mapQuadSizeM": [
+        0.2,
+        0.155
+      ],
+      "notes": "first-person viewmodel; bind pose is the carry pose. Bind the ISOM canvas to the map_face material by name; map_back covers the reverse and the edge rim. Verify framing with tools/blender/preview-viewmodel.py, not the turntable"
     },
     {
       "name": "race-belt",
