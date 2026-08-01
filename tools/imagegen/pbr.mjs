@@ -441,11 +441,19 @@ function renormalize(buf, n) {
   return buf;
 }
 
+/**
+ * Normals are LOSSLESS on purpose. A tangent-space normal map is a vector
+ * field, not a picture: lossy WebP's chroma handling and 4x4 blocking quantise
+ * the x/y components into flat facets and put a measurable discontinuity at
+ * the image border (the wrap boundary's rank among all cut positions jumped
+ * from ~0.5 to ~0.98 purely from q=96 encoding). Roughness and AO are single
+ * channel and low frequency, so lossy is fine there.
+ */
 const WEBP_OPTS = {
   albedo: { quality: 92, effort: 5 },
-  normal: { quality: 96, effort: 5, smartSubsample: false },
-  roughness: { quality: 88, effort: 5 },
-  ao: { quality: 88, effort: 5 }
+  normal: { lossless: true, effort: 5 },
+  roughness: { quality: 90, effort: 5 },
+  ao: { quality: 90, effort: 5 }
 };
 
 /* --------------------------------------------------------------- the pass */

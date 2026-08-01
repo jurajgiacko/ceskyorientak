@@ -34,8 +34,11 @@ def parse():
     p.add_argument("--cell", type=int, default=560, help="pixels per grid cell")
     p.add_argument("--max-width", type=int, default=2000)
     p.add_argument("--lod", type=int, default=0)
-    p.add_argument("--samples", type=int, default=48)
-    p.add_argument("--engine", default="BLENDER_EEVEE_NEXT")
+    p.add_argument("--samples", type=int, default=28)
+    # Cycles is the default deliberately: EEVEE Next silently drops
+    # alpha-blended foliage cards in --background, which made trees render
+    # as bare trunks and would have hidden real defects.
+    p.add_argument("--engine", default="CYCLES")
     p.add_argument("--bg", type=float, default=0.30)
     return p.parse_args(argv)
 
@@ -185,7 +188,7 @@ def main():
     try:
         sc.render.engine = args.engine
     except Exception:
-        sc.render.engine = "BLENDER_EEVEE_NEXT"
+        sc.render.engine = "CYCLES"
     if sc.render.engine == "CYCLES":
         sc.cycles.samples = args.samples
         sc.cycles.device = "CPU"

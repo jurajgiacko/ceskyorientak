@@ -46,22 +46,26 @@ LEG_AZIMUTHS = (math.pi / 3.0, math.pi, math.pi * 5.0 / 3.0)
 SI_MOUNT_Z = 0.850       # top face of the bracket plate
 ARM_R = 0.0090           # same stock as the mast, one size down
 ARM_Z = 1.2210
-# Out level, dip into a cradle, then kick up: the dip is where a control-flag
-# hook settles and the kicked-up tip is what stops it sliding off.
-ARM_PATH = [(0.006, 0.0, ARM_Z),
-            (0.068, 0.0, ARM_Z),
-            (0.120, 0.0, ARM_Z - 0.0025),
-            (0.152, 0.0, ARM_Z - 0.0090),
-            (0.170, 0.0, ARM_Z - 0.0065),
-            (0.179, 0.0, ARM_Z + 0.0055)]
-FLAG_HANG_Z = ARM_Z - 0.0090 + ARM_R   # top of the rod at the cradle
-FLAG_HANG_X = 0.152
+# Out level, then a smooth arc down into a cradle and back up into a stop:
+# the cradle is where a control-flag hook settles, the stop is what keeps it
+# from sliding off.  Enough path points that the bend reads as a curve.
+ARM_PATH = [(0.004, 0.0, ARM_Z),
+            (0.055, 0.0, ARM_Z),
+            (0.100, 0.0, ARM_Z - 0.0015),
+            (0.134, 0.0, ARM_Z - 0.0070),
+            (0.158, 0.0, ARM_Z - 0.0125),
+            (0.176, 0.0, ARM_Z - 0.0100),
+            (0.186, 0.0, ARM_Z + 0.0020)]
+ARM_RADII = [ARM_R, ARM_R, 0.0089, 0.0087, 0.0084, 0.0078, 0.0068]
+FLAG_HANG_X = 0.158
+FLAG_HANG_Z = ARM_Z - 0.0125 + 0.0084   # top of the rod at the cradle
 
 # Facet angles: a regular n-gon sweep has 360/n between neighbouring side
 # faces, so the smoothing limit has to clear that but stay under the 90 deg
 # of a cap or a shoulder.
 SMOOTH_8 = 50.0
 SMOOTH_6 = 66.0
+SMOOTH_ROUND = 78.0      # domes and swept bends: everything but the end caps
 
 
 def move(obj, offset):
@@ -96,26 +100,29 @@ def swept(name, points, radii, material, sides=8, caps=True, smooth=SMOOTH_8):
 
 
 def build_mast(steel):
-    return swept("mast",
-                 [(0.0, 0.0, MAST_Z0), (0.0, 0.0, 0.80), (0.0, 0.0, MAST_Z1)],
+    return swept("mast", [(0.0, 0.0, MAST_Z0), (0.0, 0.0, MAST_Z1)],
                  MAST_R, steel, sides=8, caps=True)
 
 
 def build_mast_cap(steel):
-    """Domed ferrule -- a flat octagonal cap would read as a cut-off pipe."""
+    """Domed ferrule -- a flat octagonal cap would read as a cut-off pipe.
+
+    Smoothed at SMOOTH_ROUND so the pole does not show as a faceted gem tip.
+    """
     return lathe("cap", [(MAST_R, MAST_Z1),
-                         (MAST_R * 0.94, MAST_Z1 + 0.0065),
-                         (MAST_R * 0.64, MAST_Z1 + 0.0120),
-                         (0.0, MAST_TOP)], steel)
+                         (MAST_R * 0.985, MAST_Z1 + 0.0040),
+                         (MAST_R * 0.860, MAST_Z1 + 0.0100),
+                         (MAST_R * 0.520, MAST_Z1 + 0.0148),
+                         (0.0, MAST_TOP)], steel, smooth=SMOOTH_ROUND)
 
 
 def build_hub(plastic):
     """Moulded hub: barrel with a shoulder at the top where the legs pivot."""
     return lathe("hub", [(MAST_R, HUB_Z0),
-                         (0.0250, HUB_Z0 + 0.011),
-                         (HUB_R, HUB_Z0 + 0.050),
-                         (HUB_R, HUB_Z1 - 0.030),
-                         (0.0190, HUB_Z1 - 0.007),
+                         (0.0255, HUB_Z0 + 0.008),
+                         (HUB_R, HUB_Z0 + 0.024),
+                         (HUB_R, HUB_Z1 - 0.020),
+                         (0.0245, HUB_Z1 - 0.006),
                          (MAST_R, HUB_Z1)], plastic)
 
 
@@ -162,17 +169,15 @@ def build_si_plate(plastic):
 
 
 def build_arm_collar(plastic):
-    return lathe("armcollar", [(MAST_R, 1.1780), (0.0235, 1.1900),
-                               (0.0235, 1.2340), (MAST_R, 1.2460)], plastic)
+    return lathe("armcollar", [(MAST_R, 1.1720), (0.0235, 1.1830),
+                               (0.0235, 1.2250), (MAST_R, 1.2340)], plastic)
 
 
 def build_arm(steel):
     """Cranked arm: runs out level, dips, then kicks up so the flag hook
     cannot slide off the end."""
-    return swept("arm", ARM_PATH,
-                 [ARM_R, ARM_R, ARM_R, ARM_R * 0.96, ARM_R * 0.90,
-                  ARM_R * 0.78],
-                 steel, sides=8, caps=True)
+    return swept("arm", ARM_PATH, ARM_RADII, steel, sides=8, caps=True,
+                 smooth=SMOOTH_ROUND)
 
 
 def main():

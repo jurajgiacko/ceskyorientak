@@ -61,13 +61,26 @@ VARIANTS = 6
 TARGET_LOD0 = 1470       # tris per variant -> 8820 total, budget is 9000
 RATIOS = (1.0, 0.40, 0.10)
 
+# The palette constants are *linear* base colours: GRANITE_MID 0.235 linear is
+# sRGB ~0.52, a light-to-mid grey, and under three suns totalling ~8 W/m2 it
+# renders as near-white.  Sumava granite is a mid-to-dark grey, so the whole
+# palette is shaded by one factor rather than being re-picked per tone -- the
+# relative spacing of LIGHT/MID/DARK is exactly the palette's, only the overall
+# value moves.  Raise this to 1.0 to get the raw palette back.
+SHADE = 0.60
+
+GRANITE = {
+    "light": tuple(c * SHADE for c in mat.GRANITE_LIGHT),
+    "mid": tuple(c * SHADE for c in mat.GRANITE_MID),
+    "dark": tuple(c * SHADE for c in mat.GRANITE_DARK),
+}
+
 # Crustose lichen on granite is a low-saturation sage that reads as a stain
-# rather than paint: barely greener than the rock and a little *darker* than
-# it, never a bright contrasting patch.  Half way from the palette lichen to
-# the dark granite, then knocked down again -- at the exposure the preview rig
-# uses, anything at the palette's own value blows out to custard.
-LICHEN_SAGE = tuple(0.72 * (0.5 * a + 0.5 * b)
-                    for a, b in zip(mat.LICHEN, mat.GRANITE_DARK))
+# rather than paint: barely greener than the rock and within a few percent of
+# it in value, never a bright contrasting patch.  Mostly the palette lichen,
+# pulled towards the mid granite and shaded with everything else.
+LICHEN_SAGE = tuple(SHADE * 0.88 * (0.55 * a + 0.45 * b)
+                    for a, b in zip(mat.LICHEN, mat.GRANITE_MID))
 
 # Per-variant recipe.
 #   size    X extent in metres; prop gives Y and Z as ratios of it
@@ -80,13 +93,13 @@ LICHEN_SAGE = tuple(0.72 * (0.5 * a + 0.5 * b)
 #           how hard to flatten -- 1.0 is a clean parted face)
 SPECS = [
     dict(  # v0 -- classic medium wool-sack block, one clean side joint
-        size=2.60, prop=(0.84, 0.66), bevel=0.44, bseg=1, tone="mid",
+        size=2.60, prop=(0.84, 0.66), bevel=0.44, bseg=1, tone="light",
         yaw=17.0, smooth=38.0,
         broad=(0.155, 1.5, 2), groove=(0.036, 2.2), fine=(0.028, 5.0, 2),
         cuts=[((1, 0, 0), 0.78, 1.00)],
     ),
     dict(  # v1 -- small, very rounded sack, barely jointed
-        size=1.20, prop=(0.94, 0.84), bevel=0.60, bseg=1, tone="light",
+        size=1.20, prop=(0.94, 0.84), bevel=0.60, bseg=1, tone="mid",
         yaw=-38.0, smooth=42.0,
         broad=(0.180, 1.8, 2), groove=(0.038, 2.6), fine=(0.032, 6.2, 2),
         cuts=[((0, -1, 0), 0.88, 0.55)],
@@ -104,10 +117,10 @@ SPECS = [
         cuts=[((0, 1, 0), 0.78, 0.90)],
     ),
     dict(  # v4 -- long low sheet, reads as a bench, one parted end
-        size=4.00, prop=(0.76, 0.44), bevel=0.30, bseg=2, tone="mid",
+        size=4.00, prop=(0.76, 0.44), bevel=0.32, bseg=2, tone="mid",
         yaw=41.0, smooth=35.0,
-        broad=(0.165, 1.7, 2), groove=(0.045, 1.9), fine=(0.029, 4.2, 2),
-        cuts=[((0, 0, 1), 0.90, 0.55), ((-1, 0, 0), 0.78, 1.00)],
+        broad=(0.125, 1.5, 2), groove=(0.034, 1.9), fine=(0.028, 4.2, 2),
+        cuts=[((-1, 0, 0), 0.80, 1.00)],
     ),
     dict(  # v5 -- knobbly mid-size sack, coarse relief, no clean facet
         size=1.65, prop=(0.90, 0.82), bevel=0.54, bseg=1, tone="dark",
@@ -307,11 +320,11 @@ def main():
     # crumbly diffuse surface, and the broad sheen a default Principled puts on
     # it is most of what was making the set read as pale.
     tones = {
-        "light": mat.principled("granite_light", mat.GRANITE_LIGHT,
+        "light": mat.principled("granite_light", GRANITE["light"],
                                 roughness=0.92, metallic=0.0, specular=0.18),
-        "mid": mat.principled("granite_mid", mat.GRANITE_MID,
+        "mid": mat.principled("granite_mid", GRANITE["mid"],
                               roughness=0.92, metallic=0.0, specular=0.18),
-        "dark": mat.principled("granite_dark", mat.GRANITE_DARK,
+        "dark": mat.principled("granite_dark", GRANITE["dark"],
                                roughness=0.94, metallic=0.0, specular=0.16),
     }
     lichen = mat.principled("granite_lichen", LICHEN_SAGE, roughness=0.96,

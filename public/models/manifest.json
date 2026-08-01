@@ -2,8 +2,8 @@
   "generator": "blender-asset-pipeline (Blender 4.5.12 LTS)",
   "generatedAt": "2026-08-01",
   "seed": 20260805,
-  "totalLod0Tris": 33838,
-  "totalBytes": 2149024,
+  "totalLod0Tris": 33918,
+  "totalBytes": 2142080,
   "assets": [
     {
       "name": "beech",
@@ -55,7 +55,7 @@
     {
       "name": "boulder-set",
       "file": "boulder-set.glb",
-      "bytes": 161904,
+      "bytes": 158860,
       "tris": 8820,
       "lods": [
         {
@@ -182,8 +182,8 @@
     {
       "name": "deadwood",
       "file": "deadwood.glb",
-      "bytes": 83868,
-      "tris": 2876,
+      "bytes": 79968,
+      "tris": 2956,
       "lods": [
         {
           "node": "deadwood_v0_LOD0",
@@ -195,7 +195,7 @@
         },
         {
           "node": "deadwood_v0_LOD2",
-          "tris": 106
+          "tris": 107
         },
         {
           "node": "deadwood_v1_LOD0",
@@ -211,15 +211,15 @@
         },
         {
           "node": "deadwood_v2_LOD0",
-          "tris": 1072
+          "tris": 1152
         },
         {
           "node": "deadwood_v2_LOD1",
-          "tris": 428
+          "tris": 460
         },
         {
           "node": "deadwood_v2_LOD2",
-          "tris": 118
+          "tris": 130
         }
       ],
       "variants": [

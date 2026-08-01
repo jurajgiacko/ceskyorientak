@@ -33,7 +33,7 @@ from lib import cli, exporter, lod, mat, mesh as M, uvtools  # noqa: E402
 
 NAME = "deadwood"
 TAU = math.pi * 2.0
-SMOOTH = 41.0           # sharp-edge angle: smooth bark, crisp splinters
+SMOOTH = 53.0           # sharp-edge angle: smooth bark, crisp splinters
 
 
 # ---------------------------------------------------------------------------
@@ -105,10 +105,12 @@ def centre_xy(obj):
 def splinter_tube_end(obj, sides, rings, rng, at_start, depth, pinch=0.10):
     """Turn a capped `M.tube` end into a broken, splintered fracture.
 
-    The rim vertices are pushed out along the local axis by an uneven,
-    neighbour-correlated amount and the cap centre is pulled in, so the cap
-    fan becomes a ring of tapering spikes -- what a snapped trunk looks like,
-    as opposed to the flat disc a saw leaves.
+    The rim vertices are shifted along the local axis by an uneven,
+    neighbour-correlated amount -- some proud, some recessed -- so the cap fan
+    becomes a ring of tapering spikes around a torn hollow.  That is what a
+    snapped trunk looks like, as opposed to the flat disc a saw leaves.  The
+    cap centre only moves a little: a break is roughly a plane with splinters
+    on it, not a funnel.
     """
     vs = obj.data.vertices
     rim = 0 if at_start else rings - 1
@@ -126,7 +128,7 @@ def splinter_tube_end(obj, sides, rings, rng, at_start, depth, pinch=0.10):
         return obj
     axis.normalize()
 
-    raw = [rng.uniform(0.0, 1.0) ** 1.7 for _ in range(sides)]
+    raw = [rng.uniform(0.0, 1.0) ** 1.7 - 0.30 for _ in range(sides)]
     smooth = [(2.0 * raw[j] + raw[(j - 1) % sides] + raw[(j + 1) % sides]) / 4.0
               for j in range(sides)]
 
@@ -137,11 +139,11 @@ def splinter_tube_end(obj, sides, rings, rng, at_start, depth, pinch=0.10):
         co = co + axis * (smooth[j] * depth) - radial * pinch
         vs[vi].co = co
         ii = inner * sides + j
-        vs[ii].co = vs[ii].co + axis * (smooth[j] * depth * 0.26)
+        vs[ii].co = vs[ii].co + axis * (max(0.0, smooth[j]) * depth * 0.26)
 
     cap = rings * sides + (0 if at_start else 1)
     if cap < len(vs):
-        vs[cap].co = vs[cap].co - axis * (depth * 0.55)
+        vs[cap].co = vs[cap].co - axis * (depth * 0.12)
     obj.data.update()
     return obj
 
@@ -209,9 +211,9 @@ def build_fallen_log(rng, mats):
              + 0.085 * math.sin(t * 5.4 + 1.3)
              - 0.20 * t)
         # snapped at both ends, so neither end tapers to a point
-        r = ((0.300 * (1.0 - t) + 0.150 * t)
-             * (1.0 + 0.060 * math.sin(t * 12.3 + 0.5)
-                + 0.035 * math.sin(t * 27.0 + 2.2)))
+        r = ((0.320 * (1.0 - t) + 0.175 * t)
+             * (1.0 + 0.075 * math.sin(t * 4.1 + 0.5)
+                + 0.045 * math.sin(t * 12.3 + 2.2)))
         # part-buried: the centreline drops below one radius in stretches
         sink = (0.075 + 0.060 * math.sin(t * 3.3 + 0.7)
                 + 0.030 * math.sin(t * 7.4 + 2.0))
@@ -260,8 +262,8 @@ def build_fallen_log(rng, mats):
     # along the trunk so the patches run as strips, not blobs
     mat.assign_all(obj, mats["wood"])
     mat.assign_faces(obj, mats["bark"],
-                     patch_predicate(2.6, -0.05, offset=(3.1, 8.4, 1.7),
-                                     aniso=(0.22, 1.5, 1.5)))
+                     patch_predicate(2.0, -0.05, offset=(3.1, 8.4, 1.7),
+                                     aniso=(0.30, 0.55, 0.55), octaves=2))
     uvtools.cube_project(obj, 0.6)
     M.shade_smooth(obj, SMOOTH)
     return obj
@@ -382,8 +384,8 @@ def build_stump(rng, mats):
 
     mat.assign_all(obj, mats["bark"])
     mat.assign_faces(obj, mats["wood"],
-                     patch_predicate(3.2, -0.02, offset=(1.4, 2.9, 6.2),
-                                     aniso=(1.6, 1.6, 0.22)))
+                     patch_predicate(2.4, -0.02, offset=(1.4, 2.9, 6.2),
+                                     aniso=(0.9, 0.9, 0.30), octaves=2))
     uvtools.cube_project(obj, 0.5)
     M.shade_smooth(obj, SMOOTH)
     return obj
@@ -434,25 +436,29 @@ def build_root_plate(rng, mats):
 
     parts = [disc]
 
-    # broken roots radiating out of the rim, still in the disc's own plane
+    # Broken roots radiating out of the rim, still in the disc's own plane.
+    # Disc-local +Y ends up pointing skyward once the pan is tipped, so the
+    # angles are biased to that half -- the rest of the root ball is in the
+    # hole it tore out of.
     roots = rng.sub("roots")
     for k in range(10):
-        a = roots.uniform(0.0, TAU)
+        a = roots.uniform(-0.22 * math.pi, 1.22 * math.pi)
         d = Vector((math.cos(a) * 1.16, math.sin(a) * 0.86, 0.0)).normalized()
         lat = Vector((-d.y, d.x, 0.0))
         p0 = Vector((math.cos(a) * radius * 1.16, math.sin(a) * radius * 0.86,
                      0.0)) * roots.uniform(0.74, 0.95)
         base = p0 + Vector((0.0, 0.0, roots.uniform(-0.06, 0.06)))
-        ln = roots.uniform(0.35, 1.15)
+        ln = roots.uniform(0.25, 1.35) ** 1.15
         n = 4
         pts, radii = [], []
+        curl = roots.uniform(-0.42, 0.42)
+        thick = roots.uniform(0.032, 0.085)
         for i in range(n):
             t = i / (n - 1.0)
-            p = (base + d * (ln * t)
-                 + lat * (roots.uniform(-0.28, 0.28) * t * t))
+            p = base + d * (ln * t) + lat * (curl * ln * t * t)
             p.z += roots.uniform(-0.10, 0.10) * t
             pts.append(tuple(p))
-            radii.append(roots.uniform(0.045, 0.075) * (1.0 - t) + 0.013 * t)
+            radii.append(thick * (1.0 - t) + 0.011 * t)
         r_obj = M.tube("dw_plate_root%d" % k, pts, radii, sides=5, caps=True)
         splinter_tube_end(r_obj, 5, n, roots.sub("r%d" % k), False, 0.07, 0.25)
         M.noise_displace(r_obj, 0.011, scale=4.5, offset=roots.offset3(7.0))
@@ -461,35 +467,37 @@ def build_root_plate(rng, mats):
     # roots bursting out of the *face* of the pan -- this is what stops the
     # silhouette reading as a spiky disc from the front
     face = rng.sub("face")
-    for k in range(4):
-        a = face.uniform(0.0, TAU)
-        rr = face.uniform(0.25, 0.85) * radius
+    for k in range(5):
+        a = face.uniform(-0.15 * math.pi, 1.15 * math.pi)
+        rr = face.uniform(0.20, 0.90) * radius
         side = 1.0 if face.chance(0.5) else -1.0
         base = Vector((math.cos(a) * rr * 1.16, math.sin(a) * rr * 0.86,
-                       side * half * 0.5))
-        d = Vector((math.cos(a) * 0.35, math.sin(a) * 0.35, side * 1.0))
+                       side * half * 0.45))
+        d = Vector((math.cos(a) * 0.55, math.sin(a) * 0.55, side * 1.0))
         d.normalize()
-        n = 3
-        ln = face.uniform(0.22, 0.48)
+        n = 4
+        ln = face.uniform(0.30, 0.75)
+        lat = Vector((-d.y, d.x, 0.0)).normalized()
         pts, radii = [], []
         for i in range(n):
             t = i / (n - 1.0)
-            p = base + d * (ln * t) + Vector((face.uniform(-0.06, 0.06) * t,
-                                              face.uniform(-0.06, 0.06) * t,
-                                              0.0))
+            p = base + d * (ln * t) + lat * (face.uniform(-0.3, 0.3) * ln * t * t)
             pts.append(tuple(p))
-            radii.append(0.048 * (1.0 - t) + 0.012 * t)
-        parts.append(M.tube("dw_plate_face%d" % k, pts, radii, sides=5,
-                            caps=True))
+            radii.append(face.uniform(0.030, 0.055) * (1.0 - t) + 0.011 * t)
+        f_obj = M.tube("dw_plate_face%d" % k, pts, radii, sides=5, caps=True)
+        splinter_tube_end(f_obj, 5, n, face.sub("f%d" % k), False, 0.06, 0.25)
+        parts.append(f_obj)
 
     plate = M.join(parts, "dw_plate_asm")
 
     # soil / stone clinging to the pan, before the plate is tipped upright
     mat.assign_all(plate, mats["soil"])
     mat.assign_faces(plate, mats["wood"],
-                     patch_predicate(3.4, 0.02, offset=(5.5, 1.2, 3.3)))
+                     patch_predicate(1.9, 0.02, offset=(5.5, 1.2, 3.3),
+                                     octaves=2))
     mat.assign_faces(plate, mats["stone"],
-                     patch_predicate(7.5, 0.30, offset=(0.7, 4.4, 9.1)))
+                     patch_predicate(4.2, 0.34, offset=(0.7, 4.4, 9.1),
+                                     octaves=2))
 
     # tip the pan onto its edge (a windthrow plate leans back over its hole)
     tip = (Matrix.Rotation(math.radians(9.0), 4, "Z")
@@ -516,8 +524,8 @@ def build_root_plate(rng, mats):
     M.noise_displace(stem, 0.012, scale=4.4, offset=trunk.offset3(2.0))
     mat.assign_all(stem, mats["bark"])
     mat.assign_faces(stem, mats["wood"],
-                     patch_predicate(2.8, 0.0, offset=(8.8, 0.4, 2.6),
-                                     aniso=(1.5, 0.25, 1.5)))
+                     patch_predicate(2.1, 0.0, offset=(8.8, 0.4, 2.6),
+                                     aniso=(0.6, 0.30, 0.6), octaves=2))
 
     obj = M.join([plate, stem], "deadwood_v2")
     M.merge_doubles(obj, 8e-4)

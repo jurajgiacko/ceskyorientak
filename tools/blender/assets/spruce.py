@@ -150,10 +150,10 @@ VARIANTS = [
         height=6.1,
         base_r=0.072, tip_r=0.006, lean=0.008,
         crown_lo=0.030, crown_hi=0.965,   # crown extent as a fraction of height
-        whorls=12, per_whorl=(5, 6),
-        reach=1.30, reach_pow=0.72, reach_var=0.13,
+        whorls=16, per_whorl=(5, 6),
+        reach=1.32, reach_pow=0.62, reach_var=0.13,
         rise=(0.26, 0.66), droop=(0.34, 0.06),
-        card_min=0.15, card_max=0.34,
+        card_min=0.21, card_max=0.55,
         density=1.20, drop=0.0,
         dead=0,
     ),
@@ -162,10 +162,10 @@ VARIANTS = [
         height=27.6,
         base_r=0.295, tip_r=0.011, lean=0.013,
         crown_lo=0.255, crown_hi=0.980,   # ~7 m of clean bare trunk
-        whorls=14, per_whorl=(5, 6),
-        reach=3.55, reach_pow=0.80, reach_var=0.15,
-        rise=(0.13, 0.62), droop=(0.60, 0.09),
-        card_min=0.30, card_max=0.86,
+        whorls=20, per_whorl=(5, 6),
+        reach=3.55, reach_pow=0.70, reach_var=0.15,
+        rise=(0.13, 0.62), droop=(0.62, 0.09),
+        card_min=0.44, card_max=1.45,
         density=1.0, drop=0.0,
         dead=0,
     ),
@@ -174,23 +174,23 @@ VARIANTS = [
         height=31.6,
         base_r=0.355, tip_r=0.013, lean=0.019,
         crown_lo=0.360, crown_hi=0.985,   # live crown starts ~11.4 m up
-        whorls=12, per_whorl=(4, 6),
-        reach=3.35, reach_pow=0.62, reach_var=0.34,   # irregular, ragged
-        rise=(0.10, 0.55), droop=(0.66, 0.10),
-        card_min=0.30, card_max=0.86,
-        density=0.80, drop=0.16,          # 16 % of card stations left empty
+        whorls=17, per_whorl=(4, 6),
+        reach=3.35, reach_pow=0.56, reach_var=0.34,   # irregular, ragged
+        rise=(0.10, 0.55), droop=(0.68, 0.10),
+        card_min=0.44, card_max=1.45,
+        density=0.82, drop=0.15,          # 15 % of card stations left empty
         dead=8,                           # bare dead stubs low on the trunk
     ),
 ]
 
 # geometry resolution per LOD level
 QUALITY = [
-    dict(trunk_sides=7, trunk_pts=12, branch_sides=3, branch_pts=5,
-         whorl_frac=1.00, per_station=3, station_a=2.0, station_b=1.15,
-         station_max=8, card_mul=1.0, apex_cards=7),
+    dict(trunk_sides=7, trunk_pts=12, branch_sides=3, branch_pts=4,
+         whorl_frac=1.00, per_station=3, station_a=2.0, station_b=1.25,
+         station_max=9, card_fill=2.45, card_mul=1.0, apex_cards=8),
     dict(trunk_sides=4, trunk_pts=6, branch_sides=3, branch_pts=4,
-         whorl_frac=0.58, per_station=2, station_a=1.0, station_b=0.55,
-         station_max=4, card_mul=2.05, apex_cards=3),
+         whorl_frac=0.50, per_station=2, station_a=1.2, station_b=0.70,
+         station_max=5, card_fill=2.55, card_mul=2.05, apex_cards=3),
 ]
 
 
@@ -326,32 +326,33 @@ def dress_branch(out, rng, f, length, spec, q, tag):
     """Scatter card stations along one branch."""
     n_st = int(clamp(round(q["station_a"] + q["station_b"] * length),
                      1, q["station_max"]))
-    span = 0.90
+    span = 0.92
     step = span / n_st
-    hc = clamp(1.55 * step * length * q["card_mul"],
+    hc = clamp(q["card_fill"] * step * length * q["card_mul"],
                spec["card_min"] * q["card_mul"], spec["card_max"] * q["card_mul"])
 
     per = q["per_station"]
     for i in range(n_st):
-        s = 0.10 + step * (i + rng.uniform(0.15, 0.85))
+        s = 0.08 + step * (i + rng.uniform(0.15, 0.85))
         if spec["drop"] > 0.0 and rng.chance(spec["drop"]):
             continue
         base = f(clamp(s, 0.0, 1.0))
         tan = branch_tangent(f, clamp(s, 0.02, 0.98))
-        scale = (1.0 - 0.30 * s) * rng.uniform(0.82, 1.18)
+        scale = (1.0 - 0.26 * s) * rng.uniform(0.82, 1.18)
         for k in range(per):
             # splay the shoot off the branch axis, then roll the quad about it
-            splay = (k - (per - 1) * 0.5) * (1.05 / max(1, per - 1)) \
-                + rng.uniform(-0.22, 0.22)
+            splay = (k - (per - 1) * 0.5) * (1.20 / max(1, per - 1)) \
+                + rng.uniform(-0.26, 0.26)
             d = Matrix.Rotation(splay, 4, "Z") @ tan
-            d = d + Vector((0.0, 0.0, rng.uniform(-0.42, 0.10)))
+            # shoots hang: this is what keeps the drooping habit in silhouette
+            d = d + Vector((0.0, 0.0, rng.uniform(-0.58, 0.06)))
             if d.length < 1e-6:
                 d = tan.copy()
             d.normalize()
             roll = (k / float(per)) * math.pi + rng.uniform(-0.35, 0.35)
-            off = Vector(rng.offset3(hc * 0.16))
+            off = Vector(rng.offset3(hc * 0.18))
             place_card(out, rng, "%s_c%d_%d" % (tag, i, k), base + off, d,
-                       hc * scale, hc * 0.88 * scale, roll)
+                       hc * scale, hc * 1.08 * scale, roll)
 
 
 def dress_apex(out, rng, pts, spec, q, top_z):

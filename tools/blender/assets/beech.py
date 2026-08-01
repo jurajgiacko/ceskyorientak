@@ -50,13 +50,27 @@ IMPOSTER_ATLAS = 1024        # 2x2 cells, one spare
 
 # LOD0 triangle budget is 11000 for the whole file; keep a margin so a tweak
 # to one variant cannot silently fail validate.mjs.
-BUDGET_LOD0 = (1400, 4300, 4400)
-BUDGET_LOD1 = (700, 1200, 1250)
+BUDGET_LOD0 = (1250, 4650, 4800)
+BUDGET_LOD1 = (620, 1200, 1250)
+
+# mat.BARK_BEECH straight out of the palette renders close to white under the
+# preview's three-point rig, which reads as birch.  Beech bark is a pale grey
+# with a faint warm-olive cast, so the palette value is darkened and pushed
+# very slightly green.
+BARK = tuple(c * s for c, s in zip(mat.BARK_BEECH, (0.80, 0.83, 0.74)))
 
 # How much of a leaf card's normal comes from "straight out of the crown".
 # 0 = fully random (flat, muddy shading), 1 = fully radial (crown disappears
 # at its own silhouette).
 NORMAL_BIAS = 0.5
+
+# How far the crown envelope reaches below its centre, as a multiple of the
+# upper vertical radius.  >1 turns the ellipsoid into a dome with a skirt.
+SKIRT = 1.60
+
+# Woody twigs stop this far into the crown; the foliage shell runs out to 1.0,
+# so branch ends always finish under leaves.
+TWIG_REACH = 0.88
 
 VARIANTS = [
     {   # young sapling: slender, still taller than wide, narrow crown
@@ -67,11 +81,11 @@ VARIANTS = [
         "lean": 0.045,
         "limbs": 3,
         "depth": 1,
-        "crown_c": (0.0, 0.0, 4.7),
-        "crown_r": (1.85, 1.65, 2.55),
-        "card": 0.46,
-        "card_lod1": 0.92,
-        "shell_frac": 0.34,
+        "crown_c": (0.0, 0.0, 4.9),
+        "crown_r": (1.80, 1.62, 2.30),
+        "card": 0.44,
+        "card_lod1": 0.90,
+        "shell_frac": 0.48,
     },
     {   # mature: clean bole then the classic wide dome
         "key": "v1",
@@ -81,11 +95,11 @@ VARIANTS = [
         "lean": 0.030,
         "limbs": 4,
         "depth": 2,
-        "crown_c": (0.0, 0.0, 19.0),
-        "crown_r": (12.0, 11.2, 11.1),
-        "card": 2.30,
-        "card_lod1": 4.5,
-        "shell_frac": 0.36,
+        "crown_c": (0.0, 0.0, 20.4),
+        "crown_r": (12.6, 11.7, 9.3),
+        "card": 2.35,
+        "card_lod1": 4.6,
+        "shell_frac": 0.50,
     },
     {   # old: massive bole, heavy low limbs, lopsided crown
         "key": "v2",
@@ -95,11 +109,11 @@ VARIANTS = [
         "lean": 0.055,
         "limbs": 5,
         "depth": 2,
-        "crown_c": (1.5, -0.9, 20.4),
-        "crown_r": (15.4, 13.6, 14.2),
-        "card": 2.70,
-        "card_lod1": 5.2,
-        "shell_frac": 0.40,
+        "crown_c": (1.6, -1.0, 22.6),
+        "crown_r": (16.2, 14.0, 10.7),
+        "card": 2.75,
+        "card_lod1": 5.4,
+        "shell_frac": 0.52,
     },
 ]
 
@@ -234,9 +248,39 @@ def envelope(cfg):
 
 
 def env_value(p, c, r):
-    """<1 inside the crown ellipsoid, 1 on its surface, >1 outside."""
+    """<1 inside the crown envelope, 1 on its surface, >1 outside.
+
+    The envelope is an ellipsoid on top and a longer taper underneath (an egg
+    standing on its narrow end, upside down).  That asymmetry is the beech
+    crown profile: a flattish dome above, a skirt of foliage sweeping down the
+    flanks, and enough horizontal room low down for the heavy old-tree limbs.
+    """
     d = Vector(p) - c
-    return math.sqrt((d.x / r.x) ** 2 + (d.y / r.y) ** 2 + (d.z / r.z) ** 2)
+    rz = r.z * (SKIRT if d.z < 0.0 else 1.0)
+    return math.sqrt((d.x / r.x) ** 2 + (d.y / r.y) ** 2 + (d.z / rz) ** 2)
+
+
+def clamp_to_crown(p, c, r, reach=TWIG_REACH):
+    """Pull a point back inside the crown, horizontally then vertically.
+
+    Clamping radially (towards the crown centre) is wrong here: the low limbs
+    of the old tree start well below the crown, and a radial clamp would haul
+    them upward into the dome.  Squeezing X/Y at the point's own height keeps
+    the limb where it grew and only stops it reaching out past the leaves.
+    """
+    d = Vector(p) - c
+    rz = r.z * (SKIRT if d.z < 0.0 else 1.0)
+    lim2 = reach * reach - (d.z / rz) ** 2
+    lim = math.sqrt(max(0.045, lim2))
+    h = math.sqrt((d.x / r.x) ** 2 + (d.y / r.y) ** 2)
+    if h > lim:
+        s = lim / h
+        d.x *= s
+        d.y *= s
+    top = r.z * reach
+    if d.z > top:
+        d.z = top
+    return c + d
 
 
 def perp_axis(d, roll):
@@ -306,6 +350,10 @@ def grow(tubes, tips, start, direction, length, radius, level, cfg, rng,
         d = (d + pull * step).normalized()
         d = (d + Vector(rng.offset3(GROWTH["wander"]))).normalized()
         p = p + d * (length * step)
+        # Keep every twig inside the foliage shell.  Bare white sticks poking
+        # out past the leaves read as broken branches at distance and were the
+        # ugliest thing about the first pass.
+        p = clamp_to_crown(p, c, r)
         pts.append(p.copy())
         # taper hard: a beech limb loses most of its girth over its own length
         radii.append(max(0.008, radius * (1.0 - 0.72 * t)))
@@ -330,11 +378,6 @@ def grow(tubes, tips, start, direction, length, radius, level, cfg, rng,
         cd = (Matrix.Rotation(ang, 4, axis) @ d).normalized()
         cd = (cd + Vector((0.0, 0.0, up))).normalized()
         clen = length * lf * rng.uniform(0.82, 1.18)
-        # keep the crown inside its envelope: shorten anything that would
-        # punch through the dome
-        ev = env_value(p + cd * clen, c, r)
-        if ev > 1.0:
-            clen *= max(0.28, 1.0 / (ev * 1.06))
         crad = radius * rng.uniform(0.52, 0.70)
         grow(tubes, tips, p, cd, clen, crad, level + 1, cfg,
              rng.sub("f%d_%d" % (level, k)), quality, name)
@@ -402,36 +445,35 @@ def foliage_specs(cfg, tips, rng, n_cards, card_w, quality):
                       rng_l.chance(0.5)))
 
     # -- clumps hanging off the terminal twigs -----------------------------
+    # Real beech foliage is lumpy, not an even fur: sprays bunch at the ends
+    # of the fine shoots and leave shadowed hollows between the bunches.
     trng = rng.sub("tips")
-    per = max(1, int(round(tip_n / float(len(tips)))))
-    spread = card_w * (1.35 if quality == 0 else 1.05)
+    per = max(1, int(math.ceil(tip_n / float(len(tips)))))
+    spread = card_w * (1.5 if quality == 0 else 1.15)
     for ti, (tp, td, _rad) in enumerate(tips):
         sub = trng.sub("t%d" % ti)
         for _ in range(per):
             if len(specs) >= tip_n:
                 break
             off = Vector(sub.unit3()) * (spread * (sub.uniform(0.0, 1.0) ** 0.55))
-            pos = tp + td * (card_w * sub.uniform(0.0, 0.9)) + off
-            # a clump may not float outside the dome
-            ev = env_value(pos, c, r)
-            if ev > 1.06:
-                pos = c + (pos - c) * (1.03 / ev)
+            pos = tp + td * (card_w * sub.uniform(-0.35, 0.55)) + off
             emit(pos, sub)
 
-    # -- shell fill: keeps the dome outline honest -------------------------
+    # -- shell fill: this is what actually makes the dome read -------------
     srng = rng.sub("shell")
+    lowest = cfg["clear"] * 0.92
     guard = 0
-    while len(specs) < n_cards and guard < max(64, n_cards * 60):
+    while len(specs) < n_cards and guard < max(128, n_cards * 40):
         guard += 1
         u = Vector(srng.unit3())
-        # squash the bottom of the sphere: a beech crown is domed, and the
-        # underside carries far fewer leaves than the top and flanks
-        if u.z < -0.30:
-            u.z = -0.30 + (u.z + 0.30) * 0.35
-            u.normalize()
-        rad = srng.uniform(0.74, 1.02)
-        pos = c + Vector((u.x * r.x, u.y * r.y, u.z * r.z)) * rad
-        if pos.z < cfg["clear"] * 0.55:
+        # bias towards the upper hemisphere: the top and flanks of a beech
+        # carry most of the leaf area, the underside comparatively little
+        u.z = u.z * 0.62 + 0.30
+        u.normalize()
+        rz = r.z * (SKIRT if u.z < 0.0 else 1.0)
+        rad = srng.uniform(0.72, 1.03)
+        pos = c + Vector((u.x * r.x, u.y * r.y, u.z * rz)) * rad
+        if pos.z < lowest:
             continue
         emit(pos, srng)
 
