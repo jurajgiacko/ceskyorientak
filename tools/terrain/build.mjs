@@ -838,16 +838,14 @@ async function applyZabaged(cls, grid, frame) {
       await writeFile(cachePath, JSON.stringify(fc));
     }
 
+    // Count cells this layer actually *changed*, not brush visits — a stroked
+    // line stamps the same cell many times and a visit counter reads ~10x high.
     let cells = 0;
     const visit = (k) => {
       const cur = cls[k];
       if (layer.apply === 'openOnly' && !OPEN_CLASSES.has(cur)) return;
-      if (layer.apply === 'promote') {
-        if (!PROMOTABLE.has(cur)) return;
-        cls[k] = layer.to;
-        cells++;
-        return;
-      }
+      if (layer.apply === 'promote' && !PROMOTABLE.has(cur)) return;
+      if (cur === layer.to) return;
       cls[k] = layer.to;
       cells++;
     };

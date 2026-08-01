@@ -1,7 +1,7 @@
 {
   "venue": "martinkov",
   "label": "Lachovice (permitted training terrain)",
-  "generatedAt": "2026-08-01T11:16:19.280Z",
+  "generatedAt": "2026-08-01T11:17:46.746Z",
   "source": {
     "elevation": "ČÚZK DMR 5G + DMP 1G via ArcGIS ImageServer exportImage",
     "imagery": "ČÚZK Ortofoto ČR (WMS)",
@@ -58,13 +58,13 @@
       "layer": 139,
       "name": "permanent grassland",
       "features": 27,
-      "cells": 120229
+      "cells": 37516
     },
     {
       "layer": 138,
       "name": "arable land",
       "features": 9,
-      "cells": 40351
+      "cells": 5302
     },
     {
       "layer": 129,
@@ -82,7 +82,7 @@
       "layer": 93,
       "name": "watercourse",
       "features": 32,
-      "cells": 211343
+      "cells": 36921
     },
     {
       "layer": 131,
@@ -94,37 +94,37 @@
       "layer": 16,
       "name": "forest ride / firebreak",
       "features": 39,
-      "cells": 493775
+      "cells": 57332
     },
     {
       "layer": 82,
       "name": "footpath",
       "features": 16,
-      "cells": 49911
+      "cells": 14030
     },
     {
       "layer": 150,
       "name": "marked hiking route",
       "features": 15,
-      "cells": 100204
+      "cells": 18854
     },
     {
       "layer": 83,
       "name": "track / unpaved road",
       "features": 131,
-      "cells": 431999
+      "cells": 69020
     },
     {
       "layer": 79,
       "name": "road, motorway",
       "features": 6,
-      "cells": 272316
+      "cells": 31006
     },
     {
       "layer": 84,
       "name": "street",
       "features": 145,
-      "cells": 1174187
+      "cells": 84007
     },
     {
       "layer": 132,
@@ -136,7 +136,7 @@
       "layer": 99,
       "name": "building",
       "features": 446,
-      "cells": 81854
+      "cells": 81824
     }
   ],
   "files": [
