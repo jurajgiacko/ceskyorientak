@@ -2278,7 +2278,7 @@
       "h": 1024,
       "supercompression": 2,
       "webpBytes": 404040,
-      "ktx2Bytes": 579095,
+      "ktx2Bytes": 579138,
       "psnr": null,
       "maxErr": null
     },
@@ -2292,7 +2292,7 @@
       "h": 512,
       "supercompression": 2,
       "webpBytes": 140350,
-      "ktx2Bytes": 167181,
+      "ktx2Bytes": 167177,
       "psnr": null,
       "maxErr": null
     },
@@ -2689,6 +2689,5 @@
       "maxErr": null
     }
   ],
-  "generatedAt": "2026-08-01T12:04:23.366Z",
-  "scanned": true
+  "generatedAt": "2026-08-01T12:27:54.421Z"
 }

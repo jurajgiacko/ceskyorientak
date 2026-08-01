@@ -1,0 +1,18 @@
+{
+  "updatedAt": "2026-08-01T12:22:06.032Z",
+  "note": "Headless, vsync disabled, Apple M3 via ANGLE Metal. sample() reports the last 240 frames, so run-to-run spread is wide (desktop 1.4-1.9 ms observed). These are the slowest of five runs so the 10% regression gate is not flaky.",
+  "scenes": {
+    "forest.desktop": {
+      "medianMs": 1.9,
+      "p95Ms": 21.8,
+      "fps": 526.3,
+      "frames": 510
+    },
+    "forest.mobile": {
+      "medianMs": 6.1,
+      "p95Ms": 16.8,
+      "fps": 163.9,
+      "frames": 799
+    }
+  }
+}

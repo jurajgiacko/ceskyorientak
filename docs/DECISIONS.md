@@ -433,3 +433,45 @@ is wildly asymmetric — 5973 elements in the sprint AOI against 133 in the fore
 So ZABAGED is primary for the forest and OSM for the sprint. Convenient, because
 merging our own or ZABAGED data into an OSM feature type would trigger ODbL
 share-alike; keeping them separate by venue avoids the question entirely.
+
+---
+
+## D-017 — S-JTSK grid north is not true north, and it matters
+
+**Finding.** At this site, S-JTSK (EPSG:5514, Krovák) grid north is rotated
+**7.95°** from true north. ČÚZK's ImageServer only emits axis-aligned rasters in
+the requested `imageSR`, so every raster arrives rotated against the world frame
+`src/core/geo.ts` defines.
+
+**Why it had to be fixed rather than tolerated.** Over our 1.2 km half-extent
+that rotation displaces a corner by **166 m**. The 3D world and the 2D map would
+have been consistently wrong about where everything is, relative to a compass
+bearing — and the symptom would have been "the map feels slightly off", which is
+close to undiagnosable in a game whose entire subject is navigation.
+
+**How.** The world→5514 transform is fitted from three small `exportImage`
+probes — using ČÚZK's own reprojection, never a client-side Krovák
+implementation (D-016.3) — and the rasters are resampled into the world frame.
+DMR and DMP share identical blending weights so the canopy height model stays an
+exact per-cell difference rather than a difference of two independently
+resampled surfaces. Verified by registering the output hillshade against the
+orthophoto pixel-for-pixel.
+
+---
+
+## D-018 — Pick the venue origin from the data, not the map
+
+**Correction.** `LACHOVICE_AOI.origin` was originally (14.2536, 48.6229). That
+point sits on a **street in Loučovice**, in the Vltava valley — not in the
+training terrain at all. The 3D scene had been quietly compensating by hunting
+for its own spawn point.
+
+**Fix.** The new origin (14.25564, 48.62695) was chosen by scoring every
+400 m-radius window of the *built runnability raster* for forest classes against
+roads and out-of-bounds, and taking the best. It scores **98.7% forest, 0% road
+or out-of-bounds**, against roughly half that for the original point.
+
+**The general lesson**, which is why this is written down: the first origin was
+picked by reading a place name off a map. Once the terrain pipeline exists, the
+pipeline's own output is a better source of truth about the terrain than any
+map is — and it is cheap to ask it.

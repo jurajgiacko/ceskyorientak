@@ -161,7 +161,11 @@ export class SkyRig {
     this.group.add(this.sky);
 
     // --- lights -----------------------------------------------------------
-    const shadowMapSize = opts.tier === 'high' ? 4096 : opts.tier === 'medium' ? 2048 : 1024;
+    // 2048 over a ±80 m frustum is 7.8 cm per texel, which is finer than the
+    // shadow of a 30 cm trunk needs. 4096 doubled the shadow-pass fill cost for
+    // detail the fog eats: contrast is gone by 100 m, so a bigger frustum has
+    // nothing to resolve.
+    const shadowMapSize = opts.tier === 'high' ? 2048 : opts.tier === 'medium' ? 1536 : 1024;
     this.texelSnap = (2 * this.shadowRadius) / shadowMapSize;
 
     // Sunny key. Measured against the ground rather than guessed: at exposure

@@ -144,14 +144,14 @@ export class ForestScene {
       latDeg: venue.origin.lat,
       lonDeg: venue.origin.lon,
       date: RACE_MORNING,
-      shadowRadius: this.tier === 'low' ? 70 : 110,
+      shadowRadius: this.tier === 'low' ? 60 : 80,
     });
     this.scene.add(this.sky.group);
 
     // --- terrain ---
     const material = createTerrainMaterial(this.ground, this.tier);
     this.terrain = new TerrainMesh(this.field, material, {
-      viewRadius: this.tier === 'low' ? 260 : 420,
+      viewRadius: this.tier === 'low' ? 240 : 340,
     });
     this.scene.add(this.terrain.group);
 

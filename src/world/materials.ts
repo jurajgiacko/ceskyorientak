@@ -496,6 +496,11 @@ export function conditionAssetMaterial(
   switch (kind) {
     case 'bark':
       m.roughness = Math.max(m.roughness, 0.92);
+      // Beech bark is genuinely pale, but the asset's is pale *and* flat, and a
+      // 90-triangle LOD1 trunk in that value reads as a white slab at 60 m.
+      // Pulling it down keeps it recognisably beech without punching holes in
+      // the mid-ground.
+      if (/beech/i.test(m.name)) m.color.multiplyScalar(0.55);
       break;
     case 'foliage':
       // Spruce needles read as a solid dark mass in the reference; a little
@@ -524,14 +529,26 @@ export function conditionAssetMaterial(
  */
 export function makeImposterMaterial(source: THREE.Material): THREE.Material {
   const src = source as THREE.MeshStandardMaterial;
-  const m = new THREE.MeshStandardMaterial({
+
+  // Unlit, on purpose. The imposter atlas is a *render* of the tree, so its
+  // shading is already baked in; running it through the lighting model again
+  // lights it twice, and because a crossed quad's normals point outward it
+  // catches the sky hard and comes out as a pale cutout — which is exactly what
+  // the first build did, with a row of white slabs behind the LOD1 trees.
+  //
+  // Basic still respects fog, which is what actually matters at 120 m+, and it
+  // is the cheapest material in the engine for the most numerous object in the
+  // scene.
+  const m = new THREE.MeshBasicMaterial({
     map: src.map,
     alphaTest: 0.42,
     transparent: false,
     side: THREE.DoubleSide,
-    roughness: 0.85,
-    metalness: 0,
+    fog: true,
   });
+  // Matched by eye against the LOD1 trees at the swap distance. The atlas was
+  // baked under Blender's view transform, which is brighter than ours.
+  m.color.setScalar(0.42);
   m.name = `${src.name}_imposter`;
   return m;
 }

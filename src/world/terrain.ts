@@ -348,7 +348,11 @@ export class TerrainMesh {
     this.field = field;
     this.material = material;
     this.viewRadius = opts.viewRadius ?? 420;
-    this.buildBudget = opts.buildBudget ?? 3;
+    // One chunk per frame. An LOD0 chunk is 6 724 vertices, each needing five
+    // bilinear heightfield samples for position and normal, so three per frame
+    // is a 15 ms spike every time the player crosses a chunk boundary — which
+    // is exactly the p95 the perf gate measures.
+    this.buildBudget = opts.buildBudget ?? 1;
     this.group.name = 'terrain';
     this.group.matrixAutoUpdate = false;
   }

@@ -241,16 +241,26 @@ export interface SpeciesMix {
  * an order of magnitude denser in stems and where the young-variant spruce and
  * the heavy undergrowth go.
  */
+/**
+ * Beech share is deliberately low.
+ *
+ * D-007 is explicit that Vyšší Brod is Šumava **granite and spruce** — the
+ * beech-and-sandstone look belongs to the Liberec footage and putting it here
+ * would place the forest in the wrong part of the country to anyone who knows
+ * it. There is a rendering reason too: beech bark is pale grey and the LOD1
+ * beech is a 90-triangle trunk with a thin crown, so at 60 m a stand of them
+ * reads as a row of white slabs. A few for variety along edges, no more.
+ */
 export const MIX: Readonly<Record<Runnability, SpeciesMix>> = {
   [Runnability.Road]: { density: 0, beechShare: 0, boulders: 0, deadwood: 0, undergrowth: 0, scale: 1 },
   [Runnability.Path]: { density: 0, beechShare: 0, boulders: 0, deadwood: 0, undergrowth: 0.05, scale: 1 },
-  [Runnability.OpenFast]: { density: 0.0015, beechShare: 0.5, boulders: 0.0006, deadwood: 0, undergrowth: 0.55, scale: 1 },
-  [Runnability.OpenRough]: { density: 0.004, beechShare: 0.4, boulders: 0.004, deadwood: 0.001, undergrowth: 1.5, scale: 0.85 },
-  [Runnability.ForestOpen]: { density: 0.042, beechShare: 0.1, boulders: 0.004, deadwood: 0.004, undergrowth: 0.55, scale: 1 },
-  [Runnability.Green1]: { density: 0.075, beechShare: 0.18, boulders: 0.004, deadwood: 0.008, undergrowth: 2.0, scale: 0.85 },
-  [Runnability.Green2]: { density: 0.13, beechShare: 0.22, boulders: 0.003, deadwood: 0.012, undergrowth: 3.4, scale: 0.7 },
-  [Runnability.Green3]: { density: 0.24, beechShare: 0.25, boulders: 0.002, deadwood: 0.016, undergrowth: 5.2, scale: 0.5 },
-  [Runnability.Marsh]: { density: 0.006, beechShare: 0.3, boulders: 0, deadwood: 0.004, undergrowth: 3.0, scale: 0.6 },
+  [Runnability.OpenFast]: { density: 0.0015, beechShare: 0.28, boulders: 0.0006, deadwood: 0, undergrowth: 0.55, scale: 1 },
+  [Runnability.OpenRough]: { density: 0.004, beechShare: 0.2, boulders: 0.004, deadwood: 0.001, undergrowth: 1.5, scale: 0.85 },
+  [Runnability.ForestOpen]: { density: 0.042, beechShare: 0.03, boulders: 0.004, deadwood: 0.004, undergrowth: 0.75, scale: 1 },
+  [Runnability.Green1]: { density: 0.075, beechShare: 0.07, boulders: 0.004, deadwood: 0.008, undergrowth: 2.0, scale: 0.85 },
+  [Runnability.Green2]: { density: 0.13, beechShare: 0.1, boulders: 0.003, deadwood: 0.012, undergrowth: 3.4, scale: 0.7 },
+  [Runnability.Green3]: { density: 0.24, beechShare: 0.12, boulders: 0.002, deadwood: 0.016, undergrowth: 5.2, scale: 0.5 },
+  [Runnability.Marsh]: { density: 0.006, beechShare: 0.18, boulders: 0, deadwood: 0.004, undergrowth: 3.0, scale: 0.6 },
   [Runnability.Rock]: { density: 0.008, beechShare: 0.05, boulders: 0.05, deadwood: 0.002, undergrowth: 0.3, scale: 0.6 },
   [Runnability.Impassable]: { density: 0, beechShare: 0, boulders: 0, deadwood: 0, undergrowth: 0, scale: 1 },
 };
@@ -458,15 +468,22 @@ export class Vegetation {
     const tier = opts.tier;
     this.nearRadius = opts.nearRadius ?? (tier === 'low' ? 70 : 120);
     this.farRadius = opts.farRadius ?? (tier === 'low' ? 150 : 230);
-    this.groundRadius = opts.groundRadius ?? (tier === 'low' ? 24 : 48);
+    this.groundRadius = opts.groundRadius ?? (tier === 'low' ? 18 : 27);
     this.densityScale = tier === 'low' ? 0.45 : tier === 'medium' ? 0.75 : 1;
 
     const capacity = tier === 'low' ? 2000 : 6000;
 
     for (const asset of [this.spruce, this.beech]) {
       const buckets = asset.variants.map((v) =>
-        v.lods.map((lod, li) =>
-          new Bucket(this.group, lod, capacity, li === 0 && tier !== 'low'),
+        v.lods.map(
+          (lod, li) =>
+            // LOD0 *and* LOD1 cast. The shadow pass is a second full draw of
+            // every caster, so restricting it to LOD0 would have meant either
+            // no shadows past the near ring — a very visible bright floor
+            // beyond ~25 m — or paying LOD0 geometry across the whole shadow
+            // frustum. LOD1 is a rebuilt silhouette, not a decimation, so it
+            // casts a shadow that is indistinguishable at these distances.
+            new Bucket(this.group, lod, capacity, li < v.lods.length - 1 && tier !== 'low'),
         ),
       );
       this.treeBuckets.push({ asset, buckets });
@@ -538,12 +555,15 @@ export class Vegetation {
       // Tuned darker on the first pass and the clumps read as black holes
       // punched in the carpet — the mat has to sit *within* the ground's value
       // range or it stops being ground cover and starts being litter.
-      const tint = 0.72 + rnd() * 0.48;
-      col.push(0.095 * tint, 0.115 * tint, 0.05 * tint);
-      col.push(0.095 * tint, 0.115 * tint, 0.05 * tint);
+      // Values measured against the rendered moss, not picked in isolation: the
+      // tufts have to sit slightly *under* the floor's value or every one of
+      // them reads as a pale speck and the mid-ground turns to confetti.
+      const tint = 0.7 + rnd() * 0.45;
+      col.push(0.075 * tint, 0.09 * tint, 0.04 * tint);
+      col.push(0.075 * tint, 0.09 * tint, 0.04 * tint);
+      col.push(0.135 * tint, 0.16 * tint, 0.07 * tint);
+      col.push(0.135 * tint, 0.16 * tint, 0.07 * tint);
       col.push(0.17 * tint, 0.2 * tint, 0.088 * tint);
-      col.push(0.17 * tint, 0.2 * tint, 0.088 * tint);
-      col.push(0.21 * tint, 0.245 * tint, 0.11 * tint);
 
       idx.push(base, base + 1, base + 2, base + 1, base + 3, base + 2);
       idx.push(base + 2, base + 3, base + 4);
@@ -816,8 +836,13 @@ export class Vegetation {
     const cam = camera.position;
     const near2 = this.nearRadius * this.nearRadius;
     const far2 = this.farRadius * this.farRadius;
-    // Mid ring uses LOD1 where the asset has one.
-    const mid2 = ((this.nearRadius * 0.45) ** 2) | 0;
+    // LOD0 is reserved for the trees you can actually see bark on. At 0.45 of
+    // the near radius it covered ~54 m, which is 380 mature spruce at 7 k
+    // triangles each — half the frame budget spent on geometry that LOD1 draws
+    // identically at this distance. 0.30 (~36 m) is the compromise: close
+    // enough to stay cheap, far enough that the LOD0→LOD1 swap is not
+    // happening in the player's near field where a pop is unmissable.
+    const mid2 = (this.nearRadius * 0.3) ** 2;
 
     let trees = 0;
     let imposters = 0;
@@ -901,7 +926,7 @@ export class Vegetation {
           // Shrink out over the last quarter of the ring instead of popping.
           // The fog is far too thin at 40 m to hide a hard edge, and a circle
           // of grass ending around the player is the most obvious tell there is.
-          const fade = 1 - THREE.MathUtils.smoothstep(Math.sqrt(d2) / this.groundRadius, 0.72, 1);
+          const fade = 1 - THREE.MathUtils.smoothstep(Math.sqrt(d2) / this.groundRadius, 0.5, 1);
           if (fade <= 0.02) continue;
           this.tmpPos.set(p.x, p.y, p.z);
           this.tmpQuat.setFromEuler(this.tmpEuler.set(p.tiltX, p.rotY, p.tiltZ));

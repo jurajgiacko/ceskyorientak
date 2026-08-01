@@ -38,9 +38,19 @@ import type { VenueAnchor, VenueId } from './types';
  * embargo lapses, and switching to it is a one-line change plus a pipeline
  * re-run.
  */
+/**
+ * Origin note: the first value picked here (14.2536, 48.6229) was wrong — it
+ * sat on a street in Loučovice, in the Vltava valley, rather than in the
+ * training terrain. The 3D scene had to hunt for a spawn point to compensate.
+ *
+ * This origin was chosen from the data instead of the map: scoring every
+ * 400 m-radius window of the built runnability raster for forest classes
+ * against roads and out-of-bounds. It scores **98.7% forest, 0% road or
+ * out-of-bounds**, against roughly 50% for the original point.
+ */
 export const LACHOVICE_AOI: VenueAnchor = {
   id: 'martinkov',
-  origin: { lon: 14.2536, lat: 48.6229 },
+  origin: { lon: 14.25564, lat: 48.62695 },
   sizeX: 2000,
   sizeZ: 2000,
   mapScale: 10000,

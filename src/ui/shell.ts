@@ -38,6 +38,15 @@ export async function mountShell(root: HTMLElement, capabilities: Capabilities):
   const params = new URLSearchParams(location.search);
   const scene = params.get('scene');
   if (scene === 'forest') {
+    // D-004 keeps the tier out of the player's hands, but QA and the perf gate
+    // need to exercise the other two code paths on demand — the low tier takes
+    // a different branch through the terrain shader, and an untested branch is
+    // a broken branch.
+    const tierOverride = params.get('tier');
+    if (tierOverride === 'low' || tierOverride === 'medium' || tierOverride === 'high') {
+      caps = { ...caps, tier: tierOverride };
+    }
+
     const { makeForestScreen } = await import('@/ui/forestScreen');
     await transitionTo(
       makeForestScreen({
