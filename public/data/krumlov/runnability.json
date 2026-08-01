@@ -1,0 +1,34 @@
+{
+  "format": "uint8",
+  "width": 1601,
+  "height": 1601,
+  "resM": 1,
+  "originX": -800,
+  "originZ": -800,
+  "classes": {
+    "0": "Road",
+    "1": "Path",
+    "2": "OpenFast",
+    "3": "OpenRough",
+    "4": "ForestOpen",
+    "5": "Green1",
+    "6": "Green2",
+    "7": "Green3",
+    "8": "Marsh",
+    "9": "Rock",
+    "10": "Impassable"
+  },
+  "histogram": {
+    "Road": 267463,
+    "Path": 45825,
+    "OpenFast": 737676,
+    "OpenRough": 138430,
+    "ForestOpen": 108185,
+    "Green1": 116943,
+    "Green2": 481129,
+    "Green3": 205444,
+    "Marsh": 2821,
+    "Rock": 14558,
+    "Impassable": 444727
+  }
+}

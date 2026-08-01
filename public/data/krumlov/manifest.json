@@ -1,0 +1,206 @@
+{
+  "venue": "krumlov",
+  "label": "Český Krumlov old town",
+  "generatedAt": "2026-08-01T11:19:46.030Z",
+  "source": {
+    "elevation": "ČÚZK DMR 5G + DMP 1G via ArcGIS ImageServer exportImage",
+    "imagery": "ČÚZK Ortofoto ČR (WMS)",
+    "vectors": "ČÚZK ZABAGED",
+    "licence": "CC BY 4.0 — © ČÚZK. See docs/DATA_LICENCES.md"
+  },
+  "origin": {
+    "lon": 14.315,
+    "lat": 48.8109
+  },
+  "playable": {
+    "sizeX": 1200,
+    "sizeZ": 1200
+  },
+  "skirtM": 200,
+  "sjtsk": {
+    "epsg": 5514,
+    "originX": -769892.2158631093,
+    "originY": -1182588.6968850736,
+    "gridConvergenceDeg": -7.907236957697941,
+    "scale": 1.000055976304194
+  },
+  "tiers": {
+    "high": {
+      "height": "height.bin",
+      "runnability": "runnability.bin",
+      "canopy": "canopy.bin"
+    },
+    "medium": {
+      "height": "height.bin",
+      "runnability": "runnability.bin",
+      "canopy": "canopy.bin"
+    },
+    "low": {
+      "height": "height-low.bin",
+      "runnability": "runnability-low.bin",
+      "canopy": "canopy.bin"
+    }
+  },
+  "zabaged": [
+    {
+      "layer": 140,
+      "name": "forest with shrub layer",
+      "features": 9,
+      "cells": 12285
+    },
+    {
+      "layer": 141,
+      "name": "dwarf pine",
+      "features": 0,
+      "cells": 0
+    },
+    {
+      "layer": 139,
+      "name": "permanent grassland",
+      "features": 22,
+      "cells": 47059
+    },
+    {
+      "layer": 138,
+      "name": "arable land",
+      "features": 4,
+      "cells": 4515
+    },
+    {
+      "layer": 129,
+      "name": "landslide, scree",
+      "features": 0,
+      "cells": 0
+    },
+    {
+      "layer": 130,
+      "name": "rock formations",
+      "features": 7,
+      "cells": 14577
+    },
+    {
+      "layer": 93,
+      "name": "watercourse",
+      "features": 36,
+      "cells": 35499
+    },
+    {
+      "layer": 131,
+      "name": "marsh, swamp",
+      "features": 0,
+      "cells": 0
+    },
+    {
+      "layer": 16,
+      "name": "forest ride / firebreak",
+      "features": 0,
+      "cells": 0
+    },
+    {
+      "layer": 82,
+      "name": "footpath",
+      "features": 25,
+      "cells": 6037
+    },
+    {
+      "layer": 150,
+      "name": "marked hiking route",
+      "features": 21,
+      "cells": 21040
+    },
+    {
+      "layer": 83,
+      "name": "track / unpaved road",
+      "features": 144,
+      "cells": 38188
+    },
+    {
+      "layer": 79,
+      "name": "road, motorway",
+      "features": 13,
+      "cells": 31984
+    },
+    {
+      "layer": 84,
+      "name": "street",
+      "features": 643,
+      "cells": 253698
+    },
+    {
+      "layer": 132,
+      "name": "water body",
+      "features": 5,
+      "cells": 156444
+    },
+    {
+      "layer": 99,
+      "name": "building",
+      "features": 1549,
+      "cells": 288283
+    }
+  ],
+  "files": [
+    {
+      "file": "height.bin",
+      "bytes": 5126402,
+      "gzipBytes": 4727434,
+      "sha256": "b1c55353053c4fd1d9a17f02ed91a4ac71781f3e6d628ea06d7908c520e00cfb"
+    },
+    {
+      "file": "height.json",
+      "bytes": 201,
+      "gzipBytes": 159,
+      "sha256": "2d3c4e30e0b72f27a1d02768324c28cb4541a3c59b4e9e53cfd3442f58f22ecf"
+    },
+    {
+      "file": "runnability.bin",
+      "bytes": 2563201,
+      "gzipBytes": 180096,
+      "sha256": "c4b470ecea78e6ee77a170aebb34ae7b6eaa573b0afe2f6d66e86fc480a3f4c5"
+    },
+    {
+      "file": "runnability.json",
+      "bytes": 609,
+      "gzipBytes": 304,
+      "sha256": "91878d25d7c166fffe9827fe47b664a5939d605922f4b2626b531d8dd09232fa"
+    },
+    {
+      "file": "canopy.bin",
+      "bytes": 641601,
+      "gzipBytes": 338414,
+      "sha256": "cc6e5272cee4d8c803b125d5d3af8fc01c26c440a53984b8b14cdf49250a0ad0"
+    },
+    {
+      "file": "canopy.json",
+      "bytes": 127,
+      "gzipBytes": 108,
+      "sha256": "4a30c7862b70f3a5ddaaef77333790ac3ce91b761d798c35b22a8ced7f055933"
+    },
+    {
+      "file": "height-low.bin",
+      "bytes": 321602,
+      "gzipBytes": 308716,
+      "sha256": "ac6b7b6182ad21603156954aeb8737b9a86aa174850c24eb202a854d2ea4dcd3"
+    },
+    {
+      "file": "height-low.json",
+      "bytes": 199,
+      "gzipBytes": 156,
+      "sha256": "091dad0ae3f1f193fe5bdd3155b3b80bc8766740d1dac64d8757887b1aa8fcd8"
+    },
+    {
+      "file": "runnability-low.bin",
+      "bytes": 160801,
+      "gzipBytes": 30876,
+      "sha256": "40c784a4f7659e00041b92132c1af98f21a09f25ba01ebc4b4c9e1f619c14657"
+    },
+    {
+      "file": "runnability-low.json",
+      "bytes": 342,
+      "gzipBytes": 200,
+      "sha256": "4aceff49a6305652e8d274b6485acfe82f9d5a58071366e17e30b0aeb37d3b38"
+    }
+  ],
+  "totalBytes": 8815085,
+  "totalGzipBytes": 5586463
+}
