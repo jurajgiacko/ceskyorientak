@@ -100,3 +100,70 @@ up front means the confirmed WCUP26 / Enervit values land as a single-file edit
 rather than a hunt through components. The IOF overprint purple and control-flag
 orange are already correct in character — they are the colours of the sport
 itself, not of any sponsor.
+
+---
+
+## D-007 — The reference video is brand reference, not terrain reference
+
+**Decision.** `2026-07-30 EN Video Svetovy Pohar` drives our **grade, identity and
+motion language**. It does **not** drive our terrain look.
+
+**Why.** Frame analysis (see `docs/RESEARCH-VIDEO.md`) established that the
+footage is from **OWC 2023, Česká Lípa** — on-screen banners read `OWC 2023 ·
+Česká Lípa` and `Liberecký kraj / Round 2`. That is Liberec-region sandstone
+and beech: brown leaf litter, smooth grey-green trunks, mossy sandstone blocks.
+Vyšší Brod is Šumava **granite and spruce** — needle floor, boulder fields,
+darker canopy. Copying the video's biome would produce a forest an orienteer
+would immediately place in the wrong part of the country.
+
+The video's headline nonetheless reads `PRO ŠUMAVSKÉ KOPCE` over that footage.
+That inconsistency is the client's, and is flagged for them rather than
+resolved by us — see `ASSETS_NEEDED.md`.
+
+**What we do take from it:** the grade (AgX tone mapping, exposure ~0.85,
+grey-olive `FogExp2` rather than white, AO carrying the contrast), the identity
+(the 10°-oblique red slab transition matching the wordmark's italic, two-weight
+condensed caps for lower thirds), and the thin white route-line motif — the
+client's visual language already contains an orienteering device we can reuse.
+
+---
+
+## D-008 — Sunny hero light, overcast as a weather state
+
+**Decision.** The default and marketing-facing look is the brief's
+specification: 10:00 sun angles, hard shadows, volumetric god rays through
+spruce canopy. The video's flat overcast look ships as one of the weather
+states.
+
+**Why.** These initially read as contradictory: the brief asks for god rays,
+the client's own film is completely diffuse with no hard shadow anywhere. They
+reconcile cleanly because the brief already requires weather (dry / light rain /
+mist in the valley). Overcast is not a compromise between them — it is a
+distinct, authentic condition that Czech August genuinely delivers, and it is
+the condition the client filmed in.
+
+Building both also earns its keep in gameplay: flat light removes shadow as a
+navigation cue, which is a real and legible difficulty modifier.
+
+---
+
+## D-009 — The supplied Enervit SVG cannot be recoloured
+
+**Decision.** Use the PNG for web and the PDF for vector. Treat
+`logo-enervit-senza-payoff.svg` as the K100 black version for light
+backgrounds only, and never restyle it.
+
+**Why.** The supplied SVG is a bitmap autotrace, not the official vector: five
+paths under a single `fill="#000000"`, whose first path is the full outer
+rectangle. The letterforms are **knockouts**, not glyphs. Setting the fill to
+Enervit red would therefore not produce a red logo — it would produce a red
+rectangle whose letters show whatever sits behind them, which the brand
+guidelines explicitly forbid. This is the kind of change that looks correct in
+a diff and is wrong on screen, so it is recorded here rather than left to be
+rediscovered.
+
+Official red is **`#E40521`** (C0 M100 Y90 K0). Note the video's red is
+`#FF0000` — gamut-clipped and broadcast-illegal; we build to the spec value.
+
+A white/mono version for dark UI does not exist in the supplied set and has
+**not** been invented. It is listed in `ASSETS_NEEDED.md`.

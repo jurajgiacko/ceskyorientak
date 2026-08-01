@@ -26,8 +26,15 @@
   /* Control flag orange/white. Secondary accent, used for calls to action. */
   --c-flag: #f25c19;
 
-  /* Enervit red — placeholder until BRAND-ENERVIT.md confirms the exact value. */
-  --c-brand: #e2001a;
+  /* Enervit red. Confirmed from the 2022 logo guidelines: C0 M100 Y90 K0.
+     The reference video's red is #FF0000 — gamut-clipped and broadcast-illegal;
+     we build to the spec value. See docs/BRAND-ENERVIT.md. */
+  --c-brand: #e40521;
+
+  /* Acid yellow — undocumented in the guidelines but used consistently on
+     product cards throughout the client's own film. Secondary accent only,
+     pending client confirmation (see ASSETS_NEEDED.md). */
+  --c-brand-accent: #e2ec00;
 
   /* State */
   --c-good: #4caf72;

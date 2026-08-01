@@ -8,14 +8,15 @@
     "verified=true means the number was read off a primary source: an Enervit packaging artwork / ingredient panel in the local brand-asset library, or an enervit.com product page. verified=false means the number is derived, rounded, from a secondary source, or internally inconsistent — DO NOT put a verified=false number in player-facing copy without client sign-off.",
     "packshotPath is absolute. `traspa` = transparent background, preferred for UI compositing.",
     "phase follows Enervit's own NUTRITION SYSTEM® placement. Products usable in more than one phase carry `alsoPhase`.",
-    "See NUTRITION_PROTOCOL.md for the phase timings and CLAIMS_TO_REVIEW.md before writing any player-facing copy about these products."
+    "See NUTRITION_PROTOCOL.md for the phase timings and CLAIMS_TO_REVIEW.md before writing any player-facing copy about these products.",
+    "nameCz values were read from eshop.enervit.cz and enervitshop.cz, the official Enervit CZ/SK shops operated by the distributor VITAR Sport s.r.o. IMPORTANT: the Czech market does NOT translate SKU names — products are sold under the English brand name with an 'ENERVIT' prefix, and only flavours and pack descriptors are Czech. nameCz is therefore a prefix+suffix transformation, not a translation. Flavour spellings and pack sizes carry transcription risk and should be spot-checked against the live shop before shipping. A null nameCz means the name could NOT be found and must not be guessed."
   ],
   "assetRoot": "/Users/jurajgiacko/Projects/JG 2026/VitarSport2026/Context/brand-assets/enervit-brand",
   "skus": [
     {
       "id": "pre-sport-jelly-orange",
       "nameEn": "Pre Sport Jelly Orange",
-      "nameCz": null,
+      "nameCz": "ENERVIT PRE Sport – pomeranč",
       "range": "SPORT",
       "phase": "before",
       "packshotPath": "/Users/jurajgiacko/Projects/JG 2026/VitarSport2026/Context/brand-assets/enervit-brand/SPORT/PRESPORT/Enervit Presport foil Jelly orange.png",
@@ -27,13 +28,18 @@
       "volumeMl": null,
       "verified": false,
       "sourceNote": "enervit.com/en/products/pre-sport-orange.html gives per-100 g (57 g carb, 0.60 g salt) and per-2-pouch/90 g (51 g carb, 0.55 g salt) columns. Both verified. The per-SINGLE-pouch values here are computed as half the 90 g column, so they are derived, not printed. Contains isomaltulose 16.2 g/100 g — the slow-release carbohydrate that is the product's whole rationale. No traspa packshot exists for Pre Sport.",
-      "gameStat": { "glycogen": 0.35, "bloodSugar": 0.25, "hydration": 0.0, "focus": 0.0 },
+      "gameStat": {
+        "glycogen": 0.35,
+        "bloodSugar": 0.25,
+        "hydration": 0.0,
+        "focus": 0.0
+      },
       "gameNote": "The BEFORE anchor. Isomaltulose is low-GI, so model it as a slow glycogen top-up with a deliberately flat blood-sugar curve — it must NOT produce the spike-and-crash that a glucose gel does. That contrast is the most teachable moment in the whole mechanic."
     },
     {
       "id": "pre-sport-jelly-cola-caffeine",
       "nameEn": "Pre Sport Jelly Cola with caffeine",
-      "nameCz": null,
+      "nameCz": "ENERVIT PRE Sport – cola+kofein",
       "range": "SPORT",
       "phase": "before",
       "packshotPath": "/Users/jurajgiacko/Projects/JG 2026/VitarSport2026/Context/brand-assets/enervit-brand/SPORT/PRESPORT/Enervit Presport foil Jelly cola.png",
@@ -45,13 +51,18 @@
       "volumeMl": null,
       "verified": false,
       "sourceNote": "Packshot exists locally and the SKU is listed on enervit.com (pre-sport-cola-caffeine.html), but that page was NOT fetched, so the caffeine dose per pouch is UNVERIFIED. Carbs assumed equal to the Orange variant — also unverified. Do not surface a caffeine number in-game until confirmed against the pack.",
-      "gameStat": { "glycogen": 0.35, "bloodSugar": 0.25, "hydration": 0.0, "focus": 0.2 },
+      "gameStat": {
+        "glycogen": 0.35,
+        "bloodSugar": 0.25,
+        "hydration": 0.0,
+        "focus": 0.2
+      },
       "gameNote": "Blocked on a verified caffeine figure. Caffeine also carries a specific regulatory problem — see CLAIMS_TO_REVIEW.md."
     },
     {
       "id": "pre-sport-jelly-cranberry",
       "nameEn": "Pre Sport Jelly Cranberry",
-      "nameCz": null,
+      "nameCz": "ENERVIT PRE Sport – brusinka",
       "range": "SPORT",
       "phase": "before",
       "packshotPath": "/Users/jurajgiacko/Projects/JG 2026/VitarSport2026/Context/brand-assets/enervit-brand/SPORT/PRESPORT/Enervit Presport foil Jelly cranberry.png",
@@ -63,13 +74,18 @@
       "volumeMl": null,
       "verified": false,
       "sourceNote": "Packshot verified to exist. Nutrition assumed equal to Orange variant — UNVERIFIED, flavour variants can differ.",
-      "gameStat": { "glycogen": 0.35, "bloodSugar": 0.25, "hydration": 0.0, "focus": 0.0 },
+      "gameStat": {
+        "glycogen": 0.35,
+        "bloodSugar": 0.25,
+        "hydration": 0.0,
+        "focus": 0.0
+      },
       "gameNote": "Flavour skin over pre-sport-jelly-orange until its own panel is confirmed."
     },
     {
       "id": "isotonic-drink-lemon",
       "nameEn": "Isotonic Drink Lemon",
-      "nameCz": null,
+      "nameCz": "ENERVIT Isotonic Drink – citron",
       "range": "SPORT",
       "phase": "during",
       "alsoPhase": "before",
@@ -82,13 +98,18 @@
       "volumeMl": 500,
       "verified": true,
       "sourceNote": "PRIMARY: on-pack panel, SPORT/ISOTONIC DRINK/ISOTONIC LEMON/B07DTBVP4T_pt04.jpg. Per 30 g in 500 ml: 101 kcal, 25 g carb, 22 g sugars, 0.6 g salt. Sodium printed DIRECTLY in the electrolyte profile: 800 mg/100 g = 240 mg per 30 g dose. Electrolyte profile per litre: sodium 480 mg/l, potassium 90 mg/l, chloride 295 mg/l, magnesium 27 mg/l, osmolality 270 mOsm/kg. Also per dose: vit D 1.9 µg, vit C 30.4 mg, thiamine 0.42 mg, riboflavin 0.53 mg, niacin 6.1 mg, pantothenic acid 2.3 mg. THIS IS THE ONLY SKU IN THE RANGE CONFIRMED TO MEET THE EU CARBOHYDRATE-ELECTROLYTE SOLUTION CLAIM CONDITIONS — see CLAIMS_TO_REVIEW.md, it is the compliance backbone of the whole game.",
-      "gameStat": { "glycogen": 0.2, "bloodSugar": 0.15, "hydration": 0.6, "focus": 0.05 },
+      "gameStat": {
+        "glycogen": 0.2,
+        "bloodSugar": 0.15,
+        "hydration": 0.6,
+        "focus": 0.05
+      },
       "gameNote": "The hydration workhorse and the single most important SKU in the mechanic, because it is the one product we can attach an authorised EU health claim to verbatim. Weight the hydration stat toward this SKU."
     },
     {
       "id": "isotonic-drink-orange",
       "nameEn": "Isotonic Drink Orange",
-      "nameCz": null,
+      "nameCz": "ENERVIT Isotonic Drink – pomeranč",
       "range": "SPORT",
       "phase": "during",
       "alsoPhase": "before",
@@ -101,13 +122,18 @@
       "volumeMl": 500,
       "verified": false,
       "sourceNote": "Packshot verified to exist. Nutrition mirrored from the Lemon variant whose panel WAS read. Orange has its own artwork PDF (SPORT/ISOTONIC DRINK/Orange/3421008 SLEEVE COM 2024 IT-UK.pdf) that was not parsed — confirm before treating the electrolyte profile as identical, since the claim conditions depend on it.",
-      "gameStat": { "glycogen": 0.2, "bloodSugar": 0.15, "hydration": 0.6, "focus": 0.05 },
+      "gameStat": {
+        "glycogen": 0.2,
+        "bloodSugar": 0.15,
+        "hydration": 0.6,
+        "focus": 0.05
+      },
       "gameNote": "Flavour skin over isotonic-drink-lemon."
     },
     {
       "id": "gel-citrus",
       "nameEn": "Enervit Gel Citrus",
-      "nameCz": null,
+      "nameCz": "ENERVIT Gel",
       "range": "SPORT",
       "phase": "during",
       "packshotPath": "/Users/jurajgiacko/Projects/JG 2026/VitarSport2026/Context/brand-assets/enervit-brand/SPORT/GEL/GEL CITRUS/Enervit Gel foil Citrus NEW 2023 traspa.png",
@@ -118,14 +144,19 @@
       "proteinG": 0,
       "volumeMl": 25,
       "verified": false,
-      "sourceNote": "20 g carb/serving is confirmed twice for the Enervit Gel format — front-of-pack '20g CARBS / GEL' on the Raspberry artwork (SPORT/GEL/GEL RASPBERRY/8097303 FOIL COM 2024 UK-SNDK.pdf) and Enervit's own NUTRITION SYSTEM® sheet. Sodium derived from the Raspberry panel (0.1 g salt/100 ml → 0.025 g per 25 ml gel), and the Citrus variant's own panel was not read. Citrus is assumed caffeine-free; NOT confirmed.",
-      "gameStat": { "glycogen": 0.25, "bloodSugar": 0.55, "hydration": -0.05, "focus": 0.0 },
+      "sourceNote": "20 g carb/serving is confirmed twice for the Enervit Gel format — front-of-pack '20g CARBS / GEL' on the Raspberry artwork (SPORT/GEL/GEL RASPBERRY/8097303 FOIL COM 2024 UK-SNDK.pdf) and Enervit's own NUTRITION SYSTEM® sheet. Sodium derived from the Raspberry panel (0.1 g salt/100 ml → 0.025 g per 25 ml gel), and the Citrus variant's own panel was not read. Citrus is assumed caffeine-free; NOT confirmed. CZ NAME: sold as 'ENERVIT Gel – mix příchutí'; the Czech shops do not list this flavour individually, so the flavour suffix is unconfirmed.",
+      "gameStat": {
+        "glycogen": 0.25,
+        "bloodSugar": 0.55,
+        "hydration": -0.05,
+        "focus": 0.0
+      },
       "gameNote": "The classic fast gel: sharp blood-sugar rise, modest glycogen. Negative hydration is deliberate — a concentrated gel taken without water pulls water into the gut. That is the mechanic that teaches 'always wash a gel down'."
     },
     {
       "id": "gel-raspberry-caffeine",
       "nameEn": "Enervit Gel Raspberry with caffeine",
-      "nameCz": null,
+      "nameCz": "ENERVIT Gel",
       "range": "SPORT",
       "phase": "during",
       "packshotPath": "/Users/jurajgiacko/Projects/JG 2026/VitarSport2026/Context/brand-assets/enervit-brand/SPORT/GEL/GEL RASPBERRY/Enervit Gel foil Raspberry NEW 2023 traspa.png",
@@ -136,14 +167,19 @@
       "proteinG": 0,
       "volumeMl": 25,
       "verified": true,
-      "sourceNote": "PRIMARY: packaging artwork SPORT/GEL/GEL RASPBERRY/8097303 FOIL COM 2024 UK-SNDK.pdf. Front of pack states '20g CARBS / GEL' and 'WITH 20mg CAFFEINE' — both legible and unambiguous. Back panel per 100 ml (= 4 gels): 322 kcal, 80 g carbohydrate, 15 g sugars, 0.1 g salt, caffeine 80 mg, thiamin 0.66 mg, niacin 9.6 mg, vit B6 0.84 mg — the back panel is a low-resolution raster so the micronutrient digits are lower confidence; the per-gel carb and caffeine figures are not. Marked 'DP4 FORMULA'. NOTE the pack's own caffeine warning: 'High caffeine content (80 mg/100 ml). Not recommended for children or pregnant or breast-feeding women.'",
-      "gameStat": { "glycogen": 0.25, "bloodSugar": 0.55, "hydration": -0.05, "focus": 0.25 },
+      "sourceNote": "PRIMARY: packaging artwork SPORT/GEL/GEL RASPBERRY/8097303 FOIL COM 2024 UK-SNDK.pdf. Front of pack states '20g CARBS / GEL' and 'WITH 20mg CAFFEINE' — both legible and unambiguous. Back panel per 100 ml (= 4 gels): 322 kcal, 80 g carbohydrate, 15 g sugars, 0.1 g salt, caffeine 80 mg, thiamin 0.66 mg, niacin 9.6 mg, vit B6 0.84 mg — the back panel is a low-resolution raster so the micronutrient digits are lower confidence; the per-gel carb and caffeine figures are not. Marked 'DP4 FORMULA'. NOTE the pack's own caffeine warning: 'High caffeine content (80 mg/100 ml). Not recommended for children or pregnant or breast-feeding women.' CZ NAME: sold as 'ENERVIT Gel – mix příchutí'; flavour suffix unconfirmed.",
+      "gameStat": {
+        "glycogen": 0.25,
+        "bloodSugar": 0.55,
+        "hydration": -0.05,
+        "focus": 0.25
+      },
       "gameNote": "20 mg is a LOW caffeine dose — roughly a quarter of an espresso. Do not model it as a dramatic focus surge; overstating it is both wrong and a claims risk. Caffeine health claims are NOT authorised in the EU — see CLAIMS_TO_REVIEW.md."
     },
     {
       "id": "gel-cola",
       "nameEn": "Enervit Gel Cola",
-      "nameCz": null,
+      "nameCz": "ENERVIT Gel",
       "range": "SPORT",
       "phase": "during",
       "packshotPath": "/Users/jurajgiacko/Projects/JG 2026/VitarSport2026/Context/brand-assets/enervit-brand/SPORT/GEL/GEL COLA/Enervit Gel foil Cola NEW 2023 traspa.png",
@@ -154,14 +190,19 @@
       "proteinG": 0,
       "volumeMl": 25,
       "verified": false,
-      "sourceNote": "Format-level 20 g carb figure is solid. Caffeine content UNKNOWN — cola-flavoured Enervit gels usually carry caffeine but this variant's panel was not read. Leave caffeine null in the UI rather than guessing.",
-      "gameStat": { "glycogen": 0.25, "bloodSugar": 0.55, "hydration": -0.05, "focus": 0.0 },
+      "sourceNote": "Format-level 20 g carb figure is solid. Caffeine content UNKNOWN — cola-flavoured Enervit gels usually carry caffeine but this variant's panel was not read. Leave caffeine null in the UI rather than guessing. CZ NAME: sold as 'ENERVIT Gel – mix příchutí'; flavour suffix unconfirmed.",
+      "gameStat": {
+        "glycogen": 0.25,
+        "bloodSugar": 0.55,
+        "hydration": -0.05,
+        "focus": 0.0
+      },
       "gameNote": "Blocked on a verified caffeine figure before the focus contribution can be set."
     },
     {
       "id": "liquid-gel-citrus",
       "nameEn": "Liquid Gel Citrus",
-      "nameCz": null,
+      "nameCz": "ENERVIT Liquid Gel Competition s kofeinem",
       "range": "SPORT",
       "phase": "during",
       "packshotPath": "/Users/jurajgiacko/Projects/JG 2026/VitarSport2026/Context/brand-assets/enervit-brand/SPORT/LIQUID GEL/Enervit Liquid Gel foil Citrus NEW 2024 traspa.png",
@@ -172,14 +213,19 @@
       "proteinG": 0,
       "volumeMl": 60,
       "verified": true,
-      "sourceNote": "30 g carb/serving confirmed twice: Enervit's own NUTRITION SYSTEM® sheet ('30g CARBS / SERVING') and enervit.com Liquid Gel product copy ('30 g of carbohydrates in 2:1 maltodextrin-fructose ratio'). Ingredients: water, maltodextrin 30%, fructose 14.3%, citric acid, natural flavouring, thiamin hydrochloride; 100 g = 85 ml. Sodium not stated. The Citrus variant may be the caffeinated 'Liquid Gel Competition' — confirm which SKU this artwork is before assigning caffeine.",
-      "gameStat": { "glycogen": 0.4, "bloodSugar": 0.45, "hydration": 0.05, "focus": 0.0 },
+      "sourceNote": "30 g carb/serving confirmed twice: Enervit's own NUTRITION SYSTEM® sheet ('30g CARBS / SERVING') and enervit.com Liquid Gel product copy ('30 g of carbohydrates in 2:1 maltodextrin-fructose ratio'). Ingredients: water, maltodextrin 30%, fructose 14.3%, citric acid, natural flavouring, thiamin hydrochloride; 100 g = 85 ml. Sodium not stated. The Citrus variant may be the caffeinated 'Liquid Gel Competition' — confirm which SKU this artwork is before assigning caffeine. CZ NAME: the Czech shops list 'ENERVIT Liquid Gel Competition s kofeinem (kofein/citrus)'. This suggests the Citrus artwork IS the caffeinated Competition variant — which would also settle the open caffeine question above. Confirm with the distributor.",
+      "gameStat": {
+        "glycogen": 0.4,
+        "bloodSugar": 0.45,
+        "hydration": 0.05,
+        "focus": 0.0
+      },
       "gameNote": "Highest carb-per-serving of the during-race liquids and more dilute than a standard gel, so it is gentler on hydration. The 2:1 maltodextrin:fructose ratio is the C2:1 story in its purest form."
     },
     {
       "id": "liquid-gel-orange",
       "nameEn": "Liquid Gel Orange",
-      "nameCz": null,
+      "nameCz": "ENERVIT Liquid Gel",
       "range": "SPORT",
       "phase": "during",
       "packshotPath": "/Users/jurajgiacko/Projects/JG 2026/VitarSport2026/Context/brand-assets/enervit-brand/SPORT/LIQUID GEL/Enervit Liquid Gel foil Orange NEW 2024 traspa.png",
@@ -190,14 +236,19 @@
       "proteinG": 0,
       "volumeMl": 60,
       "verified": true,
-      "sourceNote": "Same format-level confirmation as liquid-gel-citrus (NUTRITION SYSTEM® + enervit.com). Orange is the non-caffeinated reference variant.",
-      "gameStat": { "glycogen": 0.4, "bloodSugar": 0.45, "hydration": 0.05, "focus": 0.0 },
+      "sourceNote": "Same format-level confirmation as liquid-gel-citrus (NUTRITION SYSTEM® + enervit.com). Orange is the non-caffeinated reference variant. CZ NAME: sold as 'ENERVIT Liquid Gel – mix příchutí'; flavour suffix unconfirmed.",
+      "gameStat": {
+        "glycogen": 0.4,
+        "bloodSugar": 0.45,
+        "hydration": 0.05,
+        "focus": 0.0
+      },
       "gameNote": "Use this as the default Liquid Gel in the loadout UI — it is the variant with the fewest open questions."
     },
     {
       "id": "isotonic-gel-grapefruit",
       "nameEn": "Isotonic Gel Grapefruit",
-      "nameCz": null,
+      "nameCz": "ENERVIT Isotonic Gel",
       "range": "SPORT",
       "phase": "during",
       "packshotPath": "/Users/jurajgiacko/Projects/JG 2026/VitarSport2026/Context/brand-assets/enervit-brand/SPORT/ISOTONIC GEL/Enervit Isotonic Gel foil Grapefruit MOD2 traspa.png",
@@ -209,13 +260,18 @@
       "volumeMl": null,
       "verified": false,
       "sourceNote": "20 g carb/serving comes from Enervit's NUTRITION SYSTEM® sheet, which is a primary Enervit document but a marketing sheet rather than a pack panel. Both enervit.com Isotonic Gel product URLs failed to fetch (404 / redirect loop). Pack volume, sodium and the isotonic claim conditions are all UNVERIFIED. Enervit describes it as 'maltodextrin based with isotonic formulation'.",
-      "gameStat": { "glycogen": 0.25, "bloodSugar": 0.35, "hydration": 0.2, "focus": 0.0 },
+      "gameStat": {
+        "glycogen": 0.25,
+        "bloodSugar": 0.35,
+        "hydration": 0.2,
+        "focus": 0.0
+      },
       "gameNote": "Positioned between a gel and a drink: the point of difference is that it does not cost hydration. Do not call it 'isotonic' in player-facing copy on our own authority until the osmolality is confirmed — that word has a regulatory meaning."
     },
     {
       "id": "isotonic-gel-lemon-caffeine",
       "nameEn": "Isotonic Gel Lemon with caffeine",
-      "nameCz": null,
+      "nameCz": "ENERVIT Isotonic Gel s kofeinem",
       "range": "SPORT",
       "phase": "during",
       "packshotPath": "/Users/jurajgiacko/Projects/JG 2026/VitarSport2026/Context/brand-assets/enervit-brand/SPORT/ISOTONIC GEL/Enervit Isotonic Gel foil Lemon caffeine MOD2 traspa.png",
@@ -227,13 +283,18 @@
       "volumeMl": null,
       "verified": false,
       "sourceNote": "As isotonic-gel-grapefruit. Caffeine dose UNVERIFIED — the product page redirect-looped.",
-      "gameStat": { "glycogen": 0.25, "bloodSugar": 0.35, "hydration": 0.2, "focus": 0.2 },
+      "gameStat": {
+        "glycogen": 0.25,
+        "bloodSugar": 0.35,
+        "hydration": 0.2,
+        "focus": 0.2
+      },
       "gameNote": "Blocked on a verified caffeine figure."
     },
     {
       "id": "competition-bar-orange",
       "nameEn": "Competition Bar Orange",
-      "nameCz": null,
+      "nameCz": "ENERVIT Competition Bar",
       "range": "SPORT",
       "phase": "during",
       "packshotPath": "/Users/jurajgiacko/Projects/JG 2026/VitarSport2026/Context/brand-assets/enervit-brand/SPORT/ENERGY BARS/COMPETITION BAR/flowpack competition orange 135X126 2021.png",
@@ -244,14 +305,19 @@
       "proteinG": null,
       "volumeMl": null,
       "verified": false,
-      "sourceNote": "CONFLICTING SOURCES — resolve before use. Enervit's NUTRITION SYSTEM® sheet states '20g CARBS / SERVING'. The enervit.com product page gives a self-consistent per-100 g column (354 kcal, 77 g carb, 47 g sugars, 3.8 g protein, 3 g fat, 0.1 g salt, thiamin 0.55 mg, vit B6 0.70 mg) but a per-bar column that is internally impossible (28 g sugars against 22 g carbohydrate; 212 kcal for a stated 30 g bar that would be ~106 kcal). The per-100 g figures are trustworthy; the bar weight and therefore every per-bar number is not. carbsG=20 here follows Enervit's own sheet as the more defensible of the two.",
-      "gameStat": { "glycogen": 0.35, "bloodSugar": 0.3, "hydration": -0.1, "focus": 0.0 },
+      "sourceNote": "CONFLICTING SOURCES — resolve before use. Enervit's NUTRITION SYSTEM® sheet states '20g CARBS / SERVING'. The enervit.com product page gives a self-consistent per-100 g column (354 kcal, 77 g carb, 47 g sugars, 3.8 g protein, 3 g fat, 0.1 g salt, thiamin 0.55 mg, vit B6 0.70 mg) but a per-bar column that is internally impossible (28 g sugars against 22 g carbohydrate; 212 kcal for a stated 30 g bar that would be ~106 kcal). The per-100 g figures are trustworthy; the bar weight and therefore every per-bar number is not. carbsG=20 here follows Enervit's own sheet as the more defensible of the two. CZ NAME AMBIGUITY: Czech shops carry both 'ENERVIT Competition Bar – mix příchutí' and 'Enervit Power Sport Competition' (meruňka, banán). It could not be established whether these are one SKU under two names or two products. Resolve with the distributor before this SKU ships.",
+      "gameStat": {
+        "glycogen": 0.35,
+        "bloodSugar": 0.3,
+        "hydration": -0.1,
+        "focus": 0.0
+      },
       "gameNote": "Solid food. Slower to act than a gel and the biggest hydration cost to chew and digest — that trade-off is what makes it an interesting choice at a Long feed station rather than a strictly worse gel."
     },
     {
       "id": "carbo-gel-orange",
       "nameEn": "Carbo Gel Orange C2:1 PRO",
-      "nameCz": null,
+      "nameCz": "ENERVIT Carbo Gel C2:1",
       "range": "C2_1",
       "phase": "during",
       "packshotPath": "/Users/jurajgiacko/Projects/JG 2026/VitarSport2026/Context/brand-assets/enervit-brand/C2_1/CARBO GEL ORANGE/Enervit Carbo Gel foil Orange 2024 traspa.png",
@@ -262,14 +328,19 @@
       "proteinG": 0,
       "volumeMl": 60,
       "verified": false,
-      "sourceNote": "The Carbo Gel format is 60 ml / 40 g carbohydrate — verified directly for the Cola variant from its own panel (C2_1/CARBO GEL COLA/Ingredienti Carbo gel cola.jpg) and corroborated for the neutral variant by an internal Enervit briefing (knowledge/2026-01-31-meeting-roberto-enervit.md: '40 g sacharidov, 200 mg sodíka'). The Orange variant's own panel was NOT read; sodium not established for this flavour.",
-      "gameStat": { "glycogen": 0.5, "bloodSugar": 0.6, "hydration": -0.1, "focus": 0.0 },
+      "sourceNote": "The Carbo Gel format is 60 ml / 40 g carbohydrate — verified directly for the Cola variant from its own panel (C2_1/CARBO GEL COLA/Ingredienti Carbo gel cola.jpg) and corroborated for the neutral variant by an internal Enervit briefing (knowledge/2026-01-31-meeting-roberto-enervit.md: '40 g sacharidov, 200 mg sodíka'). The Orange variant's own panel was NOT read; sodium not established for this flavour. CZ NAME: base name confirmed as 'ENERVIT Carbo Gel C2:1'; an Orange flavour suffix was not found on the Czech shops.",
+      "gameStat": {
+        "glycogen": 0.5,
+        "bloodSugar": 0.6,
+        "hydration": -0.1,
+        "focus": 0.0
+      },
       "gameNote": "Double the carbohydrate of a standard Enervit Gel in the same swallow. In a 90-minute Long this is the single-gel choice; in a Sprint or Middle it is more carbohydrate than the race can use, which should read in-game as wasted weight and GI cost, not as a bonus."
     },
     {
       "id": "carbo-gel-cola-caffeine",
       "nameEn": "Carbo Gel Cola with caffeine C2:1 PRO",
-      "nameCz": null,
+      "nameCz": "ENERVIT Carbo Gel C2:1 – cola+kofein",
       "range": "C2_1",
       "phase": "during",
       "packshotPath": "/Users/jurajgiacko/Projects/JG 2026/VitarSport2026/Context/brand-assets/enervit-brand/C2_1/CARBO GEL COLA/Enervit Carbo Gel foil Cola Caffeine 2024 traspa.png",
@@ -281,13 +352,18 @@
       "volumeMl": 60,
       "verified": true,
       "sourceNote": "PRIMARY: on-pack panel C2_1/CARBO GEL COLA/Ingredienti Carbo gel cola.jpg. Per 60 ml pack: 120 kcal, 40 g carbohydrate, 16 g sugars, 0 g salt, caffeine 100 mg, thiamine 0.17 mg, vit B6 0.21 mg, niacin 2.4 mg. Ingredients: water, maltodextrins 36.4%, fructose 18.2% (= 2:1), citric acid, xanthan gum, natural flavourings, caffeine 0.135%, potassium sorbate, nicotinamide, pyridoxine HCl, thiamine mononitrate.",
-      "gameStat": { "glycogen": 0.5, "bloodSugar": 0.6, "hydration": -0.1, "focus": 0.5 },
+      "gameStat": {
+        "glycogen": 0.5,
+        "bloodSugar": 0.6,
+        "hydration": -0.1,
+        "focus": 0.5
+      },
       "gameNote": "100 mg caffeine is a genuine dose — five times the Enervit Gel Raspberry. This is the strongest focus item in the range and the one most likely to tempt non-compliant copy. It also triggers the mandatory EU high-caffeine labelling threshold; see CLAIMS_TO_REVIEW.md before writing a single word about it."
     },
     {
       "id": "carbo-gel-lemon-sodium",
       "nameEn": "Carbo Gel Lemon Sodium C2:1 PRO",
-      "nameCz": null,
+      "nameCz": "ENERVIT Carbo Gel C2:1 – se sodíkem",
       "range": "C2_1",
       "phase": "during",
       "packshotPath": "/Users/jurajgiacko/Projects/JG 2026/VitarSport2026/Context/brand-assets/enervit-brand/C2_1/CARBO GEL LEMON SODIUM/Enervit Carbo Gel foil Lemon Sodium 2024 traspa.png",
@@ -299,13 +375,18 @@
       "volumeMl": 60,
       "verified": false,
       "sourceNote": "40 g carbohydrate is format-verified. The 200 mg sodium figure comes from an internal Enervit briefing (knowledge/2026-01-31-meeting-roberto-enervit.md), which reports the sodium Carbo Gel line as '40 g sacharidov, 200 mg sodíka'. That is a credible first-party source but it is a meeting note, not a pack panel. Confirm against the pack before it appears in player-facing copy.",
-      "gameStat": { "glycogen": 0.5, "bloodSugar": 0.6, "hydration": 0.05, "focus": 0.0 },
+      "gameStat": {
+        "glycogen": 0.5,
+        "bloodSugar": 0.6,
+        "hydration": 0.05,
+        "focus": 0.0
+      },
       "gameNote": "The sodium variant is the answer to a hot Long. Sodium is Enervit's declared 2026 strategic focus, so giving this SKU a visible role in the mechanic is commercially well-aimed."
     },
     {
       "id": "carbo-gel-lime",
       "nameEn": "Carbo Gel Lime C2:1 PRO",
-      "nameCz": null,
+      "nameCz": "ENERVIT Carbo Gel C2:1 – limetka",
       "range": "C2_1",
       "phase": "during",
       "packshotPath": "/Users/jurajgiacko/Projects/JG 2026/VitarSport2026/Context/brand-assets/enervit-brand/C2_1/CARBO GEL LIME/Enervit Carbo Gel foil Lime 2024 traspa.png",
@@ -317,13 +398,18 @@
       "volumeMl": 60,
       "verified": false,
       "sourceNote": "Format-level 40 g carbohydrate only. This variant's own panel was not read.",
-      "gameStat": { "glycogen": 0.5, "bloodSugar": 0.6, "hydration": -0.1, "focus": 0.0 },
+      "gameStat": {
+        "glycogen": 0.5,
+        "bloodSugar": 0.6,
+        "hydration": -0.1,
+        "focus": 0.0
+      },
       "gameNote": "Flavour skin over carbo-gel-orange."
     },
     {
       "id": "carbo-gel-mango",
       "nameEn": "Carbo Gel Mango C2:1 PRO",
-      "nameCz": null,
+      "nameCz": "ENERVIT Carbo Gel C2:1",
       "range": "C2_1",
       "phase": "during",
       "packshotPath": "/Users/jurajgiacko/Projects/JG 2026/VitarSport2026/Context/brand-assets/enervit-brand/C2_1/CARBO GEL MANGO/Enervit Carbo Gel foil Mango 2024 traspa.png",
@@ -334,14 +420,19 @@
       "proteinG": 0,
       "volumeMl": 60,
       "verified": false,
-      "sourceNote": "Format-level 40 g carbohydrate only. This variant's own panel was not read.",
-      "gameStat": { "glycogen": 0.5, "bloodSugar": 0.6, "hydration": -0.1, "focus": 0.0 },
+      "sourceNote": "Format-level 40 g carbohydrate only. This variant's own panel was not read. CZ NAME: base name confirmed; Mango flavour suffix not found on the Czech shops.",
+      "gameStat": {
+        "glycogen": 0.5,
+        "bloodSugar": 0.6,
+        "hydration": -0.1,
+        "focus": 0.0
+      },
       "gameNote": "Flavour skin over carbo-gel-orange."
     },
     {
       "id": "carbo-jelly-tropical",
       "nameEn": "Carbo Jelly Tropical Fruits C2:1 PRO",
-      "nameCz": null,
+      "nameCz": "ENERVIT Carbo Jelly C2:1 – tropické ovoce",
       "range": "C2_1",
       "phase": "during",
       "packshotPath": "/Users/jurajgiacko/Projects/JG 2026/VitarSport2026/Context/brand-assets/enervit-brand/C2_1/CARBO JELLY/Enervit Carbo Jelly tropical fruits foil traspa.png",
@@ -353,13 +444,18 @@
       "volumeMl": null,
       "verified": true,
       "sourceNote": "PRIMARY: on-pack panel C2_1/CARBO JELLY/Ingredienti jelly.jpg. Per 50 g pack: 120 kcal, 30 g carbohydrate, 30 g sugars, 0.13 g salt (→ 52 mg sodium), thiamine 0.17 mg. Ingredients open with '2:1 CARBO MIX FORMULA (dextrose 35% - water - fructose syrup 17% - sucrose 16.5% ...)'.",
-      "gameStat": { "glycogen": 0.3, "bloodSugar": 0.5, "hydration": -0.05, "focus": 0.0 },
+      "gameStat": {
+        "glycogen": 0.3,
+        "bloodSugar": 0.5,
+        "hydration": -0.05,
+        "focus": 0.0
+      },
       "gameNote": "All 30 g of carbohydrate are sugars — the fastest-acting item in the range. Chewable, so slightly slower to get down than a gel while running."
     },
     {
       "id": "carbo-chews-orange",
       "nameEn": "Carbo Chews Orange C2:1 PRO",
-      "nameCz": null,
+      "nameCz": "ENERVIT Carbo Chews C2:1 – pomeranč",
       "range": "C2_1",
       "phase": "during",
       "packshotPath": "/Users/jurajgiacko/Projects/JG 2026/VitarSport2026/Context/brand-assets/enervit-brand/C2_1/CARBO CHEWS/SINGLE/flowpack carbo chews prodotto orange 125X96 2024.png",
@@ -371,7 +467,12 @@
       "volumeMl": null,
       "verified": true,
       "sourceNote": "PRIMARY: on-pack panel C2_1/CARBO CHEWS/Ingredienti chews.jpg. Per 34 g dose (6 chews): 118 kcal, 30 g carbohydrate, 18 g sugars, 0 g salt, thiamine 0.17 mg. Ingredients open with '2:1 CARBO MIX PATENTED FORMULA (sucrose 36.5% - maltodextrin 26.2% - water - glucose syrup 9.4% - fructose syrup 9%...)'. Note the patented-formula wording — do not restate it as our own claim.",
-      "gameStat": { "glycogen": 0.3, "bloodSugar": 0.4, "hydration": -0.05, "focus": 0.0 },
+      "gameStat": {
+        "glycogen": 0.3,
+        "bloodSugar": 0.4,
+        "hydration": -0.05,
+        "focus": 0.0
+      },
       "gameNote": "The only SKU that is genuinely divisible mid-race: six chews means the player can take partial doses. That makes it the natural teaching tool for 'little and often' pacing of intake."
     },
     {
@@ -388,14 +489,19 @@
       "proteinG": 1.6,
       "volumeMl": null,
       "verified": true,
-      "sourceNote": "PRIMARY: on-pack panel C2_1/CARBO BAR PEANUT/Ingredienti Carbo bar peanut.jpg. Per 45 g bar: 159 kcal, 33 g carbohydrate, 20 g sugars, 2.0 g fat, 1.6 g protein, 0.51 g salt (→ 204 mg sodium), thiamine 0.22 mg. The 204 mg derived sodium corroborates the internal briefing's '200 mg sodíka' for the salty C2:1 bar. Contains peanuts and oats.",
-      "gameStat": { "glycogen": 0.4, "bloodSugar": 0.25, "hydration": -0.05, "focus": 0.0 },
+      "sourceNote": "PRIMARY: on-pack panel C2_1/CARBO BAR PEANUT/Ingredienti Carbo bar peanut.jpg. Per 45 g bar: 159 kcal, 33 g carbohydrate, 20 g sugars, 2.0 g fat, 1.6 g protein, 0.51 g salt (→ 204 mg sodium), thiamine 0.22 mg. The 204 mg derived sodium corroborates the internal briefing's '200 mg sodíka' for the salty C2:1 bar. Contains peanuts and oats. CZ NAME NOT FOUND: the Czech shops list Carbo Bar C2:1 in 'brownie' and 'slaný karamel' (salted caramel) only. The Salty Peanut Butter variant may not be listed in CZ/SK. Do not invent a Czech name.",
+      "gameStat": {
+        "glycogen": 0.4,
+        "bloodSugar": 0.25,
+        "hydration": -0.05,
+        "focus": 0.0
+      },
       "gameNote": "The only during-race solid that carries meaningful sodium. Slow release, so it rewards being taken early rather than as a rescue."
     },
     {
       "id": "carbo-bar-brownie",
       "nameEn": "Carbo Bar Brownie C2:1 PRO",
-      "nameCz": null,
+      "nameCz": "ENERVIT Carbo Bar C2:1 – brownie",
       "range": "C2_1",
       "phase": "during",
       "packshotPath": "/Users/jurajgiacko/Projects/JG 2026/VitarSport2026/Context/brand-assets/enervit-brand/C2_1/CARBO BAR BROWNIE/BROWNIE-0553 con flowpack V5 def traspa.png",
@@ -407,7 +513,12 @@
       "volumeMl": null,
       "verified": true,
       "sourceNote": "PRIMARY: on-pack panel C2_1/CARBO BAR BROWNIE/Ingredienti carbo bar brownie.jpg. Per 45 g bar: 163 kcal, 33.3 g carbohydrate, 19.35 g sugars, 2.3 g fat, 2 g protein, 0.018 g salt (→ 7.2 mg sodium), thiamine 0.23 mg. IMPORTANT NUANCE: the pack says a bar delivers '30 g of carbohydrate in a 2:1 glucose:fructose ratio (post-hydrolysis of the sugars)' while the nutrition table declares 33.3 g total carbohydrate — the 30 g is the 2:1-ratio fraction, not the total. Do not conflate the two in copy.",
-      "gameStat": { "glycogen": 0.4, "bloodSugar": 0.25, "hydration": -0.05, "focus": 0.0 },
+      "gameStat": {
+        "glycogen": 0.4,
+        "bloodSugar": 0.25,
+        "hydration": -0.05,
+        "focus": 0.0
+      },
       "gameNote": "Essentially sodium-free — the contrast with carbo-bar-peanut is a clean in-game lesson about reading a label rather than a wrapper."
     },
     {
@@ -424,14 +535,19 @@
       "proteinG": 2,
       "volumeMl": null,
       "verified": true,
-      "sourceNote": "PRIMARY: on-pack panel C2_1/CARBO BAR NO FLAVOUR/Ingredienti carbo bar no flavour.jpg. The declared nutrition table is identical to the Brownie variant (45 g bar: 163 kcal, 33.3 g carbohydrate, 19.35 g sugars, 2 g protein, 0.018 g salt, thiamine 0.23 mg); the ingredient lists differ (no cocoa). Carries the same '30 g of carbohydrate in a 2:1 glucose:fructose ratio' statement.",
-      "gameStat": { "glycogen": 0.4, "bloodSugar": 0.25, "hydration": -0.05, "focus": 0.0 },
+      "sourceNote": "PRIMARY: on-pack panel C2_1/CARBO BAR NO FLAVOUR/Ingredienti carbo bar no flavour.jpg. The declared nutrition table is identical to the Brownie variant (45 g bar: 163 kcal, 33.3 g carbohydrate, 19.35 g sugars, 2 g protein, 0.018 g salt, thiamine 0.23 mg); the ingredient lists differ (no cocoa). Carries the same '30 g of carbohydrate in a 2:1 glucose:fructose ratio' statement. CZ NAME NOT FOUND: no unflavoured/'bez příchuti' Carbo Bar listing was found on the Czech shops, though Enervit global lists the SKU.",
+      "gameStat": {
+        "glycogen": 0.4,
+        "bloodSugar": 0.25,
+        "hydration": -0.05,
+        "focus": 0.0
+      },
       "gameNote": "Enervit's stated 2026 rationale for no-flavour variants is palate fatigue at high carbohydrate intakes. That is a real athlete problem and worth surfacing as a flavour-fatigue mechanic in career mode rather than as a stat difference."
     },
     {
       "id": "isocarb",
       "nameEn": "Isocarb C2:1 PRO",
-      "nameCz": null,
+      "nameCz": "ENERVIT Isocarb C2:1",
       "range": "C2_1",
       "phase": "during",
       "packshotPath": "/Users/jurajgiacko/Projects/JG 2026/VitarSport2026/Context/brand-assets/enervit-brand/C2_1/ISOCARB/Enervit barattolo alto 168,5 X 214 Isocarb 2022 traspa.png",
@@ -443,7 +559,12 @@
       "volumeMl": 500,
       "verified": true,
       "sourceNote": "PRIMARY: on-pack panel C2_1/ISOCARB/Ingredienti isocarb.jpg. Per 65 g dose in 500 ml: 244 kcal, 60 g carbohydrate, 20 g sugars, 0.6 g salt (→ 240 mg sodium), thiamine 0.41 mg. Ingredients: maltodextrin DE1 AgenaNova 66%, fructose 31% (= 2.1:1), citric acid, sodium chloride, natural lemon flavour, thiamine hydrochloride. COMPLIANCE FLAG: at 60 g carbohydrate in 500 ml this is ~488 kcal/l, which EXCEEDS the 350 kcal/l ceiling in the EU carbohydrate-electrolyte solution claim conditions. Isocarb therefore CANNOT carry those claims even though the Isotonic Drink can. See CLAIMS_TO_REVIEW.md.",
-      "gameStat": { "glycogen": 0.6, "bloodSugar": 0.4, "hydration": 0.25, "focus": 0.05 },
+      "gameStat": {
+        "glycogen": 0.6,
+        "bloodSugar": 0.4,
+        "hydration": 0.25,
+        "focus": 0.05
+      },
       "gameNote": "A full hour of Long-race fuelling in one bottle. Hydration gain is deliberately lower than Isotonic Drink at the same 500 ml because the concentration is more than double — the same volume of water doing more carbohydrate work and less hydration work. That difference is the whole reason both SKUs exist, and it is a mechanic worth making visible."
     },
     {
@@ -460,14 +581,19 @@
       "proteinG": 0,
       "volumeMl": 500,
       "verified": false,
-      "sourceNote": "The sachet folder carries the same 'Ingredienti isocarb.jpg' panel as the tub, so the values are assumed to be the single-serve equivalent of the 65 g dose. The sachet's own declared weight was NOT confirmed. Same >350 kcal/l compliance flag as isocarb.",
-      "gameStat": { "glycogen": 0.6, "bloodSugar": 0.4, "hydration": 0.25, "focus": 0.05 },
+      "sourceNote": "The sachet folder carries the same 'Ingredienti isocarb.jpg' panel as the tub, so the values are assumed to be the single-serve equivalent of the 65 g dose. The sachet's own declared weight was NOT confirmed. Same >350 kcal/l compliance flag as isocarb. CZ NAME NOT FOUND: Czech shops list the 650 g tub ('ENERVIT Isocarb C2:1 – dóza 650 g'); the sachet format was not seen.",
+      "gameStat": {
+        "glycogen": 0.6,
+        "bloodSugar": 0.4,
+        "hydration": 0.25,
+        "focus": 0.05
+      },
       "gameNote": "Pre-portioned form of isocarb. Mechanically identical; useful in career mode as the 'travel' variant."
     },
     {
       "id": "salt-caps",
       "nameEn": "Salt Caps",
-      "nameCz": null,
+      "nameCz": "ENERVIT Salt Caps",
       "range": "SPORT",
       "phase": "during",
       "alsoPhase": "before",
@@ -480,13 +606,18 @@
       "volumeMl": null,
       "verified": false,
       "sourceNote": "From enervit.com/en/products/salt-caps.html. Per 2-capsule dose the page lists vit C 26 mg, niacin 5.2 mg, pantothenic acid 1.98 mg, thiamin 0.36 mg, riboflavin 0.46 mg, vit D 1.63 µg (all 33% NRV) — these are from a proper table and are reliable. The sodium figure (stated as 150 mg per capsule → 300 mg per dose) appears in page body copy rather than in the nutrition table, so it is NOT table-verified. Ingredients: sodium chloride 65%, HPMC, hydroxypropyl cellulose, sodium citrates 5%, L-ascorbic acid 3%, sodium phosphate 1.2%, magnesium salts of fatty acids (anti-caking), nicotinamide, calcium D-pantothenate, cholecalciferol, thiamin HCl, riboflavin. Note the magnesium is an anti-caking agent, NOT a meaningful electrolyte dose — do not present this product as a magnesium source.",
-      "gameStat": { "glycogen": 0.0, "bloodSugar": 0.0, "hydration": 0.3, "focus": 0.05 },
+      "gameStat": {
+        "glycogen": 0.0,
+        "bloodSugar": 0.0,
+        "hydration": 0.3,
+        "focus": 0.05
+      },
       "gameNote": "Pure electrolyte, zero carbohydrate — the only SKU that isolates the hydration axis, which makes it the cleanest way to teach what sodium actually does. Its honest place in this game is narrow: for races of 15–90 minutes in Czech August conditions the evidence for needing supplemental sodium is weak. Model it as situational (hot weather, back-to-back race days) rather than as a free stat gain, and note that Enervit's own page carries a 'helps reduce tiredness and fatigue' line whose exact wording is an amber item in CLAIMS_TO_REVIEW.md."
     },
     {
       "id": "r2-recovery-drink",
       "nameEn": "R2 Recovery Drink",
-      "nameCz": null,
+      "nameCz": "ENERVIT R2 Recovery Drink",
       "range": "SPORT",
       "phase": "after",
       "packshotPath": "/Users/jurajgiacko/Projects/JG 2026/VitarSport2026/Context/brand-assets/enervit-brand/SPORT/RECOVERY DRINK/Enervit barattolo basso 168,5 x 152,4 Recovery drink MOD1 senza KYOWA traspa.png",
@@ -497,14 +628,19 @@
       "proteinG": 4.4,
       "volumeMl": 350,
       "verified": true,
-      "sourceNote": "From enervit.com (r2-recovery-drink-sachet.html and the tub page). Per 50 g dose: 188 kcal, 41 g carbohydrate, 2.9 g sugars, 4.4 g protein, 0.17 g salt (→ 68 mg sodium), vit E 10 mg, vit C 60 mg, thiamine 0.5 mg, riboflavin 1 mg, niacin 10 mg, vit B6 1 mg. Ingredients: maltodextrin 82.6%, L-leucine 4.9%, L-isoleucine 2.4%, L-valine 2.4%, citric acid, L-glutamine 2%, plus flavourings, thickeners and the vitamin blend. The declared 4.4 g 'protein' is free amino acids (BCAA + glutamine), NOT intact protein — this matters, because the EU protein claims require protein to supply a set share of energy and 4.4 g against 188 kcal comes nowhere near it. Enervit's own page uses 'Contributes to the recovery of muscle function', which is the authorised CARBOHYDRATE claim, not a protein claim.",
-      "gameStat": { "glycogen": 0.7, "bloodSugar": 0.3, "hydration": 0.35, "focus": 0.1 },
+      "sourceNote": "From enervit.com (r2-recovery-drink-sachet.html and the tub page). Per 50 g dose: 188 kcal, 41 g carbohydrate, 2.9 g sugars, 4.4 g protein, 0.17 g salt (→ 68 mg sodium), vit E 10 mg, vit C 60 mg, thiamine 0.5 mg, riboflavin 1 mg, niacin 10 mg, vit B6 1 mg. Ingredients: maltodextrin 82.6%, L-leucine 4.9%, L-isoleucine 2.4%, L-valine 2.4%, citric acid, L-glutamine 2%, plus flavourings, thickeners and the vitamin blend. The declared 4.4 g 'protein' is free amino acids (BCAA + glutamine), NOT intact protein — this matters, because the EU protein claims require protein to supply a set share of energy and 4.4 g against 188 kcal comes nowhere near it. Enervit's own page uses 'Contributes to the recovery of muscle function', which is the authorised CARBOHYDRATE claim, not a protein claim. CZ NAME AMBIGUITY: four overlapping recovery names appear across the Czech shops — 'ENERVIT R2 Recovery Drink', 'Enervit R2 Sport', 'Enervit Recovery Drink – dóza 400 g' and 'Enervit After Sport Drink (R1 Sport)'. R1 and R2 are clearly distinct products; whether 'Recovery Drink 400 g' is a third SKU is unresolved.",
+      "gameStat": {
+        "glycogen": 0.7,
+        "bloodSugar": 0.3,
+        "hydration": 0.35,
+        "focus": 0.1
+      },
       "gameNote": "The AFTER anchor and the mechanic that carries career mode: what the player drinks after Thursday's Middle sets the glycogen they start Friday's Long with. Note the protein dose is small for recovery purposes — if the design wants a genuine carb+protein recovery story it should pair this with 100% Whey Protein rather than overstate R2 on its own."
     },
     {
       "id": "whey-protein-cocoa",
       "nameEn": "100% Whey Protein Cocoa",
-      "nameCz": null,
+      "nameCz": "ENERVIT 100% Whey Protein",
       "range": "SPORT",
       "phase": "after",
       "packshotPath": "/Users/jurajgiacko/Projects/JG 2026/VitarSport2026/Context/brand-assets/enervit-brand/SPORT/100% WHEY PROTEIN/Enervit whey protein cocoa 2023 traspa.png",
@@ -516,13 +652,18 @@
       "volumeMl": null,
       "verified": false,
       "sourceNote": "Packshot verified to exist; NO nutrition data obtained from any source. Included because a credible multi-day recovery mechanic needs a real protein SKU and R2 alone does not provide one. Every number must be filled in from the pack before this SKU is used in the game.",
-      "gameStat": { "glycogen": 0.1, "bloodSugar": 0.05, "hydration": 0.1, "focus": 0.0 },
+      "gameStat": {
+        "glycogen": 0.1,
+        "bloodSugar": 0.05,
+        "hydration": 0.1,
+        "focus": 0.0
+      },
       "gameNote": "Placeholder stats. This is the SKU that could legitimately carry the authorised EU protein claims — but only once its protein-as-share-of-energy is confirmed against the conditions of use. Do not ship it until then."
     },
     {
       "id": "magic-cherry",
       "nameEn": "After Sport Magic Cherry",
-      "nameCz": null,
+      "nameCz": "ENERVIT Magic Cherry",
       "range": "SPORT",
       "phase": "after",
       "packshotPath": "/Users/jurajgiacko/Projects/JG 2026/VitarSport2026/Context/brand-assets/enervit-brand/SPORT/MAGIC CHERRY/Enervit After Sport Magic Cherry traspa.png",
@@ -534,13 +675,18 @@
       "volumeMl": null,
       "verified": true,
       "sourceNote": "PRIMARY: on-pack panel SPORT/MAGIC CHERRY/Immagine 6_MagicCherry-ingredienti.jpg. The panel declares only tart cherry extract (Prunus cerasus, Vistula variety, 26.7%) with polyphenols 300 mg and anthocyanins 50 mg per 9 g sachet, plus vitamin E 3.6 mg (30% NRV); 600 mg polyphenols / 100 mg anthocyanins / 7.2 mg vit E per 18 g. Macronutrients are NOT declared on this panel, hence carbsG null. COMPLIANCE FLAG: tart cherry polyphenols and anthocyanins have NO authorised EU health claim. Vitamin E's only authorised claim is protection of cells from oxidative stress — which is NOT a recovery, muscle-damage or soreness claim. This SKU is the single highest claims risk in the range.",
-      "gameStat": { "glycogen": 0.0, "bloodSugar": 0.0, "hydration": 0.0, "focus": 0.0 },
+      "gameStat": {
+        "glycogen": 0.0,
+        "bloodSugar": 0.0,
+        "hydration": 0.0,
+        "focus": 0.0
+      },
       "gameNote": "Deliberately all zeros. Commercially this product is a CZ/SK success (first pallets sold out in days) so there will be pressure to give it a visible in-game effect — but there is no authorised claim to hang one on, and inventing a 'recovery' stat boost for it would be exactly the kind of implied health claim that gets a client in trouble. If it appears at all, it should be cosmetic or flavour-fatigue relief. Escalate to the client's regulatory contact before giving it any stat."
     },
     {
       "id": "magnesium-lemon",
       "nameEn": "Magnesium Lemon",
-      "nameCz": null,
+      "nameCz": "ENERVIT Magnesium Sport",
       "range": "SPORT",
       "phase": "after",
       "packshotPath": "/Users/jurajgiacko/Projects/JG 2026/VitarSport2026/Context/brand-assets/enervit-brand/SPORT/MAGNESIUM/Enervit Magnesium Lemon traspa.png",
@@ -551,8 +697,13 @@
       "proteinG": 0,
       "volumeMl": null,
       "verified": false,
-      "sourceNote": "Packshot verified to exist; the enervit.com magnesium product page returned 404 and no panel exists locally. Magnesium dose per sachet and %NRV are UNKNOWN. This matters more than for most SKUs, because magnesium carries several authorised EU claims but ALL of them are conditional on the product supplying at least 15% of the magnesium NRV (56.25 mg) per serving. Until that figure is confirmed we cannot use a single magnesium claim.",
-      "gameStat": { "glycogen": 0.0, "bloodSugar": 0.0, "hydration": 0.15, "focus": 0.1 },
+      "sourceNote": "Packshot verified to exist; the enervit.com magnesium product page returned 404 and no panel exists locally. Magnesium dose per sachet and %NRV are UNKNOWN. This matters more than for most SKUs, because magnesium carries several authorised EU claims but ALL of them are conditional on the product supplying at least 15% of the magnesium NRV (56.25 mg) per serving. Until that figure is confirmed we cannot use a single magnesium claim. CZ NAME: 'ENERVIT Magnesium Sport'. Note the Czech shops ALSO list a separate 'Enervit Magnesio Potassio Sport – 10 sáčků' — two distinct SKUs, do not merge them.",
+      "gameStat": {
+        "glycogen": 0.0,
+        "bloodSugar": 0.0,
+        "hydration": 0.15,
+        "focus": 0.1
+      },
       "gameNote": "Placeholder stats pending the magnesium dose. Note the internal briefing records that Enervit expected CZ regulatory sign-off on magnesium in late May 2026 — there is an open regulatory thread here the client will know about. Resist any 'prevents cramp' framing; that is a red-list phrasing."
     }
   ]

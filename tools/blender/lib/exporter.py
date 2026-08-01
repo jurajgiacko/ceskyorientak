@@ -1,0 +1,87 @@
+"""glTF-Binary export.
+
+One .glb per asset, containing every LOD as a root-level node named
+``<asset>_LOD<n>``.  Textures are embedded in the binary chunk, so a .glb is
+a single self-contained file for the web build.
+"""
+
+import json
+import os
+
+import bpy
+
+from . import mesh as M
+
+
+def export_glb(objects, path, draco=True, draco_level=6, position_bits=14,
+               normal_bits=10, texcoord_bits=12, apply_modifiers=True,
+               extras=True):
+    """Export exactly `objects` (and nothing else) to `path`.
+
+    Draco is worth it for the high-poly natural assets and actively harmful
+    for the tiny props (header overhead exceeds the savings), so callers pass
+    the flag per asset.
+    """
+    objects = [o for o in objects if o is not None]
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+
+    vl = bpy.context.view_layer
+    for o in vl.objects:
+        o.select_set(False)
+    for o in objects:
+        o.hide_set(False)
+        o.hide_viewport = False
+        o.hide_render = False
+        o.select_set(True)
+    if objects:
+        vl.objects.active = objects[0]
+
+    kwargs = dict(
+        filepath=path,
+        export_format="GLB",
+        use_selection=True,
+        export_apply=apply_modifiers,
+        export_yup=True,
+        export_materials="EXPORT",
+        export_image_format="AUTO",
+        export_texcoords=True,
+        export_normals=True,
+        export_tangents=False,
+        export_cameras=False,
+        export_lights=False,
+        export_extras=extras,
+        export_draco_mesh_compression_enable=bool(draco),
+    )
+    if draco:
+        kwargs.update(
+            export_draco_mesh_compression_level=draco_level,
+            export_draco_position_quantization=position_bits,
+            export_draco_normal_quantization=normal_bits,
+            export_draco_texcoord_quantization=texcoord_bits,
+        )
+
+    bpy.ops.export_scene.gltf(**kwargs)
+    return path
+
+
+def emit_meta(name, path, lod_objects, extra=None):
+    """Print a machine-readable line for build.mjs to scrape.
+
+    Kept as stdout rather than a side file so a failed run cannot leave stale
+    metadata behind.
+    """
+    lods = []
+    for o in lod_objects:
+        lods.append({"node": o.name, "tris": M.tri_count(o)})
+    meta = {
+        "name": name,
+        "file": os.path.basename(path),
+        "bytes": os.path.getsize(path) if os.path.exists(path) else 0,
+        "tris": sum(l["tris"] for l in lods[:1]) if lods else 0,
+        "trisAllLods": sum(l["tris"] for l in lods),
+        "lods": lods,
+    }
+    if extra:
+        meta.update(extra)
+    print("ASSETMETA " + json.dumps(meta, separators=(",", ":")))
+    return meta
