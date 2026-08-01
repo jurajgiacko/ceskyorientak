@@ -19,16 +19,16 @@
     "10": "Impassable"
   },
   "histogram": {
-    "Road": 114186,
-    "Path": 90007,
-    "OpenFast": 440278,
-    "OpenRough": 267634,
-    "ForestOpen": 3127056,
-    "Green1": 555561,
-    "Green2": 760921,
-    "Green3": 159595,
-    "Marsh": 13867,
-    "Rock": 2905,
-    "Impassable": 232791
+    "Road": 113741,
+    "Path": 90535,
+    "OpenFast": 525633,
+    "OpenRough": 250542,
+    "ForestOpen": 3166674,
+    "Green1": 475587,
+    "Green2": 764374,
+    "Green3": 119656,
+    "Marsh": 20632,
+    "Rock": 2906,
+    "Impassable": 234521
   }
 }

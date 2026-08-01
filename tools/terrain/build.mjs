@@ -80,7 +80,12 @@ const VENUES = [
   {
     id: 'martinkov',
     label: 'Lachovice (permitted training terrain)',
-    origin: { lon: 14.2536, lat: 48.6229 },
+    // Must stay identical to LACHOVICE_AOI.origin in src/core/venues.ts. The
+    // first value (14.2536, 48.6229) sat on a street in Loučovice, so world
+    // (0,0) was tarmac and the 3D scene had to hunt for a forest spawn. This
+    // one was chosen from the built raster — 98.7 % forest, 0 % road or
+    // out-of-bounds inside a 400 m radius.
+    origin: { lon: 14.25564, lat: 48.62695 },
     /** Playable area, metres. Matches LACHOVICE_AOI. */
     sizeX: 2000,
     sizeZ: 2000,
@@ -232,6 +237,19 @@ function worldToSjtsk(a, x, z) {
 // Elevation fetch + world-frame resample
 // ---------------------------------------------------------------------------
 
+/**
+ * Cache namespace for a venue's fetched rasters.
+ *
+ * The origin *must* be in the key. It was not, and moving the Lachovice origin
+ * 150 m east and 450 m north silently reused the previous AOI's DMR/DMP tiles:
+ * the build reported 1.3 M unresolved cells, minH collapsed from 647 m to 0,
+ * and the heightfield came out full of pits. A stale cache that produces a
+ * plausible-looking but wrong terrain is far worse than a slow refetch.
+ */
+function originTag(v) {
+  return `${v.origin.lon.toFixed(5)}_${v.origin.lat.toFixed(5)}`;
+}
+
 async function cachedExport(service, bbox, w, h, key) {
   const path = join(CACHE, `${key}.tif`);
   if (USE_CACHE && existsSync(path)) {
@@ -300,8 +318,8 @@ async function fetchElevation(v, frame, affine, grid) {
 
       process.stdout.write(`    tile ${tx},${ty} ${px}x${py} px … `);
       const [a, b] = await Promise.all([
-        cachedExport('dmr5g', bbox, px, py, `${v.id}_dmr_${tx}_${ty}`),
-        cachedExport('dmp1g', bbox, px, py, `${v.id}_dmp_${tx}_${ty}`),
+        cachedExport('dmr5g', bbox, px, py, `${v.id}_${originTag(v)}_dmr_${tx}_${ty}`),
+        cachedExport('dmp1g', bbox, px, py, `${v.id}_${originTag(v)}_dmp_${tx}_${ty}`),
       ]);
       bytes += a.buffer.length + b.buffer.length;
       if (!a.cached || !b.cached) fetched++;
@@ -503,7 +521,7 @@ async function fetchVegMask(v, frame, grid) {
   const py = Math.min(2048, Math.ceil(grid.spanZ / 1.5));
 
   let raw;
-  const cachePath = join(CACHE, `${v.id}_ortho.png`);
+  const cachePath = join(CACHE, `${v.id}_${originTag(v)}_ortho.png`);
   if (USE_CACHE && existsSync(cachePath)) {
     raw = await readFile(cachePath);
   } else {
@@ -823,7 +841,11 @@ async function applyZabaged(cls, grid, frame) {
   const report = [];
   for (const layer of ZABAGED_LAYERS) {
     let fc;
-    const cachePath = join(CACHE, `${frame.origin.lon.toFixed(4)}_L${layer.id}.geojson`);
+    // Latitude belongs in the key as much as longitude — see `originTag`.
+    const cachePath = join(
+      CACHE,
+      `${frame.origin.lon.toFixed(5)}_${frame.origin.lat.toFixed(5)}_L${layer.id}.geojson`,
+    );
     if (USE_CACHE && existsSync(cachePath)) {
       fc = JSON.parse(await readFile(cachePath, 'utf8'));
     } else {

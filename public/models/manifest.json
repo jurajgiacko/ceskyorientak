@@ -2,8 +2,8 @@
   "generator": "blender-asset-pipeline (Blender 4.5.12 LTS)",
   "generatedAt": "2026-08-01",
   "seed": 20260805,
-  "totalLod0Tris": 39908,
-  "totalBytes": 1426900,
+  "totalLod0Tris": 46972,
+  "totalBytes": 2030756,
   "assets": [
     {
       "name": "arena-tent",
@@ -370,16 +370,16 @@
     {
       "name": "spruce",
       "file": "spruce.glb",
-      "bytes": 408476,
-      "tris": 11840,
+      "bytes": 1012332,
+      "tris": 18904,
       "lods": [
         {
           "node": "spruce_v0_LOD0",
-          "tris": 2584
+          "tris": 3108
         },
         {
           "node": "spruce_v0_LOD1",
-          "tris": 832
+          "tris": 1196
         },
         {
           "node": "spruce_v0_LOD2",
@@ -387,11 +387,11 @@
         },
         {
           "node": "spruce_v1_LOD0",
-          "tris": 5560
+          "tris": 4370
         },
         {
           "node": "spruce_v1_LOD1",
-          "tris": 1580
+          "tris": 1810
         },
         {
           "node": "spruce_v1_LOD2",
@@ -399,48 +399,74 @@
         },
         {
           "node": "spruce_v2_LOD0",
-          "tris": 3696
+          "tris": 6692
         },
         {
           "node": "spruce_v2_LOD1",
-          "tris": 1000
+          "tris": 2498
         },
         {
           "node": "spruce_v2_LOD2",
           "tris": 4
+        },
+        {
+          "node": "spruce_v3_LOD0",
+          "tris": 4734
+        },
+        {
+          "node": "spruce_v3_LOD1",
+          "tris": 1754
+        },
+        {
+          "node": "spruce_v3_LOD2",
+          "tris": 4
         }
       ],
-      "variants": 3,
+      "variants": 4,
       "originNote": "base of trunk on the ground, +Z up; every variant is centred on its own origin (no baked offsets)",
-      "notes": "v0 young / v1 mature / v2 old-with-dead-branches; LOD1 rebuilt not decimated, LOD2 crossed-quad imposter baked from each variant's own LOD0",
+      "notes": "v0 thicket / v1 pole / v2 mature / v3 old; mature and old carry 10-15 m of bare dead-stubbed bole so a stand reads through at eye level. Crown depth is baked into COLOR_0 (multiplies base colour). LOD1 rebuilt not decimated, LOD2 crossed-quad imposter baked from each variant's own shaded LOD0",
       "variantDetail": [
         {
           "variant": "v0",
-          "label": "young",
-          "heightM": 6.1,
+          "label": "thicket",
+          "heightM": 6.4,
+          "crownBaseM": 0.29,
           "tris": [
-            2584,
-            832,
+            3108,
+            1196,
             4
           ]
         },
         {
           "variant": "v1",
-          "label": "mature",
-          "heightM": 27.6,
+          "label": "pole",
+          "heightM": 15.6,
+          "crownBaseM": 4.68,
           "tris": [
-            5560,
-            1580,
+            4370,
+            1810,
             4
           ]
         },
         {
           "variant": "v2",
-          "label": "old",
-          "heightM": 31.6,
+          "label": "mature",
+          "heightM": 28.4,
+          "crownBaseM": 11.22,
           "tris": [
-            3696,
-            1000,
+            6692,
+            2498,
+            4
+          ]
+        },
+        {
+          "variant": "v3",
+          "label": "old",
+          "heightM": 33.4,
+          "crownBaseM": 15.2,
+          "tris": [
+            4734,
+            1754,
             4
           ]
         }

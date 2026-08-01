@@ -23,8 +23,22 @@ export interface PerfSample {
   frames: number;
 }
 
-/** Ring buffer of recent frame times. Sized for ~4 s at 60 fps. */
-const WINDOW = 240;
+/**
+ * Ring buffer of recent frame times.
+ *
+ * 240 frames (~4 s at 60 fps) was too short to be a CI gate. Headless, with
+ * vsync off, the forest scene runs at ~500 fps, so 240 frames is half a second
+ * of wall clock — one chunk build or one GC lands inside it and the p95 doubles.
+ * The recorded baseline had to be taken as the slowest of five runs to stop the
+ * 10 % regression gate flapping, which means the gate was measuring run-to-run
+ * noise and not the renderer.
+ *
+ * 900 frames covers the whole 6 s measurement window on mobile and ~2 s of it on
+ * desktop, which is long enough that a single hitch moves the p95 by a few per
+ * cent rather than by a factor. The adaptive scaler is unaffected: it reads the
+ * *median*, which was already stable, and it only acts once a second.
+ */
+const WINDOW = 900;
 
 export class PerfMonitor {
   private times = new Float32Array(WINDOW);

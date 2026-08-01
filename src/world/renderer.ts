@@ -25,9 +25,23 @@ import * as THREE from 'three';
 import type { Capabilities } from '@/core/capabilities';
 import { AdaptiveQuality, PerfMonitor } from '@/core/perf';
 
-/** Grey-olive, matched to the mid-distance canopy. Not white, not blue. */
-export const FOG_COLOUR_SUNNY = 0x7c8163;
-export const FOG_COLOUR_OVERCAST = 0x6e6a55;
+/**
+ * Grey-olive, matched to the mid-distance canopy. Not white, not blue.
+ *
+ * Darkened along with the lighting rig, and for a reason worth writing down:
+ * `FogExp2` mixes toward this colour in **linear** light, so its brightness has
+ * to be read against the scene it is fogging, not against a screenshot. At
+ * 0x7c8163 the fog colour is 0.21 linear while the corrected shaded forest floor
+ * is 0.015 — fourteen times darker. Nineteen per cent fog at 50 m therefore
+ * quadrupled the value of the distant ground and produced a pale beige plateau
+ * across the middle distance that looked exactly like a sunlit clearing and was
+ * nothing of the kind. It was, briefly, mistaken for one during this work.
+ *
+ * 0x4d5646 is 0.09 linear: still clearly a veil, still grey-olive, but no longer
+ * brighter than everything it sits in front of.
+ */
+export const FOG_COLOUR_SUNNY = 0x4d5646;
+export const FOG_COLOUR_OVERCAST = 0x53523f;
 
 export const EXPOSURE = 0.85;
 

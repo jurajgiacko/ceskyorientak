@@ -173,7 +173,12 @@ export class SkyRig {
     // reference's sunlit patches are bright but never blown. 2.1 puts the sun
     // patches just under the shoulder and leaves headroom for the god rays,
     // which add on top in linear light.
-    this.sun = new THREE.DirectionalLight(0xffeed2, opts.weather === 'sunny' ? 5.6 : 0.3);
+    // Raised with the hemisphere cut, and for the same measured reason: the
+    // shade sets the bottom of the range and the key has to reach the top of
+    // it. The terrain material gates this through a canopy-gap field whose mean
+    // is about 0.72, so the *average* lit fragment sees roughly the old 5.6
+    // while an actual pool sees a little over twice that.
+    this.sun = new THREE.DirectionalLight(0xffeed2, opts.weather === 'sunny' ? 9.5 : 0.3);
     this.sun.position.copy(this.sunDir).multiplyScalar(400);
     this.sun.castShadow = opts.weather === 'sunny';
     this.sun.shadow.mapSize.set(shadowMapSize, shadowMapSize);
@@ -198,20 +203,34 @@ export class SkyRig {
     // ground colour must be the warm brown of the litter, not green — the
     // bounce colour is what sells a forest floor.
     // Under a closed spruce canopy the sun reaches almost nothing, so the
-    // shaded floor is *entirely* this light. Too weak and the forest reads as
-    // a black hole with a bright hole in the roof; the reference floor is
-    // clearly legible moss. The blue is deliberately restrained — a strong
-    // blue skylight turns granite the colour of a swimming pool.
+    // shaded floor is *entirely* this light. The blue is deliberately
+    // restrained — a strong blue skylight turns granite the colour of a
+    // swimming pool.
+    //
+    // 3.6 was measured wrong, and it was the reason the whole frame read as
+    // washed. Worked through: moss at 0.074 effective linear albedo under a
+    // 3.6 hemisphere lands at ~0.036 scene luminance, which AgX at exposure
+    // 0.85 puts at roughly **0.40 display** — mid-grey. The backdrop
+    // reference's shaded floor is about 0.24 and its sunlit pools about 0.62.
+    // A fill that bright cannot produce that contrast no matter how strong the
+    // key is, because the key only ever *adds*: the shade sets the floor of the
+    // range and everything above it is compressed into what is left.
+    //
+    // 1.55 puts the shaded moss near 0.25 display and takes the shade-to-sun
+    // ratio from about 3:1 to about 9:1, which is where the reference sits.
+    // This is the single largest change in the lighting rig and it is a
+    // measurement correction, not a mood choice.
     this.hemi = new THREE.HemisphereLight(
       opts.weather === 'sunny' ? 0xa7bcd2 : 0xedeae4,
       0x4a4130,
-      opts.weather === 'sunny' ? 3.6 : 2.2,
+      opts.weather === 'sunny' ? 1.75 : 2.0,
     );
     this.group.add(this.hemi);
 
     // A whisper of ambient so the deepest canopy shadow keeps some colour
-    // instead of clipping to black under AgX's very soft toe.
-    this.ambient = new THREE.AmbientLight(0x38412c, opts.weather === 'sunny' ? 1.1 : 0.5);
+    // instead of clipping to black under AgX's very soft toe. Scaled with the
+    // hemisphere above — it is a floor under the fill, not an independent look.
+    this.ambient = new THREE.AmbientLight(0x38412c, opts.weather === 'sunny' ? 0.5 : 0.45);
     this.group.add(this.ambient);
   }
 

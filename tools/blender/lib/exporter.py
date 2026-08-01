@@ -15,12 +15,19 @@ from . import mesh as M
 
 def export_glb(objects, path, draco=True, draco_level=6, position_bits=14,
                normal_bits=10, texcoord_bits=12, apply_modifiers=True,
-               extras=True):
+               extras=True, vertex_color=None, vertex_color_name=None,
+               color_bits=10):
     """Export exactly `objects` (and nothing else) to `path`.
 
     Draco is worth it for the high-poly natural assets and actively harmful
     for the tiny props (header overhead exceeds the savings), so callers pass
     the flag per asset.
+
+    `vertex_color` maps to the exporter's own enum -- MATERIAL (default: only
+    what the shader graph actually reads), ACTIVE, NAME or NONE. Assets that
+    bake occlusion into a colour attribute should pass NAME plus the layer
+    name: relying on MATERIAL means a refactor of the node graph can silently
+    drop COLOR_0 and the model just gets flatter, with nothing to fail on.
     """
     objects = [o for o in objects if o is not None]
     os.makedirs(os.path.dirname(path), exist_ok=True)
@@ -65,7 +72,12 @@ def export_glb(objects, path, draco=True, draco_level=6, position_bits=14,
             export_draco_position_quantization=position_bits,
             export_draco_normal_quantization=normal_bits,
             export_draco_texcoord_quantization=texcoord_bits,
+            export_draco_color_quantization=color_bits,
         )
+    if vertex_color is not None:
+        kwargs["export_vertex_color"] = vertex_color
+    if vertex_color_name is not None:
+        kwargs["export_vertex_color_name"] = vertex_color_name
 
     bpy.ops.export_scene.gltf(**kwargs)
     return path

@@ -471,6 +471,8 @@ export class TerrainMesh {
     const nrm = new Float32Array(vertCount * 3);
     const uv = new Float32Array(vertCount * 2);
     const splat = new Float32Array(vertCount * 4);
+    // Curvature occlusion, one float per vertex. See the loop below.
+    const curv = new Float32Array(vertCount);
 
     let minY = Infinity;
     let maxY = -Infinity;
@@ -493,14 +495,45 @@ export class TerrainMesh {
         pos[k * 3 + 1] = y;
         pos[k * 3 + 2] = wz;
 
-        const g = f.gradientAt(wx, wz);
+        // Height samples around the vertex, reused twice: once for the normal
+        // (central difference) and once for the curvature term. Sharing them is
+        // why the AO below is nearly free — it is four extra samples per vertex,
+        // not the twelve a proper hemisphere occlusion sweep would want.
+        const d = f.hMeta.resM;
+        const hxp = f.heightAt(wx + d, wz);
+        const hxm = f.heightAt(wx - d, wz);
+        const hzp = f.heightAt(wx, wz + d);
+        const hzm = f.heightAt(wx, wz - d);
+
         // Normal of y = h(x,z) is (-dh/dx, 1, -dh/dz), normalised.
-        const nx = -(g[0] as number);
-        const nz = -(g[1] as number);
+        const nx = -(hxp - hxm) / (2 * d);
+        const nz = -(hzp - hzm) / (2 * d);
         const inv = 1 / Math.hypot(nx, 1, nz);
         nrm[k * 3] = nx * inv;
         nrm[k * 3 + 1] = inv;
         nrm[k * 3 + 2] = nz * inv;
+
+        // Curvature occlusion. The Laplacian of the heightfield is positive on
+        // a ridge and negative in a hollow, and a hollow is exactly where light
+        // does not reach: re-entrants, the inside of a gully, the base of a
+        // slope break. Two scales — 1 m catches the micro-relief the 1 m raster
+        // resolves, 7 m catches the landform. Without this the floor is one flat
+        // value across a whole hillside and reads as a painted plane no matter
+        // how good the texture on it is.
+        const lapFine = (hxp + hxm + hzp + hzm) * 0.25 - h;
+        const D = 7;
+        const lapWide =
+          (f.heightAt(wx + D, wz) +
+            f.heightAt(wx - D, wz) +
+            f.heightAt(wx, wz + D) +
+            f.heightAt(wx, wz - D)) *
+            0.25 -
+          h;
+        // Negative Laplacian = hollow. Clamped hard so a cliff edge does not
+        // punch a black hole, and biased so convex ground is only slightly lit.
+        const hollow = Math.min(1, Math.max(0, -lapFine * 6 + -lapWide * 0.55));
+        const ridge = Math.min(1, Math.max(0, lapFine * 4 + lapWide * 0.35));
+        curv[k] = 1 - hollow * 0.55 + ridge * 0.1;
 
         uv[k * 2] = wx;
         uv[k * 2 + 1] = wz;
@@ -545,6 +578,7 @@ export class TerrainMesh {
     geo.setAttribute('normal', new THREE.BufferAttribute(nrm, 3));
     geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
     geo.setAttribute('splat', new THREE.BufferAttribute(splat, 4));
+    geo.setAttribute('curv', new THREE.BufferAttribute(curv, 1));
     geo.setIndex(new THREE.BufferAttribute(idx.subarray(0, p), 1));
 
     // Explicit bounds — the skirt would otherwise inflate them downward and
@@ -615,11 +649,18 @@ function smoothSplat(splat: Float32Array, gn: number): void {
  * Find a spot that actually looks like the reference: mature closed canopy,
  * away from the valley floor and the town.
  *
- * The Lachovice AOI is centred on Loučovice in the Vltava valley, so world
- * (0,0) is a street. Hunting for the best forest cell means the camera opens on
- * spruce regardless of where a venue's origin happens to land.
+ * **This is now a safety net, not the mechanism.** The Lachovice origin used to
+ * be a street in Loučovice, so world (0,0) was tarmac and this function had to
+ * go hunting up to 900 m for somewhere plausible. The origin has since been
+ * re-chosen from the built raster (98.7 % forest, 0 % road inside 400 m), so the
+ * expected answer is now "near (0,0)".
+ *
+ * It is kept because the venue origin is a config value and a future one may
+ * again land badly — but the radius is down to 260 m and there is a distance
+ * penalty, so it corrects a bad spawn without silently relocating the scene
+ * half a kilometre from the venue anchor.
  */
-export function findForestSpawn(field: TerrainField, searchRadius = 900): THREE.Vector2 {
+export function findForestSpawn(field: TerrainField, searchRadius = 260): THREE.Vector2 {
   let best = new THREE.Vector2(0, 0);
   let bestScore = -Infinity;
   const step = 20;
@@ -647,6 +688,11 @@ export function findForestSpawn(field: TerrainField, searchRadius = 900): THREE.
       const g = field.gradientAt(x, z);
       const slope = Math.hypot(g[0] as number, g[1] as number);
       score += Math.min(slope, 0.35) * 12;
+
+      // Stay near the venue anchor unless the ground there is genuinely bad.
+      // Without this the search wanders to whatever the single best cell in the
+      // radius happens to be, and the scene silently stops being *this* venue.
+      score -= Math.hypot(x, z) / 40;
 
       if (score > bestScore) {
         bestScore = score;

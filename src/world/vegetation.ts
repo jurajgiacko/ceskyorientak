@@ -254,9 +254,14 @@ export interface SpeciesMix {
 export const MIX: Readonly<Record<Runnability, SpeciesMix>> = {
   [Runnability.Road]: { density: 0, beechShare: 0, boulders: 0, deadwood: 0, undergrowth: 0, scale: 1 },
   [Runnability.Path]: { density: 0, beechShare: 0, boulders: 0, deadwood: 0, undergrowth: 0.05, scale: 1 },
-  [Runnability.OpenFast]: { density: 0.0015, beechShare: 0.28, boulders: 0.0006, deadwood: 0, undergrowth: 0.55, scale: 1 },
-  [Runnability.OpenRough]: { density: 0.004, beechShare: 0.2, boulders: 0.004, deadwood: 0.001, undergrowth: 1.5, scale: 0.85 },
-  [Runnability.ForestOpen]: { density: 0.042, beechShare: 0.03, boulders: 0.004, deadwood: 0.004, undergrowth: 0.75, scale: 1 },
+  [Runnability.OpenFast]: { density: 0.0015, beechShare: 0.28, boulders: 0.0006, deadwood: 0, undergrowth: 1.1, scale: 1 },
+  [Runnability.OpenRough]: { density: 0.004, beechShare: 0.2, boulders: 0.004, deadwood: 0.001, undergrowth: 1.9, scale: 0.85 },
+  // Raised from 0.75. ISOM white is "runnable forest", not "bare forest": a
+  // mature Sumava spruce stand still has a near-continuous bilberry and moss
+  // layer under it — what makes it runnable is that there is nothing above
+  // knee height, which is exactly what this layer's geometry now models. At
+  // 0.75 the floor of a white stand was visibly balder than the reference.
+  [Runnability.ForestOpen]: { density: 0.042, beechShare: 0.03, boulders: 0.004, deadwood: 0.004, undergrowth: 1.4, scale: 1 },
   [Runnability.Green1]: { density: 0.075, beechShare: 0.07, boulders: 0.004, deadwood: 0.008, undergrowth: 2.0, scale: 0.85 },
   [Runnability.Green2]: { density: 0.13, beechShare: 0.1, boulders: 0.003, deadwood: 0.012, undergrowth: 3.4, scale: 0.7 },
   [Runnability.Green3]: { density: 0.24, beechShare: 0.12, boulders: 0.002, deadwood: 0.016, undergrowth: 5.2, scale: 0.5 },
@@ -406,6 +411,17 @@ export interface VegetationOptions {
 const VEG_CHUNK_M = 40;
 
 /**
+ * Undergrowth uses its own, much smaller chunk.
+ *
+ * The ground ring is 27 m but the tree chunk is 40 m, so sharing the grid meant
+ * generating a 120 m square of tufts to fill a 27 m disc — at the density this
+ * layer now runs, that is five times the work and five times the retained
+ * memory for nothing. 20 m plus an exact chunk-to-camera distance test keeps
+ * the overdraw of *generation* to about 2×.
+ */
+const GROUND_CHUNK_M = 20;
+
+/**
  * The vegetation layer.
  *
  * Instances are generated per 40 m chunk from a chunk-seeded PRNG, cached while
@@ -511,24 +527,50 @@ export class Vegetation {
    * cost about the same, antialias properly, and never crawl. The trade is that
    * they read as tufts rather than fronds, which for the moss-and-bilberry
    * floor of a Šumava spruce stand is the right tuft anyway.
+   *
+   * ---------------------------------------------------------------------------
+   * Three things were wrong with the previous clump and all three had to change
+   * together, because fixing any one of them alone leaves the others visible.
+   * ---------------------------------------------------------------------------
+   *
+   *  1. **Value.** It was the *brightest* thing on the floor. Undergrowth under
+   *     a closed spruce canopy is in permanent shade and is darker than the moss
+   *     it grows out of; painting it lighter is what turned every clump into a
+   *     pale speck. The tip is now well under the rendered moss albedo (~0.08
+   *     linear) and the root is at roughly a third of that.
+   *  2. **Normals.** They pointed 0.9 up, so every blade caught the full
+   *     hemisphere exactly like the ground did, only with a lighter albedo. They
+   *     are now lateral-biased, which both darkens the clump in shade and gives
+   *     it a silhouette instead of a flat plate.
+   *  3. **Size.** Roughly half the previous height and a third of the width, so
+   *     a clump is a tuft rather than an object. The density that makes it read
+   *     as a mat comes from `generateUndergrowth`'s clustering, not from
+   *     enlarging the geometry.
+   *
+   * The base ring is pushed *below* y=0 so the contact with the ground is buried
+   * rather than drawn. A visible base edge is the single clearest "this was
+   * placed on top of the terrain" tell there is.
    */
   private buildUndergrowth(tier: QualityTier): void {
-    const blades = tier === 'low' ? 4 : 7;
+    const blades = tier === 'low' ? 3 : 5;
     const pos: number[] = [];
     const nrm: number[] = [];
     const col: number[] = [];
     const idx: number[] = [];
 
+    /** Sunk below the origin so the blade emerges from the moss, not onto it. */
+    const BURY = 0.022;
+
     const rnd = mulberry32(0x5eed);
     for (let b = 0; b < blades; b++) {
-      const angle = (b / blades) * Math.PI * 2 + rnd() * 0.7;
+      const angle = (b / blades) * Math.PI * 2 + rnd() * 1.1;
       // Splayed low rosette, not upright blades. Lean > 1 means the tip travels
       // further sideways than up, which is what turns a clump of quads from
       // "spikes stuck in the ground" into "something growing on the floor".
       // The upright version was the single worst-looking thing in the scene.
-      const lean = 0.55 + rnd() * 0.6;
-      const height = 0.07 + rnd() * 0.1;
-      const halfW = 0.032 + rnd() * 0.026;
+      const lean = 0.8 + rnd() * 0.95;
+      const height = 0.05 + rnd() * 0.062;
+      const halfW = 0.011 + rnd() * 0.011;
       const dx = Math.cos(angle);
       const dz = Math.sin(angle);
       // Perpendicular, so the blade is not edge-on from its own lean direction.
@@ -539,31 +581,40 @@ export class Vegetation {
       const tipZ = dz * lean * height;
       const base = pos.length / 3;
 
-      pos.push(-px, 0, -pz, px, 0, pz, tipX * 0.6 - px * 0.4, height * 0.62, tipZ * 0.6 - pz * 0.4);
-      pos.push(tipX * 0.6 + px * 0.4, height * 0.62, tipZ * 0.6 + pz * 0.4, tipX, height, tipZ);
+      pos.push(
+        -px, -BURY, -pz,
+        px, -BURY, pz,
+        tipX * 0.6 - px * 0.42, height * 0.6, tipZ * 0.6 - pz * 0.42,
+      );
+      pos.push(
+        tipX * 0.6 + px * 0.42, height * 0.6, tipZ * 0.6 + pz * 0.42,
+        tipX, height, tipZ,
+      );
 
+      // Lateral-biased. See the header: an up-facing normal makes a blade a
+      // small piece of extra-bright ground, which is exactly what it must not be.
       const nx = -dz;
       const nz = dx;
-      for (let i = 0; i < 5; i++) nrm.push(nx * 0.35, 0.9, nz * 0.35);
+      // 0.4 up was too far: in a sunlit glade the tufts caught almost no key
+      // light while the moss around them caught all of it, and they went back to
+      // reading as specks — black ones this time. 0.55 keeps them under the
+      // ground's value without turning them into silhouettes.
+      const inv = 1 / Math.hypot(nx * 0.85, 0.55, nz * 0.85);
+      for (let i = 0; i < 5; i++) nrm.push(nx * 0.85 * inv, 0.55 * inv, nz * 0.85 * inv);
 
-      // Darker at the root, lighter at the tip — the cheapest possible AO and
-      // the thing that stops a tuft reading as a flat green splinter.
-      // Moss/bilberry green pulled toward olive, matching the RESEARCH-VIDEO
-      // §5.2 palette target (H 64–77°, S ~43 %). Root darker than tip: the
-      // cheapest AO there is, and the thing that stops a clump reading flat.
-      // Matched to the moss layer's own mid-tone, not chosen in isolation.
-      // Tuned darker on the first pass and the clumps read as black holes
-      // punched in the carpet — the mat has to sit *within* the ground's value
-      // range or it stops being ground cover and starts being litter.
-      // Values measured against the rendered moss, not picked in isolation: the
-      // tufts have to sit slightly *under* the floor's value or every one of
-      // them reads as a pale speck and the mid-ground turns to confetti.
-      const tint = 0.7 + rnd() * 0.45;
-      col.push(0.075 * tint, 0.09 * tint, 0.04 * tint);
-      col.push(0.075 * tint, 0.09 * tint, 0.04 * tint);
-      col.push(0.135 * tint, 0.16 * tint, 0.07 * tint);
-      col.push(0.135 * tint, 0.16 * tint, 0.07 * tint);
-      col.push(0.17 * tint, 0.2 * tint, 0.088 * tint);
+      // Root → tip gradient, the cheapest AO there is. The root value is the
+      // *floor's* value, so the bottom of the blade dissolves into the moss and
+      // there is no boundary where the geometry starts. Only the top third is
+      // allowed to lift, and even that stays under the ground albedo.
+      // For scale: the rendered moss sits at about 0.074 effective linear
+      // albedo. The tip is ~0.8 of that and the root ~0.35, so the tuft is
+      // always the darker of the two without ever becoming a hole.
+      const tint = 0.72 + rnd() * 0.5;
+      col.push(0.026 * tint, 0.028 * tint, 0.014 * tint);
+      col.push(0.026 * tint, 0.028 * tint, 0.014 * tint);
+      col.push(0.038 * tint, 0.043 * tint, 0.021 * tint);
+      col.push(0.038 * tint, 0.043 * tint, 0.021 * tint);
+      col.push(0.058 * tint, 0.068 * tint, 0.031 * tint);
 
       idx.push(base, base + 1, base + 2, base + 1, base + 3, base + 2);
       idx.push(base + 2, base + 3, base + 4);
@@ -578,12 +629,16 @@ export class Vegetation {
 
     const mat = new THREE.MeshStandardMaterial({
       vertexColors: true,
-      roughness: 0.92,
+      roughness: 0.96,
       metalness: 0,
       side: THREE.DoubleSide,
     });
 
-    const capacity = tier === 'low' ? 3000 : 16000;
+    // Sized so the ring does not clip. It measured 22 000 instances inside the
+    // 27 m radius at the densities above, and clipping is not graceful: the
+    // overflow is dropped in Map iteration order, which took a bite out of the
+    // mid-ground rather than thinning evenly.
+    const capacity = tier === 'low' ? 8000 : 32000;
     this.undergrowthMesh = new THREE.InstancedMesh(geo, mat, capacity);
     this.undergrowthMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     this.undergrowthMesh.frustumCulled = false;
@@ -725,35 +780,90 @@ export class Vegetation {
     return { boulders, deadwood };
   }
 
+  /**
+   * Undergrowth placement — clusters, not a scatter.
+   *
+   * The previous version was a uniform Poisson field at ~0.7 tufts/m², and a
+   * uniform field is *why* the layer read as scattered objects: the eye is very
+   * good at picking individual items out of an even distribution and very bad at
+   * picking them out of a patch. Real bilberry, wavy hair-grass and fern grow in
+   * colonies with bare needle litter between them, and reproducing that is worth
+   * more than any amount of per-blade modelling.
+   *
+   * So: cluster centres are drawn against a noise field (patchy patchiness),
+   * members are packed inside a small disc at ~35/m², and everything outside a
+   * cluster is bare. The mean over the ring lands near 4/m² — six times the old
+   * density — while costing about the same, because the geometry is a fifth of
+   * the size.
+   *
+   * Per-instance lean, scale and yaw are all randomised. The uniform uprightness
+   * of the previous pass was, by itself, a large part of what read as fake.
+   */
   private generateUndergrowth(cx: number, cz: number): Placement[] {
     const f = this.field;
     const rnd = mulberry32((cx * 40503) ^ (cz * 12582917));
-    const x0 = cx * VEG_CHUNK_M;
-    const z0 = cz * VEG_CHUNK_M;
+    const x0 = cx * GROUND_CHUNK_M;
+    const z0 = cz * GROUND_CHUNK_M;
     const out: Placement[] = [];
+    const area = GROUND_CHUNK_M * GROUND_CHUNK_M;
+    const g: [number, number] = [0, 0];
 
-    // Cap at 2.2 tufts/m². The MIX table goes to 5.2 for a Green3 thicket, but
-    // past ~2 they stop reading as individual plants and the cost is linear, so
-    // the extra density buys nothing but frame time.
-    const peak = 3.4;
-    const candidates = Math.round(peak * VEG_CHUNK_M * VEG_CHUNK_M * this.densityScale);
-    for (let i = 0; i < candidates; i++) {
-      const x = x0 + rnd() * VEG_CHUNK_M;
-      const z = z0 + rnd() * VEG_CHUNK_M;
-      const mix = MIX[f.runnabilityAt(x, z)];
+    /** Candidate colonies per m². Most are rejected by the patch noise. */
+    const CLUSTER_RATE = 0.5;
+    /** Members per m² *inside* a colony. This is what makes it a mat. */
+    const PACKING = 34;
+
+    const clusters = Math.round(CLUSTER_RATE * area * this.densityScale);
+    for (let c = 0; c < clusters; c++) {
+      const ccx = x0 + rnd() * GROUND_CHUNK_M;
+      const ccz = z0 + rnd() * GROUND_CHUNK_M;
+      const mix = MIX[f.runnabilityAt(ccx, ccz)];
       if (mix.undergrowth <= 0) continue;
-      if (rnd() > Math.min(1, mix.undergrowth / peak)) continue;
-      const g = f.gradientAt(x, z);
-      out.push({
-        x,
-        z,
-        y: f.heightAt(x, z),
-        scale: (0.7 + rnd() * 0.55) * (0.8 + Math.min(mix.undergrowth, 4) * 0.09),
-        rotY: rnd() * Math.PI * 2,
-        variant: 0,
-        tiltX: -(g[1] as number) * 0.5,
-        tiltZ: (g[0] as number) * 0.5,
-      });
+
+      // Two-octave patch field. Without it the *colonies* end up evenly spread,
+      // which just moves the uniformity up one level of scale.
+      const patch =
+        0.62 * valueNoise(ccx / 7.5 + 91.3, ccz / 7.5 - 44.1) +
+        0.38 * valueNoise(ccx / 2.6 - 17.9, ccz / 2.6 + 63.2);
+      const accept = Math.min(1, mix.undergrowth * 0.55) * (patch * 1.4 - 0.18);
+      if (rnd() > accept) continue;
+
+      // One gradient per colony, not per member. Members sit inside ~1.5 m and
+      // the 1 m heightfield's gradient does not meaningfully change over that,
+      // so the per-member sample was five sixths of the generation cost for no
+      // visible difference.
+      f.gradientAt(ccx, ccz, g);
+      const radius = 0.35 + rnd() * rnd() * 1.5;
+      const thickness = 0.7 + Math.min(mix.undergrowth, 4) * 0.12;
+      const members = Math.max(
+        3,
+        Math.round(PACKING * Math.PI * radius * radius * thickness * (0.6 + rnd() * 0.8)),
+      );
+      for (let i = 0; i < members; i++) {
+        // t^1.5 in radius: uniform-in-disc would give a flat pancake, this keeps
+        // a denser core with a ragged edge, which is how a colony actually ends.
+        const t = rnd();
+        const r = radius * t * Math.sqrt(t);
+        const a = rnd() * Math.PI * 2;
+        const x = ccx + Math.cos(a) * r;
+        const z = ccz + Math.sin(a) * r;
+        // Lean is squared-random so most tufts are near-upright and a minority
+        // flop hard — a flat random lean makes the whole patch look wind-blown.
+        const leanDir = rnd() * Math.PI * 2;
+        const leanMag = rnd() * rnd() * 0.6;
+        out.push({
+          x,
+          z,
+          y: f.heightAt(x, z),
+          // 0.5–1.75×, skewed small: a colony is mostly young low growth with a
+          // few established plants standing out of it.
+          scale: 0.5 + Math.pow(rnd(), 1.5) * 1.25,
+          rotY: rnd() * Math.PI * 2,
+          variant: 0,
+          tiltX: -(g[1] as number) * 0.6 + Math.cos(leanDir) * leanMag,
+          tiltZ: (g[0] as number) * 0.6 + Math.sin(leanDir) * leanMag,
+        });
+      }
     }
     return out;
   }
@@ -808,15 +918,26 @@ export class Vegetation {
       this.scatterCache.delete(key);
     }
 
-    // Undergrowth lives in a much tighter ring, cached separately.
-    const gReach = Math.ceil(this.groundRadius / VEG_CHUNK_M);
+    // Undergrowth lives in a much tighter ring, on its own finer grid, cached
+    // separately. The AABB test is exact rather than a corner-distance
+    // approximation, because at 20 m chunks a sloppy test doubles the count.
+    const gReach = Math.ceil(this.groundRadius / GROUND_CHUNK_M) + 1;
+    const gi = Math.floor(camera.position.x / GROUND_CHUNK_M);
+    const gj = Math.floor(camera.position.z / GROUND_CHUNK_M);
     const gWanted = new Set<string>();
     for (let dj = -gReach; dj <= gReach; dj++) {
       for (let di = -gReach; di <= gReach; di++) {
-        const key = `${ci + di}|${cj + dj}`;
+        const gx = gi + di;
+        const gz = gj + dj;
+        const ax = gx * GROUND_CHUNK_M;
+        const az = gz * GROUND_CHUNK_M;
+        const dx = Math.max(ax - camera.position.x, 0, camera.position.x - (ax + GROUND_CHUNK_M));
+        const dz = Math.max(az - camera.position.z, 0, camera.position.z - (az + GROUND_CHUNK_M));
+        if (dx * dx + dz * dz > this.groundRadius * this.groundRadius) continue;
+        const key = `${gx}|${gz}`;
         gWanted.add(key);
         if (!this.undergrowthCache.has(key)) {
-          this.undergrowthCache.set(key, this.generateUndergrowth(ci + di, cj + dj));
+          this.undergrowthCache.set(key, this.generateUndergrowth(gx, gz));
         }
       }
     }
@@ -923,14 +1044,16 @@ export class Vegetation {
           const dz = p.z - cam.z;
           const d2 = dx * dx + dz * dz;
           if (d2 > ground2) continue;
-          // Shrink out over the last quarter of the ring instead of popping.
+          // Shrink out over the last third of the ring instead of popping.
           // The fog is far too thin at 40 m to hide a hard edge, and a circle
           // of grass ending around the player is the most obvious tell there is.
-          const fade = 1 - THREE.MathUtils.smoothstep(Math.sqrt(d2) / this.groundRadius, 0.5, 1);
-          if (fade <= 0.02) continue;
+          // Uniform, not Y-only: squashing the height alone left a band of
+          // flattened tufts that read as a different plant.
+          const fade = 1 - THREE.MathUtils.smoothstep(Math.sqrt(d2) / this.groundRadius, 0.62, 1);
+          if (fade <= 0.03) continue;
           this.tmpPos.set(p.x, p.y, p.z);
           this.tmpQuat.setFromEuler(this.tmpEuler.set(p.tiltX, p.rotY, p.tiltZ));
-          this.tmpScale.set(p.scale, p.scale * fade, p.scale);
+          this.tmpScale.setScalar(p.scale * fade);
           this.tmpMatrix.compose(this.tmpPos, this.tmpQuat, this.tmpScale);
           mesh.setMatrixAt(n++, this.tmpMatrix);
         }

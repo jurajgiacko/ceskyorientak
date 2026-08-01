@@ -54,7 +54,11 @@ export const BUDGETS = {
   'control-stand': 800,
   'si-unit': 500,
   'boulder-set': 9000,
-  spruce: 12000,
+  // Four variants, and the two big ones carry 10-15 m of bare bole with a
+  // 12-sided fluted trunk and dead stubs on it. That bole is the single most
+  // looked-at surface in the game — it is what a stand of these reads as at eye
+  // level — so it gets the geometry rather than the crown. ~4.7 k per variant.
+  spruce: 20000,
   beech: 11000,
   deadwood: 3600,
   // First-person prop: never instanced and always seen close up, so it gets a

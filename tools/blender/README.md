@@ -132,6 +132,13 @@ legs and truss members clean.
   the exception: their LOD1 is *rebuilt* with fewer, larger foliage cards
   (decimation destroys cards), and their LOD2 is a crossed-quad billboard
   imposter textured from an orthographic render of LOD0.
+- **Vertex colour is a legitimate channel** and `spruce` uses it: crown
+  occlusion is baked into `COLOR_0`, which glTF multiplies into base colour and
+  three.js honours for free. Two things it needs. The Blender-side multiply must
+  use the 4.x `ShaderNodeMix` (data_type RGBA) — the legacy `MixRGB` makes the
+  exporter drop `baseColorFactor` to white, silently. And `export_glb` should be
+  passed `vertex_color="NAME"`, so the attribute is exported because the asset
+  says so rather than because the shader graph happens to read it.
 - **Draco** is enabled per asset in `build.mjs`'s `DRACO` set — on for the dense
   natural assets, off for small props where the container overhead exceeds the
   saving.
@@ -174,14 +181,14 @@ _Generated 2026-08-01 by `node tools/blender/validate.mjs --write-readme`._
 | `boulder-set` | 8520 | 12780 (LOD0:8520 LOD1:3408 LOD2:852) | 18 | 4 | 0 | 141.8 KB | yes | OK |
 | `control-flag` | 464 | 703 (LOD0:464 LOD1:184 LOD2:55) | 3 | 4 | 0 | 38.4 KB | no | OK |
 | `control-stand` | 756 | 1146 (LOD0:756 LOD1:302 LOD2:88) | 3 | 2 | 0 | 43.8 KB | no | OK |
-| `deadwood` | 3046 | 4596 (LOD0:3046 LOD1:1216 LOD2:334) | 9 | 4 | 0 | 82.3 KB | yes | OK |
+| `deadwood` | 3038 | 4582 (LOD0:3038 LOD1:1212 LOD2:332) | 9 | 4 | 0 | 83.1 KB | yes | OK |
 | `finish-gantry` | 1728 | 2404 (LOD0:1728 LOD1:676) | 2 | 3 | 0 | 36.4 KB | yes | OK |
 | `race-belt` | 880 | 880 (LOD0:880) | 1 | 3 | 0 | 38.3 KB | no | OK |
 | `si-unit` | 450 | 684 (LOD0:450 LOD1:180 LOD2:54) | 3 | 3 | 0 | 39.6 KB | no | OK |
 | `spectator-fence` | 480 | 721 (LOD0:480 LOD1:191 LOD2:50) | 3 | 2 | 0 | 48.2 KB | no | OK |
-| `spruce` | 11840 | 15264 (LOD0:11840 LOD1:3412 LOD2:12) | 9 | 6 | 5 | 398.9 KB | yes | OK |
+| `spruce` | 18904 | 26178 (LOD0:18904 LOD1:7258 LOD2:16) | 12 | 7 | 6 | 988.6 KB | yes | OK |
 
-**Total: 11 assets, 39916 LOD0 triangles, 1392.7 KB on disk.**
+**Total: 11 assets, 46972 LOD0 triangles, 1983.2 KB on disk.**
 <!-- VALIDATION_TABLE_END -->
 
 Preview sheets for every asset are in [`previews/`](previews/), rendered from
@@ -200,7 +207,7 @@ Enforced by `validate.mjs`; exceeding one fails the build.
 | `control-stand` | 800 | instanced per control |
 | `si-unit` | 500 | instanced per control |
 | `boulder-set` | 9000 | 6 variants, ~1500 each |
-| `spruce` | 12000 | 3 variants, ~4000 each |
+| `spruce` | 20000 | 4 variants, ~4700 each |
 | `beech` | 11000 | 3 variants |
 | `deadwood` | 3600 | 3 variants |
 | `race-belt` | 1000 | first-person prop, LOD0 only |
@@ -209,9 +216,11 @@ Enforced by `validate.mjs`; exceeding one fails the build.
 | `spectator-fence` | 600 | tiles along +X |
 
 The per-asset numbers deliberately sum to more than the global cap so one asset
-can borrow another's slack. The **global ceiling of 40,000 LOD0 triangles** is
+can borrow another's slack. The **global ceiling of 60,000 LOD0 triangles** is
 what is actually enforced (`TOTAL_LOD0_BUDGET` in `validate.mjs`), because these
 are instanced heavily across the terrain and the sum is what the frame pays for.
+Library size is a VRAM cost, not a frame cost — per-frame is governed by
+`tools/perf/`, which measures instance count × the LOD actually drawn.
 
 ## Runtime notes
 
@@ -221,7 +230,20 @@ are instanced heavily across the terrain and the sum is what the frame pays for.
   (albedo/normal/roughness/ao) should be bound by material name on load —
   embedding them per asset would have added megabytes to every tree, whereas
   bound at runtime one texture set serves every trunk in the forest. Trunk UVs
-  are cylinder-projected and tile along the trunk axis, so they are ready for it.
+  are cylinder-projected and tile along the trunk axis (spruce: 0.7 m per
+  vertical tile against two round the circumference, which is roughly square on
+  the visible part of the bole), so they are ready for it.
+
+  **This binding is not actually happening yet.** `conditionAssetMaterial` in
+  `src/world/materials.ts` only reaches for the shared pack when a material has
+  *no* map, and only for `rock`/`wood` — `spruce_bark` has the embedded 256 px
+  albedo and classifies as `bark`, so it never gets the normal or roughness map.
+  Now that mature spruce carry 10 m of bare bole and the player runs within a
+  metre of them, that trunk is the most-looked-at surface in the game and it is
+  running on a flat 256 px albedo. Binding `detail.bark`'s normal + roughness by
+  material name (keeping the embedded albedo, or swapping in the 1k one) is the
+  single biggest remaining win on this asset and it is a runtime change, not a
+  pipeline one.
 - **`spectator-fence` tiles at `repeatPitchX = 2.5 m`** along +X (in the
   manifest). Consecutive instances overlap only where the hook and eye interlock.
 - **`finish-gantry`'s banner is single-sided**, so brand art reads un-mirrored
@@ -250,6 +272,17 @@ are instanced heavily across the terrain and the sum is what the frame pays for.
 - **Blender can crash under heavy parallelism.** Four concurrent instances
   segfaulted once during glTF export; the same asset built fine alone. `--jobs 2`
   is the safe setting on an 8-core machine.
+- **`ShaderNodeMixRGB` breaks `baseColorFactor`.** Multiplying a Color Attribute
+  into Base Color through the legacy MixRGB node makes the glTF exporter give up
+  on finding the factor and write `[1,1,1,1]`. On a textured material you never
+  notice; on an untextured one the surface turns *white*. The spruce deadwood
+  stubs shipped as a ring of white spikes under every crown for one build.
+  The 4.x `ShaderNodeMix` with `data_type="RGBA"` exports correctly.
+- **An angle-based cylinder projection leaves a smeared seam facet.** `atan2`
+  wraps, so the one column of quads spanning the wrap gets U running 1.99 → 0.0
+  and samples the entire texture backwards into one twelfth of the trunk. Not
+  visible in a turntable; very visible running past a 28 m bole. `close_uv_seam`
+  in `assets/spruce.py` is the fix, and any future trunk wants it.
 
 ## Known limitations
 
@@ -260,6 +293,13 @@ are instanced heavily across the terrain and the sum is what the frame pays for.
   vertex-colour mask rather than material slots.
 - `deadwood`'s exposed bare wood currently reads slightly too bleached against
   its bark.
+- `spruce`'s embedded bark albedo is 256 px, which is soft inside about 2 m.
+  See the runtime note above: the fix is binding the shipped 1k `bark-spruce`
+  set by material name, not growing the `.glb` (the map alone would be ~600 kB
+  in every copy of the tree).
+- `spruce` LOD1 reads a shade lighter than LOD0 — larger cards mean less
+  card-on-card occlusion for the same vertex colours. It is close enough that
+  the 36 m swap is not obvious, but it is not exact.
 
 ## Interactive Blender (optional)
 

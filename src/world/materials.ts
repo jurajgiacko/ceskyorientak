@@ -34,10 +34,21 @@ export const GROUND_LAYERS = [
   'dirt-path',
   'meadow-grass',
   'granite-lichen',
+  // Layer 5 has no splat channel of its own. It is mixed in by the shader's
+  // noise fields out of the moss/needle pool — see `floorBreakup` below. The
+  // Šumava floor is not one surface, and painting it as one is what made the
+  // ground read as a flat texture no matter what was drawn on top of it.
+  'forest-floor-leaf',
 ] as const;
 
-/** World metres covered by one tile of each layer. Bigger = less obvious repeat. */
-const LAYER_TILING_M = [2.2, 2.6, 3.0, 2.6, 3.4] as const;
+/**
+ * World metres covered by one tile of each layer. Bigger = less obvious repeat.
+ *
+ * Deliberately not all the same, and deliberately not related by small integer
+ * ratios: layers on commensurate tilings beat against each other and produce a
+ * third, larger, and very visible periodicity.
+ */
+const LAYER_TILING_M = [2.2, 2.6, 3.0, 2.6, 3.4, 1.9] as const;
 
 /**
  * Per-layer albedo gain.
@@ -50,7 +61,22 @@ const LAYER_TILING_M = [2.2, 2.6, 3.0, 2.6, 3.4] as const;
  *
  * These are not a look — they are a units correction on the source textures.
  */
-const LAYER_GAIN = [0.5, 0.42, 0.5, 0.5, 0.58] as const;
+/*
+ * Measured mean linear albedo of each source texture, for the record, because
+ * the numbers below are only meaningful against them:
+ *
+ *   moss     0.174 0.157 0.020     needles  0.230 0.188 0.118
+ *   dirt     0.326 0.206 0.115     meadow   0.181 0.179 0.056
+ *   granite  0.286 0.299 0.233     leaf     0.272 0.129 0.065
+ *
+ * Note how much *lighter and warmer* needles, dirt and leaf are than moss. Any
+ * mosaic that mixes them at equal gain therefore drifts the floor toward beige,
+ * and the first pass at the noise breakup did exactly that: a Šumava spruce
+ * floor came out looking like a dune. These gains bring all four into the same
+ * value band as the moss so the mosaic changes *hue and texture* without
+ * changing the value of the ground, which is what a real forest floor does.
+ */
+const LAYER_GAIN = [0.5, 0.3, 0.3, 0.46, 0.5, 0.3] as const;
 
 function textureSize(tier: QualityTier): 256 | 512 | 1024 {
   return tier === 'low' ? 256 : tier === 'medium' ? 512 : 1024;
@@ -227,7 +253,9 @@ export function createTerrainMaterial(
         /* glsl */ `
         #include <common>
         attribute vec4 splat;
+        attribute float curv;
         varying vec4 vSplat;
+        varying float vCurv;
         varying vec3 vWorldPos;
         varying vec3 vWorldNrm;
         `,
@@ -237,6 +265,7 @@ export function createTerrainMaterial(
         /* glsl */ `
         #include <worldpos_vertex>
         vSplat = splat;
+        vCurv = curv;
         vWorldPos = ( modelMatrix * vec4( transformed, 1.0 ) ).xyz;
         vWorldNrm = normalize( mat3( modelMatrix ) * objectNormal );
         `,
@@ -255,6 +284,7 @@ export function createTerrainMaterial(
         uniform float uLayerScale[ ${GROUND_LAYERS.length} ];
         uniform float uLayerGain[ ${GROUND_LAYERS.length} ];
         varying vec4 vSplat;
+        varying float vCurv;
         varying vec3 vWorldPos;
         varying vec3 vWorldNrm;
 
@@ -283,6 +313,31 @@ export function createTerrainMaterial(
         }
         float macroVariation( vec2 p ) {
           return 0.78 + 0.30 * vnoise( p / 21.0 ) + 0.14 * vnoise( p / 6.5 + 17.3 );
+        }
+
+        // --- floor breakup ---------------------------------------------------
+        // The splat weights arrive from the runnability raster, which is a hard
+        // per-class label — so a whole stand of ForestOpen came out as one
+        // constant mix of moss and needles, i.e. a flat texture. Real ground is
+        // mosaic at every scale: moss where it is damp and shaded, needle litter
+        // under the crowns, beech leaf drifted into the hollows, bare mineral
+        // soil scuffed through on the rises.
+        //
+        // Three octaves, roughly 17 m / 5 m / 1.6 m, redistribute the moss+
+        // needle pool between four surfaces without touching the *total*, so the
+        // class still governs how much forest floor there is — only the mixture
+        // within it varies. That keeps D-002 intact: the map still tells the
+        // truth about runnability.
+        //
+        // 1.6 m matters as much as 17 m. Without the fine octave the mosaic is
+        // correct but too smooth, and smooth mosaic still reads as a gradient
+        // rather than as litter.
+        vec3 floorNoise( vec2 p ) {
+          return vec3(
+            vnoise( p / 17.0 + 4.1 ),
+            vnoise( p / 5.0 - 28.7 ),
+            vnoise( p / 1.6 + 61.4 )
+          );
         }
 
         // Triplanar weights, sharpened so the blend band is narrow enough not
@@ -363,6 +418,43 @@ export function createTerrainMaterial(
         float w[ LAYERS ];
         w[0] = sw.x * inv; w[1] = sw.y * inv; w[2] = sw.z * inv;
         w[3] = sw.w * inv; w[4] = wRock * inv;
+        w[5] = 0.0;
+
+        // --- mosaic ----------------------------------------------------------
+        {
+          vec3 fn = floorNoise( vWorldPos.xz );
+          float pool = w[0] + w[1];
+          if ( pool > 0.01 ) {
+            // Where in the moss-to-needle range this fragment sits. The class mean
+            // is the centre; the noise swings a long way either side of it, so a
+            // ForestOpen stand contains genuinely mossy and genuinely bare-litter
+            // ground rather than one average of the two.
+            // The swing has to stay modest. At 1.7 it saturated to pure needle
+            // litter over about 40 % of the ground, and since needle litter is
+            // the lighter surface the stand read as beige rather than as moss.
+            // Moss stays the majority surface — that is what Sumava is.
+            float mean = w[1] / pool;
+            float swing = fn.x * 0.62 + fn.y * 0.26 + fn.z * 0.12 - 0.5;
+            float needleFrac = clamp( mean + swing * 1.0, 0.0, 1.0 );
+
+            // Leaf litter drifts: it wants the *hollows* (low curvature term)
+            // and a high mid-scale noise. Capped low — this is Sumava spruce, a
+            // beech-litter floor would put the venue in the wrong region (D-007).
+            float leafFrac = smoothstep( 0.58, 0.92, fn.y * 0.65 + fn.z * 0.35 )
+                           * smoothstep( 1.0, 0.72, vCurv ) * 0.45;
+
+            // Bare mineral soil scuffed through on the fine octave's peaks. This
+            // is what puts actual gaps in the ground cover, which is what makes
+            // the undergrowth clusters read as clusters.
+            float bareFrac = smoothstep( 0.82, 0.97, fn.z * 0.7 + fn.x * 0.3 ) * 0.2;
+
+            float rest = 1.0 - leafFrac - bareFrac;
+            w[0] = pool * rest * ( 1.0 - needleFrac );
+            w[1] = pool * rest * needleFrac;
+            w[5] = pool * leafFrac;
+            w[2] += pool * bareFrac;
+          }
+        }
 
         vec3 accAlbedo = vec3( 0.0 );
         vec3 accNormal = vec3( 0.0 );
@@ -376,9 +468,105 @@ export function createTerrainMaterial(
           accRough  += s.rough  * w[ i ];
         }
 
-        diffuseColor.rgb *= accAlbedo * macroVariation( vWorldPos.xz );
+        // Curvature occlusion from the heightfield (see terrain.ts). Tinted
+        // rather than neutral: the light that survives into a hollow has bounced
+        // off moss and litter on the way in, so it arrives green-brown. A flat
+        // grey multiply here reads as dirt, not as shadow.
+        float ao = clamp( vCurv, 0.35, 1.12 );
+        vec3 aoTint = mix( vec3( 0.72, 0.80, 0.62 ), vec3( 1.0 ), smoothstep( 0.55, 1.0, ao ) );
+
+        diffuseColor.rgb *= accAlbedo * macroVariation( vWorldPos.xz ) * ao * aoTint;
         vec3 blendedNormal = normalize( accNormal );
         float blendedRough = accRough;
+        `,
+      )
+      .replace(
+        '#include <lights_fragment_end>',
+        /* glsl */ `
+        #include <lights_fragment_end>
+        {
+          // --- warm sunlit pools ---------------------------------------------
+          // The shafts already work; what was missing is *where they land*. In
+          // the reference the contrast between the cold shaded floor and the
+          // warm pools is most of the image, and it is not something the shadow
+          // map gives you for free — a shadow map gives you a hard-edged patch
+          // of the same light that lit everything else.
+          //
+          // Two things happen here, and only to the direct term, so the shaded
+          // floor is untouched and this costs nothing where it would be wrong:
+          //
+          //  1. The sun contribution is pushed warm. Sunlight that has come
+          //     through a spruce canopy is genuinely warmer than the blue
+          //     skylight filling the shade, and the split is what makes the pool
+          //     read as sunlight rather than as a bright spot.
+          //  2. It is gated by a canopy-gap field, which is the part that
+          //     actually creates pools. Measured before this existed: the sun
+          //     raised the *whole* visible floor from 0.106 to 0.288 display and
+          //     left 0.4 % of it above 0.45 — uniformly, weakly lit ground with
+          //     no structure at all. The backdrop reference runs its shaded moss
+          //     at 0.11–0.21 and its sunlit moss at 0.375 mean with peaks past
+          //     0.9, i.e. mostly dark with a bright minority.
+          //
+          //     The shadow map cannot produce that on its own. It resolves the
+          //     trunks and the crown silhouettes but nothing of the needle
+          //     structure *inside* a crown, and a spruce crown is mostly hole.
+          //     So the direct term is multiplied by a gap field at 7 m and 2.3 m
+          //     (the openings) and broken up at 0.62 m (needle shadow inside an
+          //     opening). It does not align with the near trunks, and it should
+          //     not: in a mature stand the light on the floor comes from gaps
+          //     twenty metres up, which is why real dapple never lines up with
+          //     the trees you are standing next to.
+          //
+          //     The real shadow map still multiplies on top, so a trunk still
+          //     casts its own shadow across a pool.
+          //
+          //     The gate is deliberately narrow and high. A gentle one
+          //     (0.40 to 0.74) left the gap field sitting at 0.4-0.6 across most
+          //     of the ground, which is not a pool, it is a haze: measured mean
+          //     0.31 display against the reference's 0.135. Two smoothed value
+          //     noises sum to something tightly clustered around 0.5, so the
+          //     threshold has to sit well out on the shoulder to keep the lit
+          //     fraction near a fifth, which is about what a closed spruce stand
+          //     lets through.
+          //
+          //     Three octaves, not two. At two the pools came out as long smooth
+          //     bands running across the slope - correctly placed, wrong shape.
+          //     The 1.1 m octave is what turns a band into dapple.
+          vec2 pp = vWorldPos.xz;
+          float gap = 0.45 * vnoise( pp / 9.0 + 3.3 )
+                    + 0.33 * vnoise( pp / 3.2 - 11.7 )
+                    + 0.22 * vnoise( pp / 1.1 + 27.4 );
+          float pool = smoothstep( 0.46, 0.68, gap );
+          float fine = 0.62 + 0.76 * vnoise( pp / 0.62 + 5.1 );
+          // Peak gain is the number that decides whether a pool is sunlight or a
+          // hole in the exposure. At 1.9 the pools clipped to a desaturated
+          // near-white around 0.85 display and read as sand; the reference's
+          // sunlit moss sits at 0.375 mean and keeps its colour all the way up.
+          // Losing the hue is worse than losing the brightness, because the warm
+          // pool against the cold shade *is* the effect.
+          float canopyLight = 0.03 + 1.65 * pool * fine;
+          reflectedLight.directDiffuse *= vec3( 1.17, 1.0, 0.66 ) * canopyLight;
+
+          // The specular has to be gated by the *same* field, and damped hard.
+          // Measured: a sunlit pool came out at rgb(105,101,91) — the right
+          // brightness (the reference's sunlit moss is rgb(106,97,54)) and
+          // almost none of the colour. MeshStandardMaterial's fixed F0 of 0.04
+          // puts a neutral, light-coloured specular lobe on the ground, and
+          // against a moss albedo whose blue channel is 0.010 linear that lobe
+          // *is* the blue channel. It was also completely ungated, so ground the
+          // canopy field had put in shade still carried a full sun highlight.
+          //
+          // Moss and needle litter are as close to Lambertian as natural
+          // surfaces get. 0.3 is generous.
+          reflectedLight.directSpecular *= canopyLight * 0.3;
+          reflectedLight.indirectSpecular *= 0.3;
+
+          // A pool lights its own surroundings. Feeding a little of the direct
+          // term back as warm indirect is a one-line stand-in for the bounce
+          // that makes sunlit moss glow rather than merely be bright.
+          reflectedLight.indirectDiffuse +=
+            reflectedLight.directDiffuse * vec3( 0.26, 0.19, 0.08 );
+        }
         `,
       )
       .replace(
@@ -489,8 +677,11 @@ export function conditionAssetMaterial(
     m.roughnessMap = pack[2] ?? null;
     m.normalScale.set(0.8, 0.8);
     // The flat factor was doing all the work before; lift it so the texture is
-    // not multiplied down into mud.
-    m.color.multiplyScalar(kind === 'rock' ? 2.4 : 2.0);
+    // not multiplied down into mud. 2.4/2.0 was too far the other way: granite
+    // at 0.29 linear albedo lifted that much is brighter than anything else in
+    // the frame, and a boulder that out-values the canopy reads as a polystyrene
+    // prop. Šumava granite under lichen is a dark, cool grey.
+    m.color.multiplyScalar(kind === 'rock' ? 1.45 : 1.0);
   }
 
   switch (kind) {

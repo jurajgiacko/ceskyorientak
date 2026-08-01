@@ -156,8 +156,9 @@ export class ForestScene {
     this.scene.add(this.terrain.group);
 
     // --- camera ---
-    // The venue origin is a street in Loučovice, so drop the camera in the best
-    // forest the raster can find instead of at (0,0). See terrain.ts.
+    // The venue origin is now chosen from the raster and is deep forest, so this
+    // normally returns something within a chunk or two of (0,0). Kept as a
+    // safety net for a future origin that lands badly — see terrain.ts.
     this.spawn = findForestSpawn(this.field);
 
     // --- vegetation ---
