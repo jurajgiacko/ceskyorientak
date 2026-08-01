@@ -689,17 +689,32 @@ export interface DetailTextures {
   granite: THREE.Texture[];
   bark: THREE.Texture[];
   /**
-   * Normal + roughness for a trunk that already carries its own albedo.
+   * The spruce trunk pack: albedo, normal, roughness at the trunk's own repeat.
    *
    * Separate from `bark` because the repeat differs and a `THREE.Texture`
-   * carries its own. `spruce.glb` embeds a downsampled `bark-spruce` albedo and
-   * authors the trunk UVs against it 1:1 — the asset script says so in as many
-   * words ("bound by NAME at runtime, which swaps in the full
-   * normal/roughness/ao set"). So these must be at repeat 1.0 or the fissures in
-   * the normal map will not sit on the fissures in the albedo.
+   * carries its own. `spruce.glb` authors the trunk UVs at 0.7 m per vertical
+   * tile against two tiles round the circumference — on a 25 cm-radius bole that
+   * is 0.79 m round against 0.7 m up, i.e. very nearly square. So the pack must
+   * be at repeat 1.0: anything else both stretches the grain and slides the
+   * fissures in the normal map off the fissures in the albedo.
+   *
+   * These are `clone()`s of the `bark` textures, not a second load. A clone
+   * shares its `source`, so this costs one extra uv-transform and *no* extra
+   * fetch or GPU upload — which the previous two-`loadAsync` version was paying
+   * twice over for the same 1k normal map.
    */
   barkTrunk: THREE.Texture[];
 }
+
+/**
+ * The gain `bake_bark_png` bakes in when it downsamples the shared spruce
+ * albedo into the .glb (tools/blender/assets/spruce.py, "it now only takes the
+ * edge off"). Swapping that embedded 256 px map for the full-resolution one has
+ * to reapply the gain, or every bole in the forest jumps ~19 % brighter than the
+ * asset was tuned at. Linear, because `m.color` multiplies the sampled albedo in
+ * linear space — same space Blender's `img.pixels` gain was applied in.
+ */
+const BARK_BAKE_GAIN = new THREE.Color(0.84, 0.84, 0.85);
 
 let detail: DetailTextures | null = null;
 
@@ -723,21 +738,27 @@ export async function loadDetailTextures(tier: QualityTier): Promise<DetailTextu
     t.anisotropy = 8;
     return t;
   };
+  // Same image, different uv transform. `clone()` shares `source`, so the
+  // renderer uploads the texture once however many repeats we need off it.
+  const atRepeat1 = (t: THREE.Texture): THREE.Texture => {
+    const c = t.clone();
+    c.repeat.set(1, 1);
+    return c;
+  };
+
+  const bark = await Promise.all([
+    grab('bark-spruce', 'albedo', true, 1.6),
+    grab('bark-spruce', 'normal', false, 1.6),
+    grab('bark-spruce', 'roughness', false, 1.6),
+  ]);
   detail = {
     granite: await Promise.all([
       grab('granite-boulder', 'albedo', true, 0.42),
       grab('granite-boulder', 'normal', false, 0.42),
       grab('granite-boulder', 'roughness', false, 0.42),
     ]),
-    bark: await Promise.all([
-      grab('bark-spruce', 'albedo', true, 1.6),
-      grab('bark-spruce', 'normal', false, 1.6),
-      grab('bark-spruce', 'roughness', false, 1.6),
-    ]),
-    barkTrunk: await Promise.all([
-      grab('bark-spruce', 'normal', false, 1),
-      grab('bark-spruce', 'roughness', false, 1),
-    ]),
+    bark,
+    barkTrunk: bark.map(atRepeat1),
   };
   return detail;
 }
@@ -912,12 +933,36 @@ export function conditionAssetMaterial(
 ): THREE.Material {
   if (!(mat instanceof THREE.MeshStandardMaterial)) return mat;
   const m = mat;
+
+  // Run once per material, not once per mesh — the same reason
+  // `applyCanopyLight` carries its own guard, but with a quieter failure mode.
+  //
+  // A glTF material instance is shared by every primitive that references it,
+  // so `loadAsset`'s per-mesh traverse hands us the same `spruce_bark` once per
+  // variant × LOD. Most of what follows is idempotent; the `m.color` multiplies
+  // are not. They compound, and unlike a duplicated shader patch nothing errors
+  // — the colour is simply wrong and stays wrong.
+  //
+  // Measured off the running scene before this guard: `beech_bark` took its
+  // 0.55 darkening six times and arrived at 0.030, a black slab rather than the
+  // pale bole that branch exists to produce. Granite took its 1.25 lift eight
+  // times. Every one of those constants was tuned by eye against the reference,
+  // so raising them to the eighth power makes the tuning meaningless.
+  const state = m.userData as { conditioned?: boolean };
+  if (state.conditioned) return m;
+  state.conditioned = true;
+
   m.metalness = 0;
   m.envMapIntensity = kind === 'foliage' ? 0.55 : 0.75;
 
   // Untextured assets get the shared detail maps. The base colour factor stays
   // as the tint, so the granite palette the modeller chose per variant survives.
-  if (!m.map && detail && (kind === 'rock' || kind === 'wood')) {
+  // `bark` belongs here as much as `wood` does. `deadwood.glb` names its two
+  // surfaces `dw_wood` and `dw_bark`, and only the first classified into this
+  // branch — so the *bark* on a fallen log rendered as a flat brown factor while
+  // the stripped wood beside it got the full bark pack. A log lying across the
+  // route is near-field furniture the player runs straight past, so it showed.
+  if (!m.map && detail && (kind === 'rock' || kind === 'wood' || kind === 'bark')) {
     const pack = kind === 'rock' ? detail.granite : detail.bark;
     m.map = pack[0] ?? null;
     m.normalMap = pack[1] ?? null;
@@ -955,8 +1000,20 @@ export function conditionAssetMaterial(
       // Spruce only. `beech_bark` is authored against `bark-beech`, and putting
       // spruce fissures on a smooth beech bole would be worse than flat.
       if (m.map && detail && /spruce/i.test(m.name)) {
-        m.normalMap = detail.barkTrunk[0] ?? null;
-        m.roughnessMap = detail.barkTrunk[1] ?? null;
+        // The albedo goes too, not just the relief. The embedded one is 256 px
+        // for a surface the player stands a metre from — it is the blurriest
+        // thing in the near field once the 1k normal map is sharpening the
+        // fissures around it, and the mismatch reads as a decal on a smooth
+        // pole. The .glb only carries that map so the asset looks right opened
+        // standalone; the whole point of binding by material name is that the
+        // runtime can do better. Reapply the bake gain so the value does not
+        // move — see `BARK_BAKE_GAIN`.
+        if (detail.barkTrunk[0]) {
+          m.map = detail.barkTrunk[0];
+          m.color.multiply(BARK_BAKE_GAIN);
+        }
+        m.normalMap = detail.barkTrunk[1] ?? null;
+        m.roughnessMap = detail.barkTrunk[2] ?? null;
         // Full strength. Spruce bark is deeply fissured and this is the only
         // surface relief a bole has; the terrain's 0.55 exists to avoid fighting
         // the heightfield, which does not apply here.

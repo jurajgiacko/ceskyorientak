@@ -234,16 +234,28 @@ Library size is a VRAM cost, not a frame cost — per-frame is governed by
   vertical tile against two round the circumference, which is roughly square on
   the visible part of the bole), so they are ready for it.
 
-  **This binding is not actually happening yet.** `conditionAssetMaterial` in
-  `src/world/materials.ts` only reaches for the shared pack when a material has
-  *no* map, and only for `rock`/`wood` — `spruce_bark` has the embedded 256 px
-  albedo and classifies as `bark`, so it never gets the normal or roughness map.
-  Now that mature spruce carry 10 m of bare bole and the player runs within a
-  metre of them, that trunk is the most-looked-at surface in the game and it is
-  running on a flat 256 px albedo. Binding `detail.bark`'s normal + roughness by
-  material name (keeping the embedded albedo, or swapping in the 1k one) is the
-  single biggest remaining win on this asset and it is a runtime change, not a
-  pipeline one.
+  **This binding now happens.** `conditionAssetMaterial` in
+  `src/world/materials.ts` takes `spruce_bark` by name and swaps in the full
+  `detail.barkTrunk` set — albedo, normal and roughness, all at repeat 1.0 to
+  match the cylinder projection. The embedded 256 px albedo is therefore only
+  what makes the `.glb` look right opened standalone; nothing renders it in
+  game, so it is free to shrink further if the payload ever needs it.
+
+  Two things to know before touching that path:
+
+  - **The trunk pack must stay at repeat 1.0.** `detail.bark` is at 1.6 for
+    cube-projected surfaces (deadwood, branches) and is the wrong pack for a
+    bole. At 1.6 the grain both stretches and slides the normal-map fissures
+    off the albedo's.
+  - **Swapping the albedo has to reapply `bake_bark_png`'s gain.** The embedded
+    map is the shared one times (0.84, 0.84, 0.85); the full-resolution file is
+    not. `BARK_BAKE_GAIN` in `materials.ts` puts it back, so the bole's value is
+    unchanged and only its sharpness improves.
+
+  `beech_bark` is deliberately left on its embedded albedo with no relief:
+  `bark-beech` ships a normal/roughness set that would suit it, but binding it
+  costs another ~1 MB of texture for a minority tree in a Šumava spruce stand.
+  Spruce fissures are *not* an acceptable substitute there.
 - **`spectator-fence` tiles at `repeatPitchX = 2.5 m`** along +X (in the
   manifest). Consecutive instances overlap only where the hook and eye interlock.
 - **`finish-gantry`'s banner is single-sided**, so brand art reads un-mirrored
