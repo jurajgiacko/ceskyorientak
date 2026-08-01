@@ -29,6 +29,14 @@ import { writeFile } from 'node:fs/promises';
 
 const AGS2 = 'https://ags.cuzk.gov.cz/arcgis2/rest/services';
 const AGS1 = 'https://ags.cuzk.gov.cz/arcgis1/services';
+/**
+ * ZABAGED is a *third* instance, and the service is `ZABAGED_POLOHOPIS`, not
+ * `zabaged`. Getting either wrong returns HTTP 404 for every layer id, which
+ * looks exactly like "that layer does not exist in this AOI" — a silent
+ * failure that ships an empty vector overlay. The URL below is the one in
+ * RESEARCH-GEODATA §4 and is re-verified by the terrain build on every run.
+ */
+const AGS_ZABAGED = 'https://ags.cuzk.gov.cz/arcgis/rest/services/ZABAGED_POLOHOPIS/MapServer';
 
 /** ArcGIS caps a single export at this many pixels on the long edge. */
 export const MAX_EXPORT_PX = 4100;
@@ -159,7 +167,7 @@ export async function queryZabaged(layerId, bbox, { resultOffset = 0, pageSize =
     f: 'geojson',
   });
 
-  const res = await fetch(`${AGS2}/zabaged/MapServer/${layerId}/query?${params}`, {
+  const res = await fetch(`${AGS_ZABAGED}/${layerId}/query?${params}`, {
     headers: { 'User-Agent': UA },
   });
   if (!res.ok) throw new Error(`ZABAGED layer ${layerId} failed: HTTP ${res.status}`);

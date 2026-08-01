@@ -11,7 +11,7 @@
       "supercompression": 1,
       "webpBytes": 646142,
       "ktx2Bytes": 253323,
-      "psnr": null,
+      "psnr": 25.43,
       "maxErr": null
     },
     {
@@ -25,7 +25,7 @@
       "supercompression": 2,
       "webpBytes": 723104,
       "ktx2Bytes": 1132941,
-      "psnr": null,
+      "psnr": 33.191,
       "maxErr": null
     },
     {
@@ -39,7 +39,7 @@
       "supercompression": 1,
       "webpBytes": 44266,
       "ktx2Bytes": 138895,
-      "psnr": null,
+      "psnr": 45.367,
       "maxErr": null
     },
     {
@@ -53,9 +53,9 @@
       "supercompression": 1,
       "webpBytes": 407706,
       "ktx2Bytes": 216430,
-      "psnr": null,
+      "psnr": 26.999,
       "maxErr": null
     }
   ],
-  "generatedAt": "2026-08-01T11:10:33.727Z"
+  "generatedAt": "2026-08-01T11:13:03.185Z"
 }

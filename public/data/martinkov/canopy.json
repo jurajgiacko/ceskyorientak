@@ -1,0 +1,9 @@
+{
+  "format": "uint8",
+  "width": 1201,
+  "height": 1201,
+  "resM": 2,
+  "originX": -1200,
+  "originZ": -1200,
+  "maxCanopyM": 60
+}

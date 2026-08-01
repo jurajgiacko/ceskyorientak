@@ -1,0 +1,21 @@
+{
+  "format": "uint8",
+  "width": 601,
+  "height": 601,
+  "resM": 4,
+  "originX": -1200,
+  "originZ": -1200,
+  "classes": {
+    "0": "Road",
+    "1": "Path",
+    "2": "OpenFast",
+    "3": "OpenRough",
+    "4": "ForestOpen",
+    "5": "Green1",
+    "6": "Green2",
+    "7": "Green3",
+    "8": "Marsh",
+    "9": "Rock",
+    "10": "Impassable"
+  }
+}

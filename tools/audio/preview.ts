@@ -439,6 +439,7 @@ function rmsDbRange(x: Float64Array, sampleRate: number, fromS: number, toS: num
 async function selfTest(): Promise<void> {
   const mod = await import('@/audio');
   const SR = 48000;
+  console.log('[selftest] module loaded');
 
   // 1. setTargetAtTime, the case the Node polyfill gets wrong.
   {
@@ -473,7 +474,9 @@ async function selfTest(): Promise<void> {
         glycogen: 1,
       });
     }
-    rows[g] = analyse(await ctx.startRendering());
+    const rendered = await ctx.startRendering();
+    rows[g] = analyse(rendered);
+    console.log(`[selftest] footstep ${g}: centroid ${rows[g]?.centroidHz} Hz`);
   }
   console.log('[selftest] footsteps');
   console.table(rows);
@@ -526,11 +529,12 @@ async function selfTest(): Promise<void> {
     }
     const out = await ctx.startRendering();
     const m = toMono(out);
-    const win = (a: number, b: number): Measured & { lrCorr: number; rms: number } => ({
-      ...analyse(out),
-      rms: rmsDbRange(m, SR, a, b),
-      lrCorr: lrCorrelation(out, a, b),
+    const win = (a: number, b: number): { rmsDb: number; centroidHz: number; lrCorr: number } => ({
+      rmsDb: rmsDbRange(m, SR, a, b),
       centroidHz: centroidOf(m.slice(Math.round(a * SR), Math.round(b * SR)), SR),
+      // 0 = wide, 1 = mono. The M/S width collapse is visible here and nowhere
+      // else — a level meter cannot see it.
+      lrCorr: lrCorrelation(out, a, b),
     });
     console.log('[selftest] map duck — level down, centroid down, L/R correlation up');
     console.table({

@@ -16,7 +16,8 @@
     "preview:models": "node tools/blender/build.mjs --previews",
     "perf": "node tools/perf/budget.mjs",
     "gen:pbr": "node tools/imagegen/pbr.mjs",
-    "gen:validate": "node tools/imagegen/validate.mjs"
+    "gen:validate": "node tools/imagegen/validate.mjs",
+    "audio:render": "node tools/audio/render.mjs"
   },
   "dependencies": {
     "three": "^0.180.0"

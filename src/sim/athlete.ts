@@ -266,7 +266,14 @@ export function parallelErrorRate(s: AthleteStats, ambiguity: number): number {
   const q = navigationQuality(s);
   // Rises sharply as quality falls — a tired orienteer in vague terrain is a
   // different animal from a fresh one in the same place.
-  return ambiguity * Math.pow(1 - q, 2.2) * 0.02;
+  //
+  // The coefficient is tuned by simulation (tools/sim/nav-check.mjs), not
+  // guessed. At 0.02 a tired athlete in ambiguous terrain took a parallel
+  // error on ~80% of long legs, which is far too often to be believable: a
+  // parallel error is a memorable disaster, not a routine event. At 0.006 it
+  // lands around 10–15% on a bad leg and ~40% on a genuinely awful one, which
+  // is closer to how often it actually ruins someone's race.
+  return ambiguity * Math.pow(1 - q, 2.2) * 0.006;
 }
 
 /**

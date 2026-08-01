@@ -1,0 +1,206 @@
+{
+  "venue": "martinkov",
+  "label": "Lachovice (permitted training terrain)",
+  "generatedAt": "2026-08-01T11:16:19.280Z",
+  "source": {
+    "elevation": "ČÚZK DMR 5G + DMP 1G via ArcGIS ImageServer exportImage",
+    "imagery": "ČÚZK Ortofoto ČR (WMS)",
+    "vectors": "ČÚZK ZABAGED",
+    "licence": "CC BY 4.0 — © ČÚZK. See docs/DATA_LICENCES.md"
+  },
+  "origin": {
+    "lon": 14.2536,
+    "lat": 48.6229
+  },
+  "playable": {
+    "sizeX": 2000,
+    "sizeZ": 2000
+  },
+  "skirtM": 200,
+  "sjtsk": {
+    "epsg": 5514,
+    "originX": -777253.9055027924,
+    "originY": -1202672.904506139,
+    "gridConvergenceDeg": -7.95260664798553,
+    "scale": 1.00011644737954
+  },
+  "tiers": {
+    "high": {
+      "height": "height.bin",
+      "runnability": "runnability.bin",
+      "canopy": "canopy.bin"
+    },
+    "medium": {
+      "height": "height.bin",
+      "runnability": "runnability.bin",
+      "canopy": "canopy.bin"
+    },
+    "low": {
+      "height": "height-low.bin",
+      "runnability": "runnability-low.bin",
+      "canopy": "canopy.bin"
+    }
+  },
+  "zabaged": [
+    {
+      "layer": 140,
+      "name": "forest with shrub layer",
+      "features": 7,
+      "cells": 2809
+    },
+    {
+      "layer": 141,
+      "name": "dwarf pine",
+      "features": 0,
+      "cells": 0
+    },
+    {
+      "layer": 139,
+      "name": "permanent grassland",
+      "features": 27,
+      "cells": 120229
+    },
+    {
+      "layer": 138,
+      "name": "arable land",
+      "features": 9,
+      "cells": 40351
+    },
+    {
+      "layer": 129,
+      "name": "landslide, scree",
+      "features": 0,
+      "cells": 0
+    },
+    {
+      "layer": 130,
+      "name": "rock formations",
+      "features": 2,
+      "cells": 2905
+    },
+    {
+      "layer": 93,
+      "name": "watercourse",
+      "features": 32,
+      "cells": 211343
+    },
+    {
+      "layer": 131,
+      "name": "marsh, swamp",
+      "features": 0,
+      "cells": 0
+    },
+    {
+      "layer": 16,
+      "name": "forest ride / firebreak",
+      "features": 39,
+      "cells": 493775
+    },
+    {
+      "layer": 82,
+      "name": "footpath",
+      "features": 16,
+      "cells": 49911
+    },
+    {
+      "layer": 150,
+      "name": "marked hiking route",
+      "features": 15,
+      "cells": 100204
+    },
+    {
+      "layer": 83,
+      "name": "track / unpaved road",
+      "features": 131,
+      "cells": 431999
+    },
+    {
+      "layer": 79,
+      "name": "road, motorway",
+      "features": 6,
+      "cells": 272316
+    },
+    {
+      "layer": 84,
+      "name": "street",
+      "features": 145,
+      "cells": 1174187
+    },
+    {
+      "layer": 132,
+      "name": "water body",
+      "features": 4,
+      "cells": 150967
+    },
+    {
+      "layer": 99,
+      "name": "building",
+      "features": 446,
+      "cells": 81854
+    }
+  ],
+  "files": [
+    {
+      "file": "height.bin",
+      "bytes": 11529602,
+      "gzipBytes": 10613848,
+      "sha256": "1c3a3e4f4a120145ebf206b70e11f92a93b02c2061393ceb59cbcaeee7456f50"
+    },
+    {
+      "file": "height.json",
+      "bytes": 204,
+      "gzipBytes": 160,
+      "sha256": "1a2821af90df7d32c5c6d8a8dd025ad3dc30a50d0fd85ba7c7d73c38a65665da"
+    },
+    {
+      "file": "runnability.bin",
+      "bytes": 5764801,
+      "gzipBytes": 244512,
+      "sha256": "5df8ec69799ab95ae3601766b4319f9cad23db88f3b83e941b3c74d970719e6d"
+    },
+    {
+      "file": "runnability.json",
+      "bytes": 612,
+      "gzipBytes": 305,
+      "sha256": "3fc700a24bc356407773f8a5aa626904cd3b2e874d85361cbee6b5735492a6d3"
+    },
+    {
+      "file": "canopy.bin",
+      "bytes": 1442401,
+      "gzipBytes": 997425,
+      "sha256": "79a7a80ba7748ada6d9d93dd4e3e99888263370cd543f8d9e668d29c723c6d99"
+    },
+    {
+      "file": "canopy.json",
+      "bytes": 131,
+      "gzipBytes": 110,
+      "sha256": "f7dd0cf9ef07f8b26b349455c69fbc9363672506a81b07f3bb51540a0091e5a7"
+    },
+    {
+      "file": "height-low.bin",
+      "bytes": 722402,
+      "gzipBytes": 686371,
+      "sha256": "222bf21a435192c16afa266129c8dac8ac5702280130a2c7a73dfb460bcd9626"
+    },
+    {
+      "file": "height-low.json",
+      "bytes": 200,
+      "gzipBytes": 159,
+      "sha256": "cdf6283d6221ec2f1a5fad9bfd8031b3d87d6771c21b3834ddc9aebde86484ba"
+    },
+    {
+      "file": "runnability-low.bin",
+      "bytes": 361201,
+      "gzipBytes": 44391,
+      "sha256": "9cff01f763d89bec9e06cff32d1c08eb0e7a5d21b3e6ac11b57b9aa03d9fc965"
+    },
+    {
+      "file": "runnability-low.json",
+      "bytes": 344,
+      "gzipBytes": 203,
+      "sha256": "39ba906282df8dfd26f2747b713e5ffbe530c67f91a23824ef1601ffddbc847f"
+    }
+  ],
+  "totalBytes": 19821898,
+  "totalGzipBytes": 12587484
+}
