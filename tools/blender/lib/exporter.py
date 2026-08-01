@@ -26,6 +26,13 @@ def export_glb(objects, path, draco=True, draco_level=6, position_bits=14,
     os.makedirs(os.path.dirname(path), exist_ok=True)
 
     vl = bpy.context.view_layer
+    # Required, not defensive. `join()` removes the source objects, and until
+    # the depsgraph catches up `view_layer.objects` still holds pointers to the
+    # freed ones — iterating it segfaults Blender inside ViewLayer_objects_next.
+    # Individual asset scripts were each working around this locally, which
+    # meant the next script written without the workaround would crash; the
+    # guard belongs here instead.
+    vl.update()
     for o in vl.objects:
         o.select_set(False)
     for o in objects:

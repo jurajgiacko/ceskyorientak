@@ -27,7 +27,26 @@ const MODELS = path.join(ROOT, 'public', 'models');
  * deliberately sum to more than this so one asset can borrow from another's
  * slack, but the total is still enforced.
  */
-export const TOTAL_LOD0_BUDGET = 40000;
+/**
+ * Total LOD0 triangles across the whole asset library.
+ *
+ * Raised from 40k to 60k deliberately. 40k was an initial guess, and it turned
+ * out to be the wrong *kind* of budget: these assets are GPU-instanced, so what
+ * costs frame time is instance count × the LOD actually drawn, not the size of
+ * the source library. Library size costs VRAM — roughly 50 kB per 1000 tris
+ * with normals and UVs — so the whole jump is about 1 MB against a 15 MB
+ * initial / 120 MB streamed budget.
+ *
+ * The cost of the tight ceiling was real and visible: the deadwood root plate
+ * had to be cut to ~1100 tris for a 3 m object and reads as a lumpy pan rather
+ * than a dense root ball, and its log lost two rings to afford the root web.
+ * Starving unique detail to protect a number that does not govern frame time is
+ * the wrong trade.
+ *
+ * Per-frame cost is governed by the perf budget in tools/perf/, which measures
+ * the thing that actually matters.
+ */
+export const TOTAL_LOD0_BUDGET = 60000;
 
 /** LOD0 triangle budget per asset (see README). */
 export const BUDGETS = {

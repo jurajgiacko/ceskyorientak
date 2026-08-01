@@ -1,0 +1,61 @@
+{
+  "rows": [
+    {
+      "id": "moss",
+      "map": "albedo",
+      "size": 1024,
+      "mode": "etc1s",
+      "levels": 11,
+      "w": 1024,
+      "h": 1024,
+      "supercompression": 1,
+      "webpBytes": 646142,
+      "ktx2Bytes": 253323,
+      "psnr": null,
+      "maxErr": null
+    },
+    {
+      "id": "moss",
+      "map": "normal",
+      "size": 1024,
+      "mode": "uastc",
+      "levels": 11,
+      "w": 1024,
+      "h": 1024,
+      "supercompression": 2,
+      "webpBytes": 723104,
+      "ktx2Bytes": 1132941,
+      "psnr": null,
+      "maxErr": null
+    },
+    {
+      "id": "moss",
+      "map": "roughness",
+      "size": 1024,
+      "mode": "etc1s",
+      "levels": 11,
+      "w": 1024,
+      "h": 1024,
+      "supercompression": 1,
+      "webpBytes": 44266,
+      "ktx2Bytes": 138895,
+      "psnr": null,
+      "maxErr": null
+    },
+    {
+      "id": "moss",
+      "map": "ao",
+      "size": 1024,
+      "mode": "etc1s",
+      "levels": 11,
+      "w": 1024,
+      "h": 1024,
+      "supercompression": 1,
+      "webpBytes": 407706,
+      "ktx2Bytes": 216430,
+      "psnr": null,
+      "maxErr": null
+    }
+  ],
+  "generatedAt": "2026-08-01T11:10:33.727Z"
+}
