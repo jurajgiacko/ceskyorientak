@@ -58,5 +58,13 @@
   "common.next": "Next",
   "common.cancel": "Cancel",
   "error.noWebgl": "Your browser does not support WebGL2. Try a current Chrome, Safari or Firefox.",
-  "brand.mainPartner": "Main partner"
+  "brand.mainPartner": "Main partner",
+  "race.route": "Route",
+  "race.routeChoice": "Route choice",
+  "race.parallelError": "Parallel error",
+  "race.relocation": "Relocate",
+  "race.attackPoint": "Attack point",
+  "race.catchingFeature": "Catching feature",
+  "race.timeLoss": "Time loss",
+  "race.startOfNav": "Start of navigation"
 }

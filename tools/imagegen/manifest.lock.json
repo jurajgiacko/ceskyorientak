@@ -4,7 +4,7 @@
   "assets": {
     "badge-clean-run": {
       "id": "badge-clean-run",
-      "fetched": true,
+      "fetched": false,
       "promptHash": "d9166d2f8683d3a1",
       "seed": 20202,
       "model": "gemini-2.5-flash-image",
@@ -17,20 +17,20 @@
       "outputs": [
         {
           "path": "public/art/badge/badge-clean-run.webp",
-          "bytes": 93904,
-          "sha256": "f57dff2f320b86c5ac85fbd312842ac2ead6251150dc7bb9522b0ff971620d25"
+          "bytes": 116872,
+          "sha256": "e1c7f1c60eaebc4171a4481745d6ad42373996b20503d0d3827830412a6f01f4"
         },
         {
           "path": "public/art/badge/badge-clean-run@half.webp",
-          "bytes": 25028,
-          "sha256": "86260c4fa36fab6a6e909ed0466ce8cdd34add058f1ee3cc1d2c97328655e15f"
+          "bytes": 32136,
+          "sha256": "6d5f4a3dead74a4da01321ad8e8a597eddf63a634587713596f26ba7eb29a7bc"
         }
       ],
-      "generatedAt": "2026-08-01T10:30:46.981Z"
+      "generatedAt": "2026-08-01T10:36:22.758Z"
     },
     "badge-first-control": {
       "id": "badge-first-control",
-      "fetched": true,
+      "fetched": false,
       "promptHash": "9722da6142979163",
       "seed": 20201,
       "model": "gemini-2.5-flash-image",
@@ -43,20 +43,20 @@
       "outputs": [
         {
           "path": "public/art/badge/badge-first-control.webp",
-          "bytes": 104436,
-          "sha256": "32c8fbd45a5471f4824ac36bc592ecfbeca225c5808bb11fd7a36e5825033d01"
+          "bytes": 135526,
+          "sha256": "44211394db39f13a67bad46d92b79415f9469e5ced3d310c88890f84accd21cb"
         },
         {
           "path": "public/art/badge/badge-first-control@half.webp",
-          "bytes": 28428,
-          "sha256": "a16850e5be0ae5316bb3c68dae25c4b30ee7c53fb38fe811bb6043624622cd76"
+          "bytes": 36438,
+          "sha256": "d9522b60a4d2adfdec34f36645efae89769b5c293bbceca58a56ca74c40fc77e"
         }
       ],
-      "generatedAt": "2026-08-01T10:30:42.534Z"
+      "generatedAt": "2026-08-01T10:36:22.675Z"
     },
     "badge-marsh-runner": {
       "id": "badge-marsh-runner",
-      "fetched": true,
+      "fetched": false,
       "promptHash": "f7fccf85d2533fa4",
       "seed": 20204,
       "model": "gemini-2.5-flash-image",
@@ -69,46 +69,46 @@
       "outputs": [
         {
           "path": "public/art/badge/badge-marsh-runner.webp",
-          "bytes": 70532,
-          "sha256": "f451f1a93bafbd7f37ac0eee12097c40250d801f6cf83132abc9365d0188a2a6"
+          "bytes": 93524,
+          "sha256": "1d0798ffe7d83929950917b83002bb87cb27300d5ffc22bec15bcfe4276aa0ae"
         },
         {
           "path": "public/art/badge/badge-marsh-runner@half.webp",
-          "bytes": 22748,
-          "sha256": "38e958df056b03acdc50d788190e57f68e1fc959f3d6325004607a9f04ff7d9f"
+          "bytes": 30764,
+          "sha256": "6fd1fd66cc37121068a9f92f114741a8dfcc5ce73da2b70557e0d0f93ccd91f5"
         }
       ],
-      "generatedAt": "2026-08-01T10:30:48.753Z"
+      "generatedAt": "2026-08-01T10:36:22.847Z"
     },
     "badge-night-owl": {
       "id": "badge-night-owl",
-      "fetched": true,
-      "promptHash": "bd117c5ffc4ca7de",
+      "fetched": false,
+      "promptHash": "d64ca71a907c3508",
       "seed": 20203,
       "model": "gemini-2.5-flash-image",
       "aspect": "1:1",
       "source": {
         "path": "tools/imagegen/.cache/badge-night-owl.png",
-        "bytes": 1269528,
-        "sha256": "035c58727d93e7550620ca0f050c39b09c9b57863e179760e8fa7deef5cd8b37"
+        "bytes": 1209679,
+        "sha256": "73f72c99b9e967d7febe80d3b9b55c68e69eb7c0b20aca077054b0eb20ce0488"
       },
       "outputs": [
         {
           "path": "public/art/badge/badge-night-owl.webp",
-          "bytes": 50686,
-          "sha256": "52840e0a5120aa056b99e3f2e3d23c207640060eec63941604a335acdde5be61"
+          "bytes": 59120,
+          "sha256": "792e68154a3ddcac9694f441397deecc618cfbebc4234217235e3f6b71c1da75"
         },
         {
           "path": "public/art/badge/badge-night-owl@half.webp",
-          "bytes": 14084,
-          "sha256": "4b977afad675d5edccaa28b0a971fbcc11195bc81533d6d95a06bf3b0245fdac"
+          "bytes": 19008,
+          "sha256": "7370d0643f20583c2b48ed8d3842308746639114efde60c699d449b48e12206a"
         }
       ],
-      "generatedAt": "2026-08-01T10:30:47.468Z"
+      "generatedAt": "2026-08-01T10:36:22.761Z"
     },
     "badge-sprint-krumlov": {
       "id": "badge-sprint-krumlov",
-      "fetched": true,
+      "fetched": false,
       "promptHash": "d7ea14d9cb766110",
       "seed": 20205,
       "model": "gemini-2.5-flash-image",
@@ -121,20 +121,20 @@
       "outputs": [
         {
           "path": "public/art/badge/badge-sprint-krumlov.webp",
-          "bytes": 88328,
-          "sha256": "12785ed62e22a6c9841038d77811c132a9fa4fbba21112843f30541f233bc91c"
+          "bytes": 112404,
+          "sha256": "686c7606c1e0277c8fe4cb77b686919714572642cd624534c37aa4bbb9ff29d3"
         },
         {
           "path": "public/art/badge/badge-sprint-krumlov@half.webp",
-          "bytes": 25390,
-          "sha256": "7b3749150988af49ba858ef0dfa0ab2b25ab6d9f356ba0c7b759f5c03cdc54bd"
+          "bytes": 32744,
+          "sha256": "5b6965ea860c75e24451669f5dcf1107099a2900cb32920a9e2a077f2e596bc5"
         }
       ],
-      "generatedAt": "2026-08-01T10:30:53.404Z"
+      "generatedAt": "2026-08-01T10:36:22.936Z"
     },
     "badge-summit-boulder": {
       "id": "badge-summit-boulder",
-      "fetched": true,
+      "fetched": false,
       "promptHash": "34a2a2ea9e48e301",
       "seed": 20206,
       "model": "gemini-2.5-flash-image",
@@ -147,16 +147,16 @@
       "outputs": [
         {
           "path": "public/art/badge/badge-summit-boulder.webp",
-          "bytes": 112024,
-          "sha256": "0901db3a2e783dfb879b3d94f949c2ab296d60a09c089afdcfaae1d62e3d3b92"
+          "bytes": 144308,
+          "sha256": "26fac75c13e114693ccffd5e83df57aad1c6d416cf168befe79f4c667223429e"
         },
         {
           "path": "public/art/badge/badge-summit-boulder@half.webp",
-          "bytes": 32442,
-          "sha256": "1c2bbc03b204b30466581eac6976d9097a412adb0279a4eb790b7a0b1258ac99"
+          "bytes": 39994,
+          "sha256": "b4a84ad0ef7c8763c16175db5e7efe4a813b7201c9da233eca55abcd596c038f"
         }
       ],
-      "generatedAt": "2026-08-01T10:30:53.934Z"
+      "generatedAt": "2026-08-01T10:36:22.926Z"
     },
     "bark-beech": {
       "id": "bark-beech",
@@ -617,78 +617,78 @@
     "granite-boulder": {
       "id": "granite-boulder",
       "fetched": true,
-      "promptHash": "857b109000fd65f2",
+      "promptHash": "647d142f4d36619e",
       "seed": 10201,
       "model": "gemini-2.5-flash-image",
       "aspect": "1:1",
       "source": {
         "path": "tools/imagegen/.cache/granite-boulder.png",
-        "bytes": 2357099,
-        "sha256": "d8d705201887649263318058d4046f163105a2129ca6f7b90ace50f816b1570a"
+        "bytes": 2286239,
+        "sha256": "59c413b5d57d5dc2f7184592cce40a8d3940a17bcb717a88b18a017efde21e05"
       },
       "outputs": [
         {
           "path": "public/textures/granite-boulder/albedo.webp",
-          "bytes": 595620,
-          "sha256": "2db2dbfa935bb89356ae733fd88f6a8f5246ee693837803a59c5f8d65d2d3aca"
+          "bytes": 566458,
+          "sha256": "e7629fc0ff087d54655761ef370a0ce4c3f3a4f317396b4f93217e7b15106a57"
         },
         {
           "path": "public/textures/granite-boulder/albedo@512.webp",
-          "bytes": 154970,
-          "sha256": "2c1f392ddc21523215547160ebfa56a98d4bdcefb06a2a7c166bb31a3fc2564d"
+          "bytes": 146494,
+          "sha256": "343499d69821e264aabbfcb34d32bedfe50f803368421808933bd1b62d576d01"
         },
         {
           "path": "public/textures/granite-boulder/albedo@256.webp",
-          "bytes": 37938,
-          "sha256": "b48211acf7cf2b14d0f22a3ef908e938351378db0b6979f4682d9be02bdb7632"
+          "bytes": 35812,
+          "sha256": "f32c2ff032eb3663e8c3456313949b88d2cefdc76a66b3ff378723136a0baa65"
         },
         {
           "path": "public/textures/granite-boulder/normal.webp",
-          "bytes": 436796,
-          "sha256": "3e6e2e6744c836899d25119d5ea7873fe81a5e7e7d49d979eab90ed5878cde08"
+          "bytes": 402368,
+          "sha256": "a86e528e31738cf486b950e7c7cdd46f0bef6fc51ede1a3b811fd7a025109172"
         },
         {
           "path": "public/textures/granite-boulder/normal@512.webp",
-          "bytes": 162840,
-          "sha256": "478605d3f2e5b7bdae48e519fd29a71fe1999a3e50a41e9d9d20f9fc3eeb1943"
+          "bytes": 153650,
+          "sha256": "0099201dfbafe8015c0d80d0f8f6adabc108fce882aa9dc99bc4305777f1d294"
         },
         {
           "path": "public/textures/granite-boulder/normal@256.webp",
-          "bytes": 42636,
-          "sha256": "ccf7307bffb47f337b435632ffea77325c3e4a911967ac0f48aa58fce304ea05"
+          "bytes": 41694,
+          "sha256": "d25578106a981cef50d07b5cace6727f53a76d2e64b9e11a3c9b0892f88151f0"
         },
         {
           "path": "public/textures/granite-boulder/roughness.webp",
-          "bytes": 62136,
-          "sha256": "9b5c7e5112c31c3e6b667659f08c06f4cf5e714b7157e42df33c3842032cd56f"
+          "bytes": 58684,
+          "sha256": "05ac3f8d5031df562c402d4fa705c4471f28101c6cd3d0b305ad0c48e07dc082"
         },
         {
           "path": "public/textures/granite-boulder/roughness@512.webp",
-          "bytes": 31034,
-          "sha256": "a2d37c7abc366d2eeb3fb607e55e4cc300810fe7aed323e5015f41e0126689bd"
+          "bytes": 28596,
+          "sha256": "3d229e5076165ef658462efa1d3d6f74b14e12c19d7f00e94bf6125ad8ab5619"
         },
         {
           "path": "public/textures/granite-boulder/roughness@256.webp",
-          "bytes": 14754,
-          "sha256": "6379928f354d3830f0262f0ac0851bddfe5d6537db5219c0142c9ba3385f015b"
+          "bytes": 14068,
+          "sha256": "3a74b23601ce5a7aab49d2a946b87450153315066f41ced5bebf97f45d048562"
         },
         {
           "path": "public/textures/granite-boulder/ao.webp",
-          "bytes": 292502,
-          "sha256": "9c735b262fcb022c3d8fbbac7e1e3bd9f1f101a3820c6fdcb279ce07d08cdf00"
+          "bytes": 267750,
+          "sha256": "cd084eb75089a8319a3553e6ce072f5fda74b6e3ef858300c098eb7c0c3ea584"
         },
         {
           "path": "public/textures/granite-boulder/ao@512.webp",
-          "bytes": 123326,
-          "sha256": "1477e33b64e75f52031078bd414b11b748230c3e21a34605581bf2fd9787fb2a"
+          "bytes": 117168,
+          "sha256": "2525f7fcd9ef07ec59fc42edfecf4b63c0db784dc38ccf40525a4c2e70510c29"
         },
         {
           "path": "public/textures/granite-boulder/ao@256.webp",
-          "bytes": 36406,
-          "sha256": "30227c6f6433064c3ade2bc2302d98ae949a50dad40c551b2a1a1e23e5424f6d"
+          "bytes": 35408,
+          "sha256": "b131b0f86a618f07e799e8da70c90abba9a780c7841605e6e4dd0d25a13061ee"
         }
       ],
-      "generatedAt": "2026-08-01T10:33:58.591Z"
+      "generatedAt": "2026-08-01T10:34:55.299Z"
     },
     "granite-lichen": {
       "id": "granite-lichen",
@@ -920,7 +920,7 @@
     },
     "loading-forest-run": {
       "id": "loading-forest-run",
-      "fetched": true,
+      "fetched": false,
       "promptHash": "81338c228a15b0e0",
       "seed": 20101,
       "model": "gemini-2.5-flash-image",
@@ -942,11 +942,11 @@
           "sha256": "6ecbdccac62c00dd307fe413ace8cb62c6f65b2708ccf4668fbff59d1b23acd9"
         }
       ],
-      "generatedAt": "2026-08-01T10:30:34.532Z"
+      "generatedAt": "2026-08-01T10:36:22.499Z"
     },
     "loading-krumlov-street": {
       "id": "loading-krumlov-street",
-      "fetched": true,
+      "fetched": false,
       "promptHash": "33426c11b5858ed7",
       "seed": 20103,
       "model": "gemini-2.5-flash-image",
@@ -968,11 +968,11 @@
           "sha256": "d3b32e7b7358dc18751c0300a4d03b4399b85a54fe578b0e5414e24a8c3d73f2"
         }
       ],
-      "generatedAt": "2026-08-01T10:30:40.849Z"
+      "generatedAt": "2026-08-01T10:36:22.591Z"
     },
     "loading-marsh-crossing": {
       "id": "loading-marsh-crossing",
-      "fetched": true,
+      "fetched": false,
       "promptHash": "2ebf3a5ce5ee826b",
       "seed": 20102,
       "model": "gemini-2.5-flash-image",
@@ -994,7 +994,7 @@
           "sha256": "826d28f06f0da6a54962f8e3fb9129564a161f37af2eec34bdcde9bae71d862e"
         }
       ],
-      "generatedAt": "2026-08-01T10:30:41.341Z"
+      "generatedAt": "2026-08-01T10:36:22.619Z"
     },
     "marsh-grass": {
       "id": "marsh-grass",
@@ -1150,7 +1150,7 @@
     },
     "menu-backdrop-krumlov": {
       "id": "menu-backdrop-krumlov",
-      "fetched": true,
+      "fetched": false,
       "promptHash": "b1cf6563c31d8843",
       "seed": 20002,
       "model": "gemini-2.5-flash-image",
@@ -1172,11 +1172,11 @@
           "sha256": "312ea25d15cd1ba05c147fa73c83d4036a83594b5cf316a210980bfeacd35811"
         }
       ],
-      "generatedAt": "2026-08-01T10:30:36.203Z"
+      "generatedAt": "2026-08-01T10:36:22.464Z"
     },
     "menu-backdrop-sumava": {
       "id": "menu-backdrop-sumava",
-      "fetched": true,
+      "fetched": false,
       "promptHash": "647854a3b76ed4ba",
       "seed": 20001,
       "model": "gemini-2.5-flash-image",
@@ -1198,7 +1198,7 @@
           "sha256": "f646dee5b1f4d0e5458c7e53959c7cffe42d1b23a97cd61735cc771f81d22d5e"
         }
       ],
-      "generatedAt": "2026-08-01T10:30:34.894Z"
+      "generatedAt": "2026-08-01T10:36:22.462Z"
     },
     "moss": {
       "id": "moss",
@@ -1279,78 +1279,78 @@
     "plaster-renaissance": {
       "id": "plaster-renaissance",
       "fetched": true,
-      "promptHash": "87fad5cda89454ba",
+      "promptHash": "7496b67ce84271ee",
       "seed": 10502,
       "model": "gemini-2.5-flash-image",
       "aspect": "1:1",
       "source": {
         "path": "tools/imagegen/.cache/plaster-renaissance.png",
-        "bytes": 2033913,
-        "sha256": "f8dff738bd4e661a483a2eead6ef5554e22b808931266f86f1501d007205e9a2"
+        "bytes": 2007773,
+        "sha256": "229bfb61ea4bc1f8288a1af41dd25ec009c713ea178d226375df90d972065e5d"
       },
       "outputs": [
         {
           "path": "public/textures/plaster-renaissance/albedo.webp",
-          "bytes": 413576,
-          "sha256": "8d3c24816ab6cab07d76d40030981c2cd8e5ca4d6fd8d4bbe1a130e010fee46d"
+          "bytes": 400552,
+          "sha256": "89532a3877a6126d08924a1070b94b8be3672ff871b461a7db4c03b57acb7b82"
         },
         {
           "path": "public/textures/plaster-renaissance/albedo@512.webp",
-          "bytes": 88280,
-          "sha256": "10c03522975602acf4c2f4cff201e2c13f085cc7985b0fd5cfe5c6e583a288e2"
+          "bytes": 83882,
+          "sha256": "4e9022fb748c9678234d3454b8093e5c0405e54cbbfd3c722676d2f6d24eb3c1"
         },
         {
           "path": "public/textures/plaster-renaissance/albedo@256.webp",
-          "bytes": 17560,
-          "sha256": "f4590977fda4aaad92b188e7970d5c4271732b20cc6913e0cddb96a624b17324"
+          "bytes": 14938,
+          "sha256": "e2d943e30844bebd2d7d6d213735ef6a93f8bb7f83a7e3bf0cbdb201df86481f"
         },
         {
           "path": "public/textures/plaster-renaissance/normal.webp",
-          "bytes": 125720,
-          "sha256": "4ee462e73b586075b388cbd6ff4e845db857fe515ee42f8e01396659d1122383"
+          "bytes": 98006,
+          "sha256": "4268d7847ec84ad21f3396e890c7de68fa6bcd08abe1c57f0be3d4efcd2a7dca"
         },
         {
           "path": "public/textures/plaster-renaissance/normal@512.webp",
-          "bytes": 52472,
-          "sha256": "23ba4e6b8a17a2e04de1b5d8a241e334f18f29e875ec1769ffd7fedcd7783a11"
+          "bytes": 38844,
+          "sha256": "43457620f78ccc819e090ba608a9d195889ffd1d19a4518056e329c216973a19"
         },
         {
           "path": "public/textures/plaster-renaissance/normal@256.webp",
-          "bytes": 17770,
-          "sha256": "3f810342e68cc8dba133b95e72787d32cd80c5a79c4bfb09b0a4aca7faa4dc81"
+          "bytes": 11740,
+          "sha256": "46b84a0eb8182147de03b54f73c0e14e508fb767931809f5e91b210b500387fd"
         },
         {
           "path": "public/textures/plaster-renaissance/roughness.webp",
-          "bytes": 43752,
-          "sha256": "50689134b66f3ce05ff9b6b66c9eb1bf117758d0b7654b7f7a85b29234b278db"
+          "bytes": 35288,
+          "sha256": "16051f57a38d70a184ebbc3f490867a72b6b66c5ae9ac1361f89bad70db69189"
         },
         {
           "path": "public/textures/plaster-renaissance/roughness@512.webp",
-          "bytes": 21072,
-          "sha256": "fb3717bde32952df72c3a88fb4ac185f485204c72cb874f3beed757da22c602c"
+          "bytes": 16480,
+          "sha256": "337cac6fc3dac949159eb6f675d65d1b3fb95dccb86a202252a333742f5a8352"
         },
         {
           "path": "public/textures/plaster-renaissance/roughness@256.webp",
-          "bytes": 10484,
-          "sha256": "3546180afc0906e7385ff1bc6bda43e6804d3561b0624555269daf95ad476e72"
+          "bytes": 7780,
+          "sha256": "c70bacc24c6c95605c0930faa9703776400e9e0830a35c988586eddad5dacb45"
         },
         {
           "path": "public/textures/plaster-renaissance/ao.webp",
-          "bytes": 98158,
-          "sha256": "ca39cf06aa7df13a99e71afef47fb452ca5f8427075ad7c8b2623d6a6c0d24cc"
+          "bytes": 100012,
+          "sha256": "3beb475194b38da652adb46bc419728e79e1a6c3eb04b90692374752802f0e0f"
         },
         {
           "path": "public/textures/plaster-renaissance/ao@512.webp",
-          "bytes": 50718,
-          "sha256": "6eb90bacc1559e23f359460b560f33c1fd127b55d27bf1ebdb6ec24acb8dbad2"
+          "bytes": 50522,
+          "sha256": "cfea0105ff197f1468bd1a05df3fe4d6ffbdfdd27fc793eb20ec76589445b245"
         },
         {
           "path": "public/textures/plaster-renaissance/ao@256.webp",
-          "bytes": 21314,
-          "sha256": "338084eda0167cbe1b20d6964e264770d2d3e86b47318fc526f23cb732be9fa4"
+          "bytes": 21112,
+          "sha256": "80dc08b1663ec2bdb0db5c0c65256d997c515eed1d40420bfbffb2e174495ab0"
         }
       ],
-      "generatedAt": "2026-08-01T10:34:08.890Z"
+      "generatedAt": "2026-08-01T10:34:55.497Z"
     },
     "roof-tile-bohemian": {
       "id": "roof-tile-bohemian",
@@ -1505,5 +1505,5 @@
       "generatedAt": "2026-08-01T10:30:22.832Z"
     }
   },
-  "updatedAt": "2026-08-01T10:34:08.891Z"
+  "updatedAt": "2026-08-01T10:36:22.936Z"
 }

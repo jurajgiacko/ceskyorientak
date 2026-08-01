@@ -134,9 +134,39 @@ export function toMarkdown(rows) {
   return [head, sep, ...body].join('\n');
 }
 
+function writeReadme(rows) {
+  const file = path.join(HERE, 'README.md');
+  const src = fs.readFileSync(file, 'utf8');
+  const start = '<!-- VALIDATION_TABLE_START -->';
+  const end = '<!-- VALIDATION_TABLE_END -->';
+  const i = src.indexOf(start);
+  const j = src.indexOf(end);
+  if (i === -1 || j === -1) throw new Error('README markers not found');
+  const total = rows.reduce((a, r) => a + r.lod0Tris, 0);
+  const bytes = rows.reduce((a, r) => a + r.bytes, 0);
+  const block = [
+    start,
+    `_Generated ${new Date().toISOString().slice(0, 10)} by \`node tools/blender/validate.mjs --write-readme\`._`,
+    '',
+    toMarkdown(rows),
+    '',
+    `**Total: ${rows.length} assets, ${total} LOD0 triangles, ${kb(bytes)} on disk.**`,
+    '',
+  ].join('\n');
+  fs.writeFileSync(file, src.slice(0, i) + block + src.slice(j));
+  console.log(`README table updated (${rows.length} assets, ${total} LOD0 tris)`);
+}
+
 if (import.meta.url === `file://${process.argv[1]}`) {
   const rows = await validateAll();
-  if (process.argv.includes('--json')) {
+  if (process.argv.includes('--write-readme')) {
+    writeReadme(rows);
+    const bad = rows.filter((r) => !r.ok);
+    if (bad.length) {
+      console.error(`${bad.length} asset(s) failed validation`);
+      process.exit(1);
+    }
+  } else if (process.argv.includes('--json')) {
     console.log(JSON.stringify(rows, null, 2));
   } else if (process.argv.includes('--markdown')) {
     console.log(toMarkdown(rows));

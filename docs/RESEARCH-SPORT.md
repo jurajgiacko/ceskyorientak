@@ -18,6 +18,19 @@ Numbers are given exactly as the specs state them. Where a value is derived or e
 | IOF Control Descriptions landing page | — | https://orienteering.sport/iof/rules/control-descriptions/ |
 | O-Map Wiki (IOF Map Commission) | — | https://omapwiki.orienteering.sport/specifications/issprom/ |
 
+## Contents
+
+1. [**ISOM 2017-2** — forest maps 1:15 000 / 1:10 000](#1-isom-2017-2-forest-maps-115-000-110-000) — colours (CMYK + hex), the five-colour logic, runnability bands, the full symbol tables, minimum dimensions
+2. [**ISSprOM 2019-2** — sprint maps 1:4 000 / 1:3 000](#2-issprom-2019-2-sprint-maps-14-000-13-000) — the black-line-width passability ladder, canopy vs building, multi-level, the olive/DSQ rule
+3. [**IOF Control Descriptions 2024**](#3-iof-control-descriptions) — sheet format and every column A–H pictogram with SVG-ready geometry
+4. [**Course overprint**](#4-course-overprint-isom-37-issprom-47-iof-rules-1519-appendix-2) — start triangle, control circles, the gap rule, marked routes, crossing points, control flags
+5. [**SportIdent**](#5-sportident) — card generations, SIAC/AIR+, feedback, station types, splits, mispunch rules, start modes
+6. [**Navigation technique as game mechanics**](#6-navigation-technique-as-game-mechanics) — compass, handrails, attack points, aiming off, the parallel error, relocation, time-loss calibration
+7. [**Race formats**](#7-race-formats-iof-competition-rules-2025-15-16-appendix-2-appendix-6) — winning times, real WOC course specs, design philosophy, forking, qualification structure
+8. [**Running speed model**](#8-running-speed-model) — Tobler, Minetti, Strava GAP, ISOM terrain multipliers, the combined formula + reference implementation
+9. [**Czech / Slovak / English terminology**](#9-czech-slovak-english-terminology-i18n-source-of-truth) — ~200 terms for i18n
+* [Appendix A — audit risks, open questions, corrected priors](#appendix-a-consolidated-audit-risks-and-open-questions)
+
 **Conventions used throughout this file**
 
 * All ISOM dimensions are **mm at 1:15 000**. All ISSprOM dimensions are **mm at 1:4 000**.
@@ -1220,3 +1233,1372 @@ passing it **switches their SIAC off**. And because the card flashes for ~3 s an
 that time, **control separation and the finish run-in must both be ≥ 25 m** (this is the stated rationale behind
 Rule 19.4 / Appendix 2 §3.5.5).
 
+---
+---
+
+# 6. Navigation technique as game mechanics
+
+Everything in this section is framed as: **(a)** what the athlete physically does, **(b)** the error it prevents or
+causes, **(c)** the time cost/benefit, **(d)** when it is used. Where no source quantifies a cost, it is marked
+**[UNCERTAIN]** rather than invented.
+
+## 6.0 The master model — attention is the scarce resource
+
+British Orienteering's performance model (Kris Jones,
+[Analysis / Plan / Direct / Picture notes](https://www.britishorienteering.org.uk/images/uploaded/downloads/2Analysis%20Plan%20Direct%20Picture%20Further%20Notes%20by%20Kris%20Jones.pdf))
+splits a finite attention budget three ways — **travel**, **map**, **terrain**:
+
+> *"when the athlete is attending to either the map or the terrain they are attending less attention to travel and
+> this will reduce speed."*
+
+**This is the core game loop.** Model a scalar `attention ∈ [0,1]` split between `speed`, `map_reading` and
+`terrain_matching`. Every technique below is a strategy for spending less attention on map+terrain for a given
+level of positional certainty.
+
+**The traffic-light speed model** (widely taught; see
+[Orienteering ACT Lesson 12](https://act.orienteering.asn.au/resources/skills/advanced-skills/lesson-12-route-choice/)):
+
+| Phase | Behaviour | Speed | Positional certainty |
+|---|---|---|---|
+| **Green** | Confident running on line features, minimal cross-checking | ~100 % | coarse (±200 m circle is fine) |
+| **Orange** | Off line features; slow down, cross-check regularly | ~85–90 % | ±50–100 m |
+| **Red** | Very slow or walking; stop to cross-check; precise compass + pacing | ~50–70 % | ±10–20 m |
+
+And the governing design principle (ACT Lesson 12):
+> **"More time is lost making navigational errors than from poor route choice."**
+
+---
+
+## 6.1 Compass — rough vs precise bearing
+
+**The geometry.** `lateral_error_m = distance_m × tan(θ)`. For small angles, **1° ≈ 17.5 m per km**
+(`tan(1°)×1000 = 17.46`; the aviation 1-in-60 rule gives `1000/57.3 = 17.45`).
+
+| Bearing error | @100 m | @200 m | @500 m | @1000 m |
+|---|---:|---:|---:|---:|
+| 1° | 1.7 | 3.5 | 8.7 | **17.5** |
+| 2° | 3.5 | 7.0 | 17.5 | 34.9 |
+| 3° | 5.2 | 10.5 | 26.2 | 52.4 |
+| 5° | 8.7 | 17.5 | 43.7 | 87.5 |
+| 10° | 17.6 | 35.3 | 88.2 | **176.3** |
+| 20° | 36.4 | 72.8 | 182.0 | 364.0 |
+
+**Error budget** ([QOC "Five key skills"](https://www.qocweb.org/content/five-key-skills-orienteering)):
+map-measurement error **1–2°** + unconscious execution veer **1–2°** = a **2–4° floor even when careful**.
+
+| Mode | What the athlete does | Angular error | Speed | Used when |
+|---|---|---|---|---|
+| **Rough compass** (*hrubý azimut*) | Glance at the needle every few seconds at full speed and accept drift. On a **thumb compass** the housing is never rotated: place the thumb tip on your position, rotate **body + map** until the needle sits north, then sight along the map line. | **~10°**, up to 15° | 100 % | The bulk of a leg, aimed at a large collecting feature or handrail |
+| **Precise compass** (*přesný azimut*) | Set the bearing, slow to a jog or walk, **sight an object 50–100 m ahead**, run to it, re-sight, repeat. | **2–3°** | ~50–70 % | From the attack point into the circle; in featureless terrain; night-O |
+| Catastrophic outlier (documented) | — | 27° | — | panic / not looking at the needle at all |
+
+*(Angular figures are practitioner self-reports from [Attackpoint](http://www.attackpoint.org/discussionthread.jsp/message_20714),
+internally consistent with the tangent table; technique from
+[Learn Orienteering — compass bearings](https://www.learnorienteering.com/AdCompBearings.html) and
+[Desert Adventurer, rough vs fine](https://desertadventurer.com/rough-vs-fine-orienteering/).)*
+
+**Time cost of precise vs rough: [UNCERTAIN]** — not published. The documented mitigation is structural instead
+(QOC): *"break the long leg up into several shorter sections between identifiable features, even if it means
+following a zig-zag course. **It often is faster.**"*
+
+**Implementation:** apply a per-tick heading noise `N(0, σ)` with `σ_rough ≈ 10°`, `σ_precise ≈ 2.5°`, plus a
+constant systematic bias per leg drawn from `N(0, 2°)` (the map-measurement error, which does **not** average out).
+
+## 6.2 Thumbing and folding the map
+
+**Does:** grip the map with the thumb immediately below the exact current position and advance the thumb as you
+move; fold the map so only the relevant section is showing.
+**Prevents:** the **parallel error** — it is named explicitly as the primary defence
+([Orienteering ACT Lesson 3](https://act.orienteering.asn.au/resources/skills/advanced-skills/lesson-3-thumbing-the-map/)).
+Also prevents re-scanning the whole map at every glance.
+**Cost/benefit:** near-zero cost; reduces the attention needed per map glance, which frees attention for speed.
+**Used:** always, from novice level upward.
+**Model:** thumbing sets `position_uncertainty_growth_rate` low and makes each `map_glance` cheap; losing the thumb
+(e.g. after a stumble, or on a map exchange) resets it.
+
+## 6.3 Handrails (*vodicí linie*)
+
+**Does:** follow a linear feature — track, road, fence, power line, watercourse, distinct ridge or vegetation
+boundary — instead of navigating in open terrain.
+**Prevents:** essentially all positional error while on it. This is the "green light" phase:
+*"run confidently along linear features… with **minimal cross checking**."*
+**Cost/benefit:** a handrail is usually **longer** than the straight line but **faster and safer**. The trade is
+`extra_distance × path_speed_bonus` vs `straight_distance × terrain_penalty × error_risk`.
+**Used:** whenever the detour is under roughly 20–30 % **[estimate]**.
+
+Norwegian course-design difficulty ladder ([nfollo.no](https://www.nfollo.no/next/page/grunnleggende-om-orientering)) —
+useful as a difficulty parameter for the course generator:
+
+| Level | Control offset from the handrail | Length of "cut-through" off line features |
+|---|---|---|
+| **N2** (beginner) | 5–15 m | 100–150 m |
+| **C** (intermediate) | 100–150 m | 200–300 m |
+| **B** (advanced) | 100–250 m | longer / none |
+
+## 6.4 Attack points (*odrazový bod*)
+
+**Does:** pick a large, unmistakable feature **close to the control** and navigate to it in "green/orange" mode;
+switch to precise navigation only for the final short section.
+**Prevents:** long-range accumulation of bearing error being carried into the circle.
+**Recommended distance: within ~100 m of the control** ([EMPO](https://empoclub.org/o-basics/navigation-tips-for-beginners/)).
+**Advanced terrain chains attack points** (a coarse one, then a fine one).
+**Diagnostic value** ([ACT Lesson 8](https://act.orienteering.asn.au/resources/skills/advanced-skills/lesson-8-attack-points/)):
+> *"If there is **no obvious attack point**, it is a warning that extra care must be taken."*
+
+**Model:** the attack point resets `position_uncertainty` to ~0 at a known point at distance `d` from the control;
+final-approach error ≈ `d × tan(σ_precise)`. With `d = 100 m` and `σ = 2.5°` that is **4.4 m** — inside the flag's
+visibility radius. With no attack point and `d = 600 m` at `σ = 10°`, it is **106 m** — a guaranteed search.
+
+## 6.5 Catching / collecting features (*záchytný bod*, *záchytná linie*)
+
+* **Collecting feature** — a prominent feature *en route* that you are unlikely to miss; ticking it off confirms
+  progress.
+* **Catching feature / backstop** — the same thing placed **beyond** the control, so that hitting it tells you that
+  you have overshot. Norwegian coaching places these **200 m+ behind** controls.
+
+**Prevents:** unbounded overshoot. Converts an open-ended search into a bounded one.
+**Causes:** ACT warns they can *cause* parallel errors if you run at them blindly without checking which instance
+you hit.
+**Time benefit:** turns "keep going and hope" into "I know I have gone too far" — see §6.14, this is the difference
+between a 1-minute and a 5-minute error.
+
+## 6.6 Aiming off
+
+**Does:** deliberately bias the bearing to one side of the target so that on hitting a linear feature you know
+unambiguously which way to turn along it.
+**Prevents:** the 50/50 guess at a linear feature.
+**How much to aim off:** **no orienteering source specifies a number** — BAOC and Quantock both explicitly decline
+to give one. **[UNCERTAIN]** Derive it: the offset must comfortably exceed your own drift, i.e. more than a
+10°-equivalent for a running rough bearing. **Model: `offset = max(30 m, 1.5 × distance × tan(σ_rough))`.**
+**Failure mode:** *"aiming off too little is worse than not aiming off at all"*
+([BAOC](http://baoc.org/wiki/Training/BulletinTrainingTips/Aiming_Off)) — you land on the wrong side and turn the
+wrong way, doubling the error.
+
+## 6.7 Contouring
+
+**Does:** move along a slope at constant height rather than up-and-over. In featureless terrain: sight a distinct
+tree **at your own eye height**, run to it, repeat ([ACT Lesson 10](https://act.orienteering.asn.au/resources/skills/advanced-skills/lesson-10-improving-contour-navigation/)).
+**Prevents:** the **height error** — a failure mode orthogonal to horizontal displacement, and the reason runners
+"run back and forth over the right feature".
+**Benefit:** avoids climb, which is expensive — see §8: **1 m of climb ≈ 6.2 m of flat running for men, 6.4 m for
+women**. A 30 m climb avoided is worth ~190 m of flat distance.
+**Heuristic taught:** ~**5 m of height per apartment floor**.
+
+## 6.8 Simplification (*zjednodušení*)
+
+**Does:** deliberately read only the large, unmistakable features and ignore minor detail until close to the circle.
+Advanced form: navigate a **"virtual corridor"** — a *band* of features rather than a single handrail.
+**Standard to hit** ([Better Orienteering, advanced](https://betterorienteering.org/advanced-techniques/)): at
+advanced level you should know your location within a **200 m circle** at all times and know your intended position
+**100–200 m ahead**.
+**The canonical description** (Thierry Gueorgiou, via the Kris Jones notes): identifying *"the most visible and
+distinct features in the terrain (and ignoring many small details), trusting his compass and keeping his head
+high."*
+**Benefit:** directly buys running speed by lowering the attention cost of map reading.
+**Risk:** over-simplification loses the ability to relocate cheaply.
+
+## 6.9 Map memory
+
+**Does:** memorise a chunk of the leg so you can run several hundred metres without looking at the map. The advanced
+target is *"a rolling Picture that is always being updated"*.
+**When to plan ahead:** only when it is cheap — climbing, or running along a line feature — and only with a firmly
+identified **Break Point** to return to. Otherwise *"planning ahead itself forces errors"* (Better Orienteering).
+**Failure mode:** the **map-memory error** — navigating from a decayed internal picture. Crucially, this error is
+*self-announcing*: the terrain **fails** to match, confidence drops immediately, and it is caught within ~100 m if
+you stop at once. Contrast the parallel error (§6.12), where confidence stays high.
+
+## 6.10 Pace counting (*krokování*)
+
+Orienteering counts **one foot only** — a "pace" is a double pace (left-right).
+
+| Source | Walking, paces/100 m | Running, paces/100 m |
+|---|---|---|
+| [DVOA](https://www.dvoa.org/learn/train/docs/pace-counting-summer-2009.pdf) | **57** | **38** |
+| [Quantock](https://www.quantockorienteers.co.uk/info/training/intermediate/pace-counting) | 60–64 | 32 (jog on trail) |
+| [BAOC](https://baoc.org/wiki/Training/Pace_Counting) | — | 45–60 (55 recommended starting value) |
+| [WAOC](https://www.waoc.org.uk/about/orienteering-techniques/) | — | 40 (open forest) |
+| Attackpoint practitioners | ~60–63 | ~45 |
+
+> **Correction to a common prior:** "40–50 double paces per 100 m walking" is **too low**. Published walking figures
+> cluster at **57–64**; **38–50 is the running band.** DVOA states the relationship explicitly: *"the walking pace
+> per 100 metres will be about **50 % higher** than the running pace"* (57/38 = 1.50 exactly).
+
+**Terrain variation:** trail 32 vs flat open forest 40 = a **1.25× penalty**.
+**Slope thresholds** (the only quantified ones found, [Attackpoint](http://www.attackpoint.org/discussionthread.jsp/message_1514691)):
+the **run → walk/climb transition is around +8 to +10 % uphill**; downhill the transition is **earlier, at −4 to −5 %**.
+**Field hack:** in thick vegetation or on steep ground, substitute a **3-step** pace for the 2-step pace (BAOC).
+**Useful range:** **200–300 m maximum, usually less** — error accumulates.
+**Counter-view:** Orienteering ACT explicitly *discourages* pace counting as "unreliable and distracting", preferring
+reference objects (cricket pitch 20 m, swimming pool 50 m, soccer field 100 m).
+
+## 6.11 Map-to-terrain vs terrain-to-map
+
+| Mode | Direction | Behaviour | Consequence |
+|---|---|---|---|
+| **Proactive — map → terrain** (*mapa do terénu*) | You pre-select the features you expect to meet, then look for them | The expert mode | Fast; you are ahead of yourself |
+| **Reactive — terrain → map** (*terén do mapy*) | You see a feature and then hunt for it on the map | The novice mode | *"leaves them **one step behind** and unable to run with any speed"* ([WAOC](https://www.waoc.org.uk/about/orienteering-techniques/)) |
+
+Reactive reading is a listed **cause of parallel errors** in detailed terrain: you find *a* feature that matches
+rather than *the* feature you predicted.
+
+**Model:** proactive mode = the game pre-commits a list of expected features; matching one advances a "confirmed
+position" cheaply. Reactive mode = each observed feature triggers a search over nearby candidates, costing extra
+`attention` and, in repetitive terrain, sometimes selecting the wrong candidate — which is exactly a parallel error.
+
+## 6.12 The parallel error (*paralelní chyba*) — the important one
+
+### Why it happens
+
+The terrain supplies **near-identical instances** of a feature type — parallel re-entrants, parallel spurs, a series
+of similar knolls, a row of similar buildings:
+
+> *"any spur or gully can look very much like every other one, especially to the over-confident (or panicked!)
+> mind"* — [Attackpoint](http://www.attackpoint.org/discussionthread.jsp/message_1369221)
+
+**The directional asymmetry — encode this in the terrain generator:**
+
+> *"Reentrants **branch** as you're going up them, so you can get diverted into the wrong one, but going **down**,
+> they merge together."*
+
+**Ascending re-entrants generates parallel errors; descending them is self-correcting.** Course setters exploit
+this deliberately: *"Controls being approached from below will be placed in gullies that encourage parallel errors
+and demand decisions at sequential gully junctions."*
+
+**Triggers:** rough-compass drift (10° over 500 m = **88 m** — easily one feature over); losing the thumb position;
+reactive map reading; approaching a repeating landform from below.
+
+### What it feels like
+
+The best first-person account is from Radan Kamenický (Czech federation), on Czech Radio:
+
+> *"Člověk se přesvědčí, že skutečnost sedí s mapou. Tam je údolí, tady je údolí, tam jsou skály, tady jsou skály."*
+> — "A person convinces himself that reality matches the map. There's a valley there, here's a valley, there are
+> rocks, here are rocks."
+
+He was confident enough to **give directions to another runner** before realising he was wrong.
+([Český rozhlas Vysočina](https://vysocina.rozhlas.cz/orientacni-bezci-nesvindluji-a-pokud-pri-zavodech-zabloudi-jedna-se-o-paralelni-7117592))
+
+### How far off you get, and how it resolves
+
+Usually **one feature over** — but it *persists*, because every subsequent observation keeps confirming it:
+
+> *"you go several hundred metres up the wrong reentrant before anything starts to really look wrong"* —
+> [BAOC, Errors to Avoid](http://baoc.org/wiki/Training/BulletinTrainingTips/Errors_to_Avoid)
+> *"You can end up hundreds of metres off course before you realise, and then maybe have to cross several deep
+> gullies and high ridges to get back."*
+
+Documented extreme: **~1 km** (Kamenický, French championships).
+
+**It does not resolve through fine detail** — only through a contradiction at a **scale larger than the repeating
+unit**: overall landform, altitude, a major line feature, or a counted index of features.
+**Preventive:** count each re-entrant/spur as you cross it. **Structural fix:** *"locate yourself in the bottom
+before you go up, pick a spur in front of you, and go up it."*
+
+**Time loss: [UNCERTAIN]** — no source quantifies it specifically. BAOC frames the escalation generically:
+continuing blindly turns *"1-minute errors into 5-minute errors."*
+
+### Parallel error vs map-memory error — the diagnostic to implement
+
+| | **Parallel error** | **Map-memory error** |
+|---|---|---|
+| Map reading | **Correct**, applied to the **wrong instance** | Decayed / wrong internal picture |
+| Does the terrain match? | **Yes — it genuinely fits** | **No — it fails to match** |
+| Confidence | **Stays HIGH** | **Drops immediately** |
+| Distance run before detection | hundreds of metres, sometimes ~1 km | ~100 m if you stop at once |
+| Cost | **expensive** | cheap |
+
+That confidence asymmetry is precisely **why the parallel error is the expensive one**, and it is what the
+simulator must model: a parallel error must *not* trigger the player's "something is wrong" signal.
+
+**Suggested state machine:**
+
+```
+state: {position_true, position_believed, confidence}
+on each observed feature F:
+    candidates = features_matching(F, near position_believed, tolerance)
+    if |candidates| > 1 and terrain_is_repetitive:
+        pick candidate nearest to position_believed   # NOT nearest to position_true
+        confidence stays HIGH                          # ← the parallel error
+    position_believed = chosen candidate
+resolution:
+    only when a LARGE-SCALE observation (landform / altitude / major line feature)
+    is inconsistent with position_believed
+```
+
+## 6.13 Relocation (*zorientovat se*) — the standard procedure
+
+[Orienteering ACT Lesson 11](https://act.orienteering.asn.au/resources/skills/advanced-skills/lesson-11-relocation/):
+
+1. **STOP immediately** the moment features stop matching.
+2. **Orient the map**; look in all directions — **including behind you**.
+3. **Think big.** Examine **large** features first: contours, which hillside you are on, slope direction, valley
+   orientation.
+4. Only once the big picture fits, **confirm with smaller detail**.
+5. Mentally **retrace to the last point of total contact**.
+6. If still unsure, **move to the nearest large feature** and relocate from there.
+
+> **"10 seconds of careful thinking can save 10 minutes."**
+
+[CLOK](https://clok.org.uk/new/new-to-orienteering/getting-lost-and-found-again/) adds an explicitly
+hypothesis-driven step: form a hypothesis, test it against a **distinctive** landmark, and **resume from your
+confirmed position, not from where you expected to be**.
+
+## 6.14 Other error types
+
+| Error | Mechanism | Detection & cost |
+|---|---|---|
+| **180° / compass reversal** | Map held upside down, or the meridian lines not aligned N–S → *"you end up travelling exactly in the opposite direction."* | Uniquely, the terrain gives **no partial confirmation**, so it is caught fast at the first planned feature check. Prevention: verify the exit direction on leaving **every** control. Cost **[UNCERTAIN]**. |
+| **Control picking** (*had kontrol*) | Chiefly a *training format*: short legs with sharp direction changes, drilling exit direction and attack. *"If a leg is short and you succeed to leave the control in the right direction, 90 % of the work is done."* | The associated real failure is **misjudging height** — running back and forth over the right feature. Turns a 1-min error into a 5-min error. |
+| **"Boom"** | Antonym of "spike": a leg with seriously deficient route, contact or close navigation. | **Chiefly North-American colloquial** — it appears in no major club glossary checked (British Orienteering, Quantock, MVOC, Chicago AOC). Do not present it as standard terminology. |
+| **"Bailing out"** | **No orienteering-specific definition found in any glossary checked. [UNCERTAIN — do not assert one.]** The nearest documented equivalent is relocation step 6 (go to the nearest large feature). |
+| **Overshooting** | Going past a control or attack point. Note that the **deliberate** case (running past to a backstop, then attacking backwards) is legitimate tactics. | Countered by catching features and pace counting. |
+| **Hesitation** | A **continuous** loss mode, not a discrete mistake: *"keeping a lower speed due to not having the situation under control"* ([o-training.net](https://o-training.net/blog/2011/04/13/gps-analysis-for-orienteering-the-basics/)). | **Budget:** elites spend **5–15 s** deciding on very long complex legs; exceeding **~30 s** in indecision *"likely loses more time than committing to the initial choice"* ([Better Orienteering](https://betterorienteering.org/intermediate-techniques/)). |
+
+## 6.15 Time loss per control — the calibration numbers
+
+| Level | Typical loss when a control goes wrong | Source |
+|---|---|---|
+| **Elite / professional** | **10–20 s** | [Norwegian glossary, *bomme*](https://oordliste.vercel.app/) |
+| **Elite — threshold for a "bad error"** | **1 minute** | [CLOK](https://clok.org.uk/new/new-to-orienteering/getting-lost-and-found-again/) |
+| **Beginner with good damage control** | 3–4 min | CLOK |
+| **Beginner, uncontrolled** | minutes to tens of minutes | Norwegian glossary |
+
+**The single most useful calibration datum.** At
+[WOC 2014 Long](https://news.worldofo.com/2014/07/10/woc-long-2014-men-the-big-analysis/), the **gold medallist
+(Gueorgiou) still lost 17 s, 24 s, 31 s, 18 s and 13 s at five separate controls.** Silver (Hubmann) lost
+38/31/24/38 s; bronze (Lundanes) 46/39/22/66 s.
+→ **A WOC-winning run contains roughly five identifiable losses of 13–31 s each.** A "perfect" run does not exist.
+
+At [WOC 2025 Middle](https://news.worldofo.com/2025/07/10/woc-2025-middle-maps-results-and-analysis/), losses among
+the top 8 ran **30 s to 2 min**, with a men's winning margin of **34 s** and one place decided by **1 second**.
+Club-elite scale is an order of magnitude larger — at
+[Jukola 2015](https://news.worldofo.com/2015/06/15/jukola-2015-gps-analysis-of-decisions-and-mistakes-in-the-relay/)
+individual legs lost **3–5 min**, one team ~**10 min** on leg 1.
+
+**The one published statistical result** — Ackland, WOC 2005,
+[arXiv physics/0508158](https://arxiv.org/pdf/physics/0508158):
+
+* Operational definition of a mistake: a loss of **> 45 s** on a leg.
+* **"All errors of more than two minutes are made by orienteers running alone."** (Only one such incident in the
+  entire men's race.)
+* **Pack effect: an 8 % speed boost for the athlete behind; a pair moves 4 % faster than a solo runner.** Over an
+  80-minute race that is ≈ **3 minutes**, plus near-elimination of large navigational errors.
+  → **This is a directly implementable multiplayer mechanic.**
+
+**How to score time loss** (pick one):
+
+* [WinSplits Pro](http://obasen.orientering.se/winsplits/help.aspx?topic=terms&lang=en): per-leg
+  **performance index = (mean of the fastest 25 % of splits) / (this runner's split)**; the runner's "normal
+  performance" = the **leg-length-weighted median** of their indices; a leg counts as an error only if it exceeds
+  **both** an absolute-time and a percentage threshold.
+* [NNM Analyzer](https://anders.nemonisimors.com/projects/orienteering/orienteering.html): simpler — flag a leg
+  if its %-loss exceeds the athlete's median %-loss by **more than 25 percentage points**.
+
+**"Clean run" has no published quantitative definition [UNCERTAIN].** Operationally, given that a WOC winner still
+drops 5 × 13–31 s, treat **clean ≈ no single loss above ~45 s**, not zero loss.
+> *"It is almost impossible to have a perfect run and… some relocation is a normal part of what orienteering is all
+> about."* — [Better Orienteering](https://betterorienteering.org/analyze-my-errors/)
+
+---
+---
+
+# 7. Race formats (IOF Competition Rules 2025 — §15, §16, Appendix 2, Appendix 6)
+
+## 7.1 The normative summary table (Appendix 6, verbatim structure)
+
+| | **Sprint** | **Middle** | **Long** | **Relay** | **Sprint Relay** | **Knock-Out Sprint** |
+|---|---|---|---|---|---|---|
+| **Controls** | Technically easy | Consistently technically difficult | A mixture of technical difficulties | A mixture of technical difficulties | Technically easy | Technically easy |
+| **Route choice** | Difficult route choice, requiring high concentration | Small and medium scale route choice | Significant route choice including some **large-scale** route choices | Small and medium scale route choice | Difficult route choice, high concentration | Difficult route choice, high concentration |
+| **Type of running** | Very high speed | High speed, but requiring competitors to **adjust their speed** for the complexity of the terrain | **Physically demanding**, requiring endurance and **pace judgement** | High speed, often in close proximity to other competitors who may or may not have the same controls | Very high speed | Very high speed |
+| **Terrain** | Predominantly very runnable **park or urban** (streets/buildings). Some fast runnable forest may be included. **Spectators allowed along the course** | **Technically complex** terrain | **Physically tough** terrain allowing good route-choice possibilities | Some route-choice possibilities and reasonably complex terrain | as Sprint; spectators allowed along the course | as Sprint; spectators allowed along the course |
+| **Map** | **1:4 000** | **1:10 000** | **1:15 000** | **1:10 000** | **1:4 000** | **1:4 000** |
+| **Start interval** | **1 min** | **2 min** | **3 min** | Mass start | Mass start | 1 min (qualification), mass start (knock-out rounds) |
+| **Timing** | 1 s | 1 s | 1 s | order across the line | order across the line | 1 s (qual.), order across the line (KO) |
+| **Winning time (senior elite)** | **12–15 min** | **30–35 min** (qualification shorter) | **88–92 min** (qualification shorter) | **30–40 min/leg, 90–105 min total** | **12–15 min/leg, 55–60 min total** | **8–10 min** qual., **6–8 min** knock-out rounds |
+
+## 7.2 Winning times — the exact tables
+
+### Rule 16.10 — WOC / World Cup
+
+| Race | Women | Men |
+|---|---|---|
+| **Long distance final** | **88–92** | **88–92** |
+| **Middle distance qualification** | **25** | **25** |
+| **Middle distance final** | **30–35** | **30–35** |
+| **Sprint qualification** | **12–15** | **12–15** |
+| **Sprint final** | **12–15** | **12–15** |
+| **Sprint Relay, each leg** | **12–15** | **12–15** |
+| **Sprint Relay, overall** | **55–60** | |
+| **Relay, each leg** | **30–40** | **30–40** |
+| **Relay, overall** | **90–105** | **90–105** |
+| **Knock-Out Sprint qualification** | **8–10** | **8–10** |
+| **Knock-Out Sprint mass-start races** | **6–8** | **6–8** |
+
+**Rule 16.9:** *"Where the winning time is expressed as an interval, the course must be planned with the aim of
+achieving a winning time at the **middle point** of the interval."*
+
+**Long-distance qualification** is not listed in 16.10, but Appendix 6 §3.4 states: *"In WOC and World Cup the
+winning times in qualification races must be **60 minutes**."* (Appendix 6 §2.4 gives Middle qualification as
+**25 minutes**, consistent with 16.10.)
+
+### Rule 16.11 — JWOC
+
+Long **70** · Middle **20–25** · Sprint **12–15** · Relay **30–40** per leg / **90–105** total.
+
+### Rule 16.13 — World Ranking Events (WRE)
+
+Long **88–92** · Middle **30–35** · Sprint **12–15**.
+
+### Rule 16.12 — WMOC (age classes; a useful ladder for a game's difficulty curve)
+
+Winning times taper with age. Sample rows (minutes: qualification / Middle final / Long final):
+W35/M35 **50 / 30–35 / 70** … M50 **45 / 25–30 / 55** … M55–M65 **40 / 25–30 / 50** … M70–M75 **35 / 25–30 / 50** …
+M80–M85 **35 / 25–30 / 45** … M90 **30 / 25–30 / 40**. *All* WMOC Sprint races are **12–15 min**.
+
+## 7.3 Course length, climb, control count
+
+**The IOF rules do not specify course length in km, nor the number of controls, for any format.** Length is a
+*derived* quantity — the planner works backwards from the mandated winning time. The only hard numbers are:
+
+| Quantity | Rule | Value |
+|---|---|---|
+| **Maximum climb** | App. 2 §3.11.6 | *"The total climb of a course should **normally not exceed 4 % of the length of the shortest sensible route**."* **One global figure, not varied by format.** |
+| **How length is measured** | 16.3 | Straight line start → controls → finish, deviating **only** for physically impassable obstructions, prohibited areas and marked routes |
+| **How climb is measured** | 16.4 | Climb in metres **along the shortest sensible route** |
+| **Control separation, forest scales** | 19.4 | ≥ **30 m** between any two controls incl. the start flag; ≥ **60 m** straight-line if the features are **similar** |
+| **Control separation, sprint scales** | 19.4 | minimum **running** distance **25 m**; minimum **straight-line** distance **15 m**; no similar-feature rule |
+| **Long-distance long legs** | App. 6 §3.2 | *"These longer legs may be from **1.5 to 3.5 km** depending on the terrain type. **Two or more** such long legs should form part of the course."* |
+| **Refreshments** | 19.8 | winning time ≥ 30 min → refreshment at least every **25 min at the winner's pace** |
+
+### Real elite course specifications (World Orienteering Championships)
+
+These are **measured, not derived** — course specs from the official worldofo previews, winning times from the
+official results. Use them as the calibration truth set for the course generator.
+
+| Year | Venue | Format | Sex | Winner | Time | Length | Climb | Controls | min/km |
+|---|---|---|---|---|---|---|---|---|---|
+| 2021 | Doksy CZE | Long | M | Fosser | 1:35:55 | 13.6 km | **1050 m** | 29 | 7:03 |
+| 2023 | Flims SUI | Long | M | Fosser | 1:33:06 | 14.0 km | 680 m | 35 | 6:39 |
+| 2025 | Kuopio FIN | Long | M | Fosser | 1:37:50 | 16.0 km | 565 m | 27 | 6:07 |
+| 2021 | Doksy | Long | W | Alexandersson | 1:17:11 | 9.5 km | 690 m | 21 | 8:07 |
+| 2023 | Flims | Long | W | Aebersold | 1:21:43 | 11.0 km | 510 m | 23 | 7:26 |
+| 2025 | Kuopio | Long | W | Aebersold | 1:34:51 | 13.3 km | 475 m | 23 | 7:08 |
+| 2021 | Doksy | Middle | M | Kyburz | 39:31 | 5.4 km | 320 m | 24 | 7:19 |
+| 2023 | Flims | Middle | M | Kyburz | 38:19 | 5.9 km | 220 m | 22 | 6:30 |
+| 2025 | Kuopio | Middle | M | Breivik | 33:42 | 5.8 km | 255 m | 18 | 5:49 |
+| 2021 | Doksy | Middle | W | Alexandersson | 38:12 | 4.5 km | 260 m | 20 | 8:29 |
+| 2023 | Flims | Middle | W | Alexandersson | 37:26 | 4.8 km | 180 m | 19 | 7:48 |
+| 2025 | Kuopio | Middle | W | Alexandersson | 33:17 | 5.0 km | 230 m | 16 | 6:39 |
+| 2021 | Terezín CZE | Sprint | M | von Krusenstierna | 13:46 | 3.9 km | 40 m | 24 | 3:32 |
+| 2024 | Edinburgh GBR | Sprint | M | Regborn | 15:58 | 4.3 km | 85 m | 22 | 3:43 |
+| 2021 | Terezín | Sprint | W | Alexandersson | 14:03 | 3.5 km | 40 m | 20 | 4:01 |
+| 2024 | Edinburgh | Sprint | W | Alexandersson | 16:14 | 3.8 km | 70 m | 18 | 4:16 |
+
+Sources: worldofo "All You Need To Know" previews
+([2021](http://news.worldofo.com/2021/06/30/woc-2021-all-you-need-to-know/) ·
+[2023](http://news.worldofo.com/2023/07/10/woc-2023-all-you-need-to-know/) ·
+[2024](http://news.worldofo.com/2024/07/11/woc-2024-all-you-need-to-know/) ·
+[2025](http://news.worldofo.com/2025/07/07/woc-2025-all-you-need-to-know/)); results from the WOC results pages.
+
+**Note the 4 % climb guideline is routinely exceeded at WOC Long** — Doksy 2021 was 1050 m over 13.6 km = **7.7 %**.
+Appendix 2 says "should normally not exceed 4 %", not "must not".
+
+**⚠ Women's Long winning times jumped in 2024 because of a rule change, not fitness.** Before 2024 the IOF Forest
+Course Planning Guidelines specified *"70–80 minutes for women and 90–100 minutes for men"*; the 2024 rules
+changelog records *"Winning times equalised for Men and Women"* — both are now **88–92 min**. Do not fit a single
+curve across women's Long from 2019 to 2025.
+([IOF Guidelines for Forest Course Planning, Jun 2020](https://onsw.asn.au/images/stories/technical/IOF_Guidelines_for_Forest_Course_Planning_-_Jun_2020.pdf))
+
+### Design envelope for the course generator **[derived from the table above + §8]**
+
+| Format | Winning time | **Men** length / climb / controls | mean leg | **Women** length / climb / controls |
+|---|---|---|---|---|
+| **Long** | 88–92 min | **13.5–16 km** / **475–1050 m** / **27–35** | 450–600 m | **9.5–13.5 km** / **475–700 m** / **21–24** |
+| **Long qualification** | 60 min | 9–11 km / 300–500 m / 18–24 | 450–600 m | 7–9 km / 250–400 m / 16–22 |
+| **Middle** | 30–35 min | **5.4–6.0 km** / **220–320 m** / **18–24** | 250–330 m | **4.5–5.0 km** / **180–260 m** / **16–20** |
+| **Middle qualification** | 25 min | 4.2–4.8 km / 150–250 m / 15–20 | 250–330 m | 3.4–4.0 km / 130–200 m / 14–18 |
+| **Sprint** | 12–15 min | **3.9–4.3 km** / **40–85 m** / **22–24** | 160–200 m | **3.5–3.8 km** / **40–70 m** / **18–20** |
+| **Relay (per leg)** | 30–40 min | 5.5–7.5 km / 200–350 m / 18–26 | 280–380 m | 4.5–6.0 km / 170–280 m / 16–22 |
+| **Sprint Relay (per leg)** | 12–15 min | 3.5–4.2 km / 30–80 m / 18–24 | 160–200 m | 3.2–3.8 km / 30–70 m / 17–22 |
+| **KO Sprint qualification** | 8–10 min | 2.4–3.0 km / 20–50 m / 13–18 | 160–200 m | 2.2–2.7 km / 20–50 m / 13–18 |
+| **KO Sprint rounds** | 6–8 min | 1.8–2.4 km / 15–40 m / 10–15 | 160–200 m | 1.6–2.1 km / 15–40 m / 10–15 |
+
+**Straight-line pace the numbers encode** (min per km of *stated* course length, elite winners):
+
+| Format | Men | Women |
+|---|---|---|
+| Long | **6:05 – 7:05** | **7:05 – 8:10** |
+| Middle | **5:50 – 7:20** | **6:40 – 8:30** |
+| Sprint | **3:30 – 3:45** | **4:00 – 4:20** |
+
+Aggregate over WOC 2009–2019, top-30 (Nazário & Correia 2022,
+[JPES 22(2) Art. 67](http://www.efsupit.ro/images/stories/februarie2022/Art%2067.pdf), 44 races):
+men Middle **9.5 ± 0.7 km/h**, Long **9.3 ± 0.9 km/h**; women Middle **7.6 ± 0.6 km/h**, Long **7.5 ± 0.9 km/h**.
+Winning-time coefficient of variation: Long **5.6 % (M) / 4.9 % (W)**, Middle **2.5 % / 2.7 %**.
+
+## 7.4 Design philosophy — the rules' own words (Appendix 6)
+
+### Sprint (§1.1)
+> *"The Sprint profile is **high speed**. It tests the competitors' ability to **read and translate the map in
+> complex environments**, and to plan and carry out route choices running at high speed. The course must be planned
+> so that the element of speed is maintained throughout the race. The course may require climbing but **steepness
+> forcing the competitors to walk should be avoided**. **Finding the controls should not be the challenge**; rather
+> the ability to choose and complete the best route to them. For example, **the most obvious way out from a control
+> should not necessarily be the most favourable one**. The course should be set to require the competitors' full
+> concentration throughout the race."*
+
+Course-planning: spectators are allowed along the course, **all controls must be manned**, guards may be needed at
+critical passages, the start should be at the arena, and *"the course must be planned to avoid tempting competitors
+to take shortcuts through private property and other out-of-bounds areas."*
+
+### Middle (§2.1)
+> *"The Middle distance profile is **technical**. It takes place in a non-urban (mostly forested) environment with
+> an emphasis on **detailed navigation** and where **finding the controls constitutes a challenge**. It requires
+> **constant concentration on map reading** with occasional shifts in running direction out from controls. The
+> element of route choice is essential but should not be at the expense of technically demanding orienteering. The
+> route in itself must involve demanding navigation. **The course must require speed-shifts** e.g. with legs
+> through different types of vegetation."*
+
+Map: *"The terrain must be mapped for 1:15 000 and then be **strictly enlarged** as specified by ISOM."*
+Spectators **not** allowed along the course except at the arena passage.
+
+### Long (§3.1)
+> *"The Long distance profile is **physical endurance**. … aims at testing the competitors' ability to make
+> **efficient route choices**, to read and interpret the map and **plan the race for endurance** during a long and
+> physically demanding exercise. The format emphasises **route choices and navigation in rough, demanding terrain,
+> preferably hilly**. **The control is the end-point of a long leg with demanding route choice, and is not
+> necessarily in itself difficult to find.** The Long distance may in parts include elements characteristic of the
+> Middle distance with the course suddenly breaking the pattern of route choice orienteering to introduce a section
+> with more technically demanding legs."*
+
+Plus (§3.2): long legs of **1.5–3.5 km**, **two or more** of them; **butterfly loops** to break up groups; and
+*"the terrain itself should be used as a break-up method by putting the course through areas with limited
+visibility."*
+
+### Relay (§4.1)
+> *"The Relay profile is **team competition**. … The format is built on a **technically demanding concept, more
+> similar to the concept of the Middle than the Long distance**. Some elements characteristic of the Long distance,
+> like longer, route-choice legs should occur, allowing competitors to pass each other **without making contact**.
+> **Good Relay terrain has characteristics that make competitors lose eye contact with each other** (such as denser
+> vegetation, many hills/depressions etc.). **Terrain with continuous good visibility is not suitable for the
+> Relay.**"*
+
+### Sprint Relay (§5.1)
+> *"mixed-sex high-speed head-to-head competition … **four legs** and **the first and last legs must be run by
+> women**."* Winning total **55–60 min**, each leg **12–15 min**, *"so the first and last legs (which are run by
+> women) should be a little shorter than the second and third legs."*
+
+### Knock-Out Sprint (§6.1)
+> *"individual multiple-round high-speed competition with **head-to-head racing in all but the first round**. …
+> parallel heats with an interval start to qualify for the knock-out section. In this there are one or more
+> knock-out rounds with several parallel heats and mass starts where the leading competitors qualify for the next
+> round. Finally, there is a single mass start race to determine the winner."*
+
+## 7.5 Relay forking
+
+### What the rules actually mandate
+
+| Rule | Text |
+|---|---|
+| **16.6** | *"In relay competitions, the controls must be **combined differently** for the teams, but **all teams must run the same overall course**. If the terrain and the concept of the courses permit it, the lengths of the legs may be significantly different. However, the sum of the winning times of the legs must be kept as prescribed. **All teams must run the different length legs in the same sequence.**"* |
+| **16.7** | Same principle for individual competitions — *"all competitors must run the same overall course"* — **except** Knock-Out Sprint "Course Choice" forking. |
+| **App. 6 §4.2** | *"The mass start format requires a course planning technique separating competitors from each other (e.g. **forking**). **The best teams should be carefully allocated to different forking combinations.** For fairness reasons **the different variants of each forking should be equal in running time** (assuming competitors are in equal shape and making no mistakes) and **the very last part of the last leg must be the same for all competitors.**"* |
+| **App. 2 §3.10** | *"Course planning for relays should incorporate a good and sufficient **forking/splitting system**."* |
+| **12.14** | Course-combination allocation is supervised by the IOF Event Adviser and **kept secret until after the last competitor has started**. |
+| **22.11 / 22.13 / 24.8** | Changeover **by touch**; the incoming runner may collect and hand over the outgoing runner's map as the touch. Mass starts for later legs need IOF Event Adviser approval; teams in such mass starts are placed **after** all teams that changed over normally, ranked by the sum of individual times. |
+
+### Named forking schemes — a terminology warning
+
+**"Farsta", "Motala" and "phi loop" appear nowhere in the IOF Competition Rules.** The rules use only *forking*,
+*butterfly loops* (named once, in the **Long distance** section §3.2) and *course choice forking* (KO Sprint only).
+The named schemes below are **community / national-federation / course-planning-software terminology**, and the
+descriptions are the widely-used working definitions — **they are not IOF-normative and should be treated as
+**[UNVERIFIED against a primary source]**:
+
+* **Butterfly / cloverleaf loops** — a central control from which 2–3 loops radiate; each runner does all the loops
+  but in a different order, returning to the centre between each. Total distance identical for everyone; runners
+  who were together are split apart at the hub. Explicitly endorsed by the rules for the Long distance.
+* **Phi loop (Φ-loop)** — the degenerate butterfly with a single loop plus a stem: runners either do the loop first
+  or the stem first.
+* **Farsta forking** — named after the Swedish club/relay; a block of the course is split into two or three
+  variants (A/B/C) that visit different controls between the same entry and exit control. Every team runs every
+  variant, but distributed across their legs, so a team's *set* of variants is the same.
+* **Motala forking** — a butterfly variant in which a runner does two of three available loops, with the
+  combination varying between legs.
+
+**What is safe to implement:** the *constraint*, not the taxonomy —
+`for each team: multiset(controls visited across all legs) is identical` ∧
+`for each forking: all variants ≈ equal running time` ∧
+`the final stretch of the last leg is common to all` ∧
+`all teams run the different leg lengths in the same sequence`.
+
+### Spectator control / arena passage
+
+| Format | Rule |
+|---|---|
+| **Relay** | *"the competitors should, **on each leg, pass the Arena**, and if possible competitors should be **visible from the Arena while approaching the last control**."* An appropriate number of intermediate times, in-forest commentators and TV controls shown on screen. **Spectators not allowed along the course except at the arena passage (including controls at the arena).** |
+| **Middle, Long** | Same restriction — spectators only at the arena passage. The start should be at the arena and the course *should preferably* pass the arena. |
+| **Sprint, Sprint Relay, KO Sprint** | **Spectators ARE allowed along the course.** Sprint additionally requires **all controls to be manned**. |
+| **Sprint Relay (§5.2)** | *"It should be possible to cover at least **70–80 %** of the course with TV cameras. The competition should be based on a **75 minute** live broadcasting and arena production concept; **15 minutes** should be allocated for broadcasting introductions, interviews and prize-giving. An arena passage should be used, if possible … **Two loops per leg** should be used if there is an arena passage with **one loop printed on each side of the map**. **Courses must be forked. GPS-tracking is required and contactless punching should be considered.**"* |
+| **KO Sprint (§6.2)** | Same 70–80 % TV coverage figure; GPS-tracking required. |
+
+## 7.6 Qualification races and knock-out structure
+
+### General qualification
+
+| Rule | Content |
+|---|---|
+| **16.5** | *"For qualification races, the courses for the parallel heats must be **as nearly as possible of the same length and standard**."* |
+| **22.2** | *"the first start in the finals must be **at least 2.5 hours** after the last start in the qualification races"* (except KO Sprint). |
+| **12.8** | Heats must be *"as far as possible equally strong"*; competitors from the same Federation must **not start at consecutive times** within a heat and are *"distributed **as equally as is mathematically possible** among the heats."* Start pattern is either **as many competitors as there are parallel heats start at each start time**, or competitors start at intervals in heat order (H1, H2, H3, H1, H2, H3…). |
+| **12.10** (WOC Sprint & Middle finals) | *"only the competitors placed **number 15 and better in each qualification race heat** may participate."* Further places up to a **maximum of 60**: (a) the best-placed runner from Federations with nobody in the top 15 of any heat, ordered by heat placing (ties broken by least time behind their heat winner); (b) all tied runners from different countries for the last place qualify; (c) **an athlete must have been within 100 % of the heat winner's time** to be selected under (a) or (b). |
+| **12.9** | Ties for a final place → **all** tied competitors qualify. |
+| **12.11** | Final start order *"must be the **reverse** of the placings in the qualification race heats; **the best competitors start last**."* Ties decided by lot. Equal placings across parallel heats start in heat-number sequence, so **the winner of the highest-numbered heat starts last**. |
+| **12.13** | Heat allocation drawn under IOF Event Adviser supervision. |
+
+### Knock-Out Sprint (Rule 12.24) — four stages
+
+| Stage | Structure | Advance |
+|---|---|---|
+| **Qualification** | **3 parallel heats**, interval start, **1 min interval with three competitors starting on each minute** | **top 12 in each heat** → 36 runners |
+| **Quarter-finals** | **6 QFs × 6 runners**, mass start. Allocation either (a) runners **choose** their heat in the order 6th→1st, then 7th→36th by qualification ranking, or (b) a fixed serpentine table (QF1 = 1H3, 4H1, 5H2, 8H3, 9H1, 12H2; etc.). The option must be approved by the IOF Event Adviser and published in **Bulletin 4** | **top 3** in each QF → 18 |
+| **Semi-finals** | **3 SFs × 6 runners**, mass start. QF1+QF2 → SF1; QF3+QF4 → SF2; QF5+QF6 → SF3 | **top 2** in each SF → 6 |
+| **Final** | **6 runners, mass start**, first past the post | — |
+
+Ties for any qualification place → ranked by **Sprint World Ranking as at 12:00 the day before the first race of
+the event**; still tied → random draw. Fewer finishers than places → **the place is left vacant** in the next round.
+**Fewer than 45 entered** → the number of qualification heats and knock-out stages may be reduced. Rule 22.3 allows
+the normal 30-minute undisturbed warm-up to be **reduced** between the Semi-Final and Final.
+
+---
+---
+
+# 8. Running speed model
+
+## 8.1 Tobler's hiking function (the classic baseline — and why it is not enough)
+
+**Tobler 1993**, *Three Presentations on Geographical Analysis and Modeling*, NCGIA Technical Report 93-1:
+
+```
+W = 6 · exp( −3.5 · | S + 0.05 | )          W in km/h,  S = dh/dx  (rise over run, dimensionless)
+```
+
+| Property | Value |
+|---|---|
+| **Maximum speed** | **6.000 km/h at S = −0.05** (2.86° downhill = `arctan 0.05`) |
+| **Flat (S = 0)** | `6·e^(−0.175)` = **5.037 km/h = 1.399 m/s** |
+| **Off-path multiplier (Tobler's own)** | **× 3/5 = 0.6** → 3.6 km/h maximum off-path |
+| On horseback | × 5/4 |
+| **m/s form** | `W = 1.6667 · exp(−3.5·|S+0.05|)`; off-path `W = 1.0 · exp(−3.5·|S+0.05|)` |
+| Pace form | `p = 0.6 · exp(3.5·|S+0.05|)` s/m |
+
+Sources: [Wikipedia (citing the primary report)](https://en.wikipedia.org/wiki/Tobler%27s_hiking_function);
+implementation verified in the R [`movecost`](https://www.rdocumentation.org/packages/movecost/versions/0.4)
+package (`6 * exp(-3.5 * abs(x + 0.05))`, off-path `* 0.6`).
+
+> **Do not use Tobler as the gradient term for an orienteering simulator.** It is a **walking** function and its
+> slope penalty is materially gentler than running's. At +10 % gradient Tobler gives **0.705** of flat speed;
+> running metabolics give **0.603**. Tobler is included here because it is the reference everyone knows — the model
+> in §8.5 replaces its gradient term.
+
+### Other classical models, for completeness
+
+| Model | Statement | Implied climb equivalence |
+|---|---|---|
+| **Naismith (1892)** | 1 h per 3 mi (5 km) forward + 1 h per 2000 ft (600 m) ascent | **1 m climb ≡ 7.92 m horizontal** |
+| **Langmuir correction** | Base 4 km/h + 1 h per 450 m ascent (group pace). Descent: **−10 min per 300 m** for slopes 5–12°; **+10 min per 300 m** for slopes **> 12°** | — |
+| **Aitken (1977)** | 5 km/h on paths/roads, **4 km/h off-path**, +1 h per 600 m ascent | — |
+| **Scarf (2007)** *J Sports Sci* 25(6):719–726, [PubMed 17454539](https://pubmed.ncbi.nlm.nih.gov/17454539/) | Verbatim: *"it is recommended that **male runners and walkers use a 1:8 equivalence ratio and females a 1:10 ratio**."* Contrasts: treadmill data **1:3.3**, mountain road-relay **1:4.4**, cycling **1:8.2**. Derived from fell-running records. | 8 (M) / 10 (W) |
+| **Irmischer & Clarke (2018)** *Cartography and GIS* 45(2):177–186 | On-path `(0.11 + exp(−(|S|·100 + 5)² / (2·30)²)) · 3.6` km/h; off-path `(0.11 + 0.67·exp(−(|S|·100 + 2)² / (2·30)²)) · 3.6` | — |
+
+All of these are **walking** models. Scarf's 1:8 is the closest to useful because it is derived from *runners*, but
+the orienteering-specific measurement in §8.4 (**EF = 6.3**) is better still.
+
+## 8.2 Minetti et al. 2002 — the running metabolic cost curve (use this uphill)
+
+Minetti, Moia, Roi, Susta & Ferretti, *"Energy cost of walking and running at extreme uphill and downhill slopes"*,
+**J Appl Physiol 93:1039–1046 (2002)**, [PubMed 12183501](https://pubmed.ncbi.nlm.nih.gov/12183501/).
+Verbatim from the Fig. 1 caption: *"5th-order polynomial regressions were performed, that yielded"*
+
+```
+Cw(i) = 280.5·i⁵ − 58.7·i⁴ − 76.8·i³ + 51.9·i² + 19.6·i + 2.5      (walking,  R² = 0.999)
+Cr(i) = 155.4·i⁵ − 30.4·i⁴ − 43.3·i³ + 46.3·i² + 19.5·i + 3.6      (RUNNING,  R² = 0.999)
+```
+
+Units **J·kg⁻¹·m⁻¹**; `i` = gradient (positive uphill); **valid range −0.45 ≤ i ≤ +0.45**.
+Fitted efficiencies: uphill 26 %, downhill 150 %.
+
+Verified by direct evaluation of the polynomial (matches the paper's measured values):
+
+| i | −0.45 | −0.30 | **−0.181** | −0.10 | **0** | +0.10 | +0.20 | +0.30 | +0.45 |
+|---|---|---|---|---|---|---|---|---|---|
+| **Cr(i)** | 4.03 | 2.13 | **1.781 (minimum)** | 2.05 | **3.600** | 6.00 | 8.99 | 12.6 | 19.43 |
+
+Paper's measured comparators: 3.40 ± 0.24 level, 18.93 ± 1.74 at +0.45, 1.73 ± 0.36 at −0.20, 3.92 ± 0.81 at −0.45.
+
+> **Trap:** naively scaling speed as `1/Cr` predicts **2.0× flat speed at −18 %**. That is physically false —
+> downhill running is limited by **eccentric braking and foot placement**, not aerobic cost. The downhill branch
+> must be replaced by an empirical curve.
+
+## 8.3 The downhill fix — Strava's empirical Grade Adjusted Pace
+
+Built from **~6 million runs by ~240 000 athletes** using heart-rate-normalised efficiency
+([Strava Engineering](https://medium.com/strava-engineering/an-improved-gap-model-8b07ae8886c3)):
+
+* **Minimum pace adjustment 0.88 at −9 %** → only about a **12 % speed gain** at the downhill optimum.
+* Returns to **1.00 at −18 %**, then gets worse.
+* Uphill: nearly identical to Minetti (~2 % rightward shift).
+* Strava explicitly rejects the naive Minetti downhill: *"The old model predicted a minimum adjustment of 0.5 at
+  −18 %, implying runners should be 100 % faster downhill."*
+
+Independently corroborated **in orienteering**: EOC 2018 elite GPS data puts the speed optimum at **−3 % to −7 %**
+([Wolff, Hachmeister & Schiewe, LBS 2019](https://lbs2019.lbsconference.org/wp-content/uploads/2019/11/3_5.pdf)).
+
+## 8.4 Calibration anchors
+
+| Finding | Value | Source |
+|---|---|---|
+| **ISOM reference speed** | *"If speed through **flat and open runnable forest is 4 min/km**…"* = **4.167 m/s** | ISOM 2017-2 §2.3 |
+| **OCAD Route Analyzer base speed** | *"**200 sec/km for men and 230 sec/km for women** can be used for route time calculation on an international level."* → ratio **1.15** | [OCAD wiki](https://www.ocad.com/wiki/ocad/en/index.php?title=Route_Analyzer) |
+| Consistency check | 200 s/km × 0.83 (ISOM: forest = 80–100 % of path) = 241 s/km ≈ **4:00/km** — the two specs agree | — |
+| **Running economy, path vs heavy terrain** | Impaired by **41–52 %**; less in orienteers (41 %) than track runners (52 %). Path baseline 217 ± 12 (orienteers) / 212 ± 14 (track) ml·kg⁻¹·km⁻¹ | Jensen, Johansen & Kärkkäinen 1999, *J Sports Sci* 17(12):945–50, [PubMed 10622354](https://pubmed.ncbi.nlm.nih.gov/10622354/) |
+| **Forest vs road O₂ cost** | **+26 %**; range **26–72 %** depending on surface and gradient | Creagh & Reilly 1997, *Sports Med* 24(6), [link](https://link.springer.com/article/10.2165/00007256-199724060-00005) |
+| **World-class orienteers, max running velocity** | Horizontal **20.4 ± 0.6 km/h (M) / 17.3 ± 0.8 (W)**; uphill at 22 % **8.8 ± 0.7 / 7.2 ± 0.5 km/h** | Lauenstein, Wehrlin & Marti 2013, *JSCR* 27(11), [PubMed 23442282](https://pubmed.ncbi.nlm.nih.gov/23442282/) |
+| **VO₂peak, world-class orienteers** | Uphill 69.2 ± 5.7 (M) / 59.1 ± 3.7 (W); horizontal 66.4 ± 3.5 / 55.7 ± 3.1 ml·kg⁻¹·min⁻¹ | Lauenstein 2013 |
+| **★ Climb ↔ distance equivalence, MEASURED on orienteers** | **EF = 6.3 ± 0.7** (range 5.2–7.4). Applied to WOC as **6.2 (M) / 6.4 (W)**: `equiv_km = length + climb_km × EF` | Lauenstein 2013; applied by [Nazário & Correia 2022](http://www.efsupit.ro/images/stories/februarie2022/Art%2067.pdf) |
+
+**Converting the O₂-cost ladder to a speed ladder** (at constant race intensity, speed ∝ 1/cost):
+road 1.00 → forest 1/1.26 = **0.79** → heavy terrain 1/1.41 = **0.71** → worst case 1/1.72 = **0.58**.
+This independently brackets ISOM's 80–100 % and 60–80 % bands.
+
+### Men : women base-speed ratio = **1.15**, not 1.28
+
+Three-way agreement:
+1. OCAD's published 230/200 s/km = **1.15**
+2. Solving for the ratio that makes the model reproduce **both** sexes' WOC times with the **same** detour factor
+   gives **1.15** (residual 0.001)
+3. The observed winner-vs-winner straight-line pace ratio across the six WOC forest races in §7.3 is **1.157**
+
+> **Audit note.** The widely quoted **1.28** ratio (Nazário & Correia) is the **top-30 mean over 2009–2019**, when
+> women raced 70–80 min against the men's 90–100 min. For **winner-level base speed use 1.15–1.17**, not 1.28.
+
+## 8.5 The gradient factor — the recommended formula
+
+```
+                 Cr(0) / Cr(g)                    for  g ≥ 0            [Minetti 2002, running]
+f_grad(g)  =     1 − 16.8·g·(g + 0.18)            for  −0.18 ≤ g < 0    [fitted to Strava GAP]
+                 exp( −3.5·(|g| − 0.18) )         for  g < −0.18        [Tobler-shaped tail]
+
+where Cr(i) = 155.4·i⁵ − 30.4·i⁴ − 43.3·i³ + 46.3·i² + 19.5·i + 3.6,  Cr(0) = 3.600
+```
+
+The middle branch is C⁰-continuous at both ends (`f(0) = 1.000`, `f(−0.18) = 1.000`) and peaks at
+**1.136 at g = −0.09**, matching Strava's empirical minimum pace adjustment of 0.88.
+
+| gradient | −0.40 | −0.30 | −0.20 | **−0.09** | −0.05 | **0** | +0.05 | +0.10 | +0.15 | +0.20 | +0.30 | +0.40 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| **f_grad** | 0.463 | 0.657 | 0.932 | **1.136** | 1.109 | **1.000** | 0.768 | 0.603 | 0.485 | 0.400 | 0.286 | 0.214 |
+| implied EF | — | — | — | — | — | — | **6.03** | **6.58** | **7.07** | **7.51** | 8.31 | 9.20 |
+
+**★ The key validation.** The **implied** climb-equivalence factor over the realistic orienteering range (0–20 %)
+is **6.0–7.5**, centred on Lauenstein's independently **measured EF = 6.3 ± 0.7 (range 5.2–7.4)** on Swiss
+world-class orienteers. A model built from treadmill metabolics and Strava's 6-million-run dataset agrees with a
+field measurement on elite orienteers to within noise. *(Compare Naismith's 7.92 and Scarf's 8 — both a little
+steep, because they are fell-running/hiking records rather than orienteering.)*
+
+**Cheap global approximation** (use this for course-length estimation, not per-step simulation):
+`d_equiv = d + 6.2 × climb` (men) / `d + 6.4 × climb` (women), both in metres.
+
+## 8.6 Terrain multipliers per ISOM symbol
+
+Reference = **ISOM 405 white forest, flat = 1.00**. These reconcile ISOM's normative bands (§1.4) with the only
+published per-symbol table, **Le & Eichler (2017)**,
+[CEUR-WS Vol-2020 paper 5](https://ceur-ws.org/Vol-2020/paper5.pdf) — *"An open forest (ISOM-ID 405) is the
+reference that will be set to a normalized, unitless speed value of 100."* Where the two conflict, **ISOM wins**
+(e.g. Le & Eichler give open land 90, but ISOM 401 explicitly *"offers better runnability than typical open
+forest"*).
+
+| ISOM | Terrain | **Multiplier** | **Men m/s** | **min/km** | **Women m/s** | **min/km** | ISOM band |
+|---|---|---:|---:|---|---:|---|---|
+| 501 / 502 / 503 | Paved area, wide road, road | **1.30** | 5.42 | 3:04 | 4.71 | 3:32 | > 100 % |
+| 504 / 505 | Vehicle track, footpath | **1.20** | 5.00 | 3:19 | 4.35 | 3:49 | > 100 % |
+| 506 | Small footpath | **1.12** | 4.67 | 3:34 | 4.06 | 4:06 | > 100 % |
+| 507 / 508 | Less distinct path / narrow ride | **1.05** | 4.38 | 3:48 | 3.80 | 4:22 | ~100 % |
+| 401 / 402 | Open land (yellow) | **1.10** | 4.58 | 3:38 | 3.99 | 4:10 | > 100 % |
+| 403 / 404 | Rough open land | **0.95** | 3.96 | 4:12 | 3.44 | 4:50 | 80–100 % |
+| **405** | **Forest, white — REFERENCE** | **1.00** | **4.17** | **3:59** | **3.62** | **4:35** | 80–100 % |
+| 406 / 407 | Vegetation: slow running (green 30 %) | **0.70** | 2.92 | 5:42 | 2.54 | 6:34 | 60–80 % |
+| 408 / 409 | Vegetation: walk (green 60 %) | **0.40** | 1.67 | 9:59 | 1.45 | 11:29 | 20–60 % |
+| 410 | Vegetation: fight (green 100 %) | **0.12** | 0.50 | 33:19 | 0.43 | 38:19 | < 20 % |
+
+### Multiplicative overlays (screens laid on top of a base area symbol)
+
+| ISOM | Overlay | Multiplier | Basis |
+|---|---|---:|---|
+| 210 | Stony ground, slow running | **0.75** | ISOM: 60–80 % |
+| 211 | Stony ground, walk | **0.45** | ISOM: 20–60 % |
+| 212 | Stony ground, fight | **0.15** | ISOM: < 20 % |
+| 213 | Sandy ground | **0.75** | ISOM: "< 80 %" |
+| 214 | Bare rock | **1.00** | ISOM: "runnable"; less-runnable bare rock is drawn 210–212 |
+| 208 | Boulder field | **0.95** | ISOM: *"will generally not impact runnability"* |
+| 209 | Dense boulder field | **0.45** | **[UNCERTAIN — inferred]** ISOM says only "runnability is affected" |
+| 113 | Broken ground | **0.90** | **[UNCERTAIN]** ISOM: *"little impact on runnability"* |
+| 114 | Very broken ground | **0.70** | **[UNCERTAIN]** ISOM: *"affects runnability"* |
+| 308 | Marsh | **0.55** | **[UNCERTAIN — no ISOM figure exists]**; ISOM says marsh *"shall be combined with other symbols to show runnability"* |
+| 310 | Indistinct marsh | **0.80** | **[UNCERTAIN]** |
+| 412 | Cultivated land | **0.70** | **[UNCERTAIN]** — highly seasonal; ISOM says to avoid it for courses |
+| 302 | Shallow body of water | **0.35** | **[UNCERTAIN]** — "< 0.5 m deep and runnable" |
+
+### Impassable / forbidden
+
+`201` Impassable cliff · `206` Gigantic boulder · `301` Uncrossable water · `307` Uncrossable marsh ·
+`515` Impassable wall · `518` Impassable fence · `521` Building · `529` Prominent uncrossable line feature
+→ **multiplier 0** (blocked edge in the routing graph).
+`520` / `708` / `709` / `711` and, in sprint, the full Rule-17.2 list (§2.6) → **0, and entering = DSQ**.
+
+### Combination rule — mandated by ISOM §2.3
+
+> *"A combination of a green screen and stony ground means that the runnability will be **worse than for each of
+> them in isolation**."*
+
+```
+M_terrain = M_base × Π(M_overlay_i) × (0.90 if count(overlays) ≥ 2 else 1.0)
+```
+
+### Why the EOC 2018 GPS "green" figures must NOT be used
+
+[Wolff et al. 2019](https://lbs2019.lbsconference.org/wp-content/uploads/2019/11/3_5.pdf) analysed ~156 000 track
+segments from four elite men's races at EOC 2018 (Ticino). Median speeds: wide road **4.28 m/s**, road 4.13,
+small footpath 3.51, open land 3.92, **white forest 2.57**, vegetation-walk 2.42, **vegetation-fight 2.20 m/s**.
+
+The authors flag the problem themselves: *"While indistinct marsh (310) shows unexpectedly good values, easy to run
+forest (405) shows unexpectedly bad values."* Elites only *enter* green where it is thin, short or downhill —
+massive self-selection bias. **The path : forest ratios (1.3–1.7×) are usable and corroborate the table above; the
+green values are not.** ISOM's normative bands remain the defensible source for green.
+
+**Also negative findings, so you don't waste time:**
+* **Karttapullautin has no speed model.** Its `greenshades=0.2|0.35|0.5|0.7|1.3|2.6|4|…` are **LiDAR point-density
+  thresholds**, not speeds; [Ryyppö's own guide](http://www.routegadget.net/karttapullautin/greenmapping.pdf)
+  calibrates green by visually matching existing maps.
+* **OCAD does not publish its per-symbol resistance values** — only the 200/230 s/km base speed.
+* **Albert & Sárközy (2021)**, [Proc. ICA 4:4](https://ica-proc.copernicus.org/articles/4/4/2021/ica-proc-4-4-2021.pdf),
+  give least-cost-path friction weights tuned against elite route choices — **do not use as physical speeds** (they
+  compress "fight" to 0.4× forest where ISOM says < 0.2×, and roads to 3× forest). It is a route-*preference* model.
+* **[RouteAI](https://github.com/Jekblade/RouteAI)** — a working open-source per-colour cost set for comparison:
+  white 1.5, yellow 1.2, light green 2, green 3, dark green 4, olive 10, black (paths) 1.
+
+## 8.7 The complete model
+
+```
+v(x)  =  v_base(sex)  ×  M_terrain(x)  ×  f_grad(g(x))
+
+v_base(men)   = 4.1667 m/s   ( = 4:00 min/km, the ISOM §2.3 reference )
+v_base(women) = 3.6232 m/s   ( = v_base(men) / 1.15  ≈  4:36 min/km )
+```
+
+Race-time estimate for a whole course:
+
+```
+T  =  D · ( L + EF · C ) / ( v_base · M̄ )  +  T_nav
+
+L   = stated course length (m)              — the straight-line-through-controls figure, IOF Rule 16.3
+C   = total climb (m)                       — IOF Rule 16.4
+EF  = 6.2 (men) / 6.4 (women)               — Lauenstein 2013
+M̄   = course-weighted mean terrain multiplier
+D   = route detour factor (see below)
+T_nav = navigational overhead: ~4 min Long, ~3 min Middle, ~1 min Sprint
+```
+
+### The route detour factor `D`
+
+`D` converts the **stated** (straight-line) course length into the distance actually run. **No published value
+exists** — this is the model's one free parameter. Derived here by inverting the model against the real WOC results
+in §7.3 (`v_base` = 4:00/km men, ×1.15 women, `T_nav` = 4 min Long / 3 min Middle):
+
+| | 2021 | 2023 | 2025 | mean |
+|---|---|---|---|---|
+| **D, Long (men)** | 1.14 | 1.22 | 1.20 | **1.19** |
+| **D, Middle (men)** | 1.24 | 1.22 | 1.04 | **1.17** |
+| **D, Long (women)** | — | — | 1.21 | ~1.20 |
+
+**Recommended: `D ≈ 1.18` for forest, `D ≈ 1.05` for sprint.**
+
+The sprint value is lower for a structural reason worth understanding: **IOF Rule 16.3 requires the stated length to
+deviate around physically impassable obstructions and prohibited areas** — and a sprint map is dense with impassable
+buildings and walls, so the stated length is already close to the shortest *runnable* route. A forest length is
+close to a pure straight line. This is why sprint pace (3:30/km) looks so much faster than it "should".
+
+Corroboration: route efficiency (`100 × straight / actual`) is classed "high" above 90 and "low" below 50, i.e.
+elites typically run **1.1–1.3×** the straight line
+([Route-Choice-Efficiency-Prediction repo](https://github.com/N77N77/Route-Choice-Efficiency-Prediction-in-Elite-Orienteering)).
+
+**Expose `D` as a documented tunable. It is the one number in this model that is derived, not sourced.**
+
+### Validation targets
+
+* A mixed WOC-style forest course must come out at **9.3–9.5 km/h straight-line for elite men, 7.5–7.6 km/h for
+  elite women** (Nazário & Correia, WOC 2009–2019, top-30).
+* Elite Long ≈ **88–92 min** for 13.5–16 km with 475–1050 m climb (§7.3).
+* Elite Middle ≈ **30–35 min** for 5.4–6.0 km with 220–320 m.
+* Elite Sprint ≈ **12–15 min** for 3.5–4.3 km with 40–85 m.
+* Absolute ceiling: no elite runs faster than **20.4 km/h (M) / 17.3 km/h (W)** flat out on a track — clamp there.
+
+### Reference implementation
+
+```python
+V_BASE = {"M": 4.1667, "W": 3.6232}          # m/s, ISOM 4:00/km reference; W = M / 1.15
+EF     = {"M": 6.2,    "W": 6.4}             # climb-equivalence factor, Lauenstein 2013
+V_MAX  = {"M": 5.667,  "W": 4.806}           # m/s = 20.4 / 17.3 km/h, Lauenstein 2013
+
+M_BASE = {405:1.00, 401:1.10, 402:1.10, 403:0.95, 404:0.95,
+          406:0.70, 407:0.70, 408:0.40, 409:0.40, 410:0.12,
+          501:1.30, 502:1.30, 503:1.30, 504:1.20, 505:1.20,
+          506:1.12, 507:1.05, 508:1.05, 412:0.70, 302:0.35}
+M_OVER = {210:0.75, 211:0.45, 212:0.15, 213:0.75, 214:1.00,
+          208:0.95, 209:0.45, 113:0.90, 114:0.70, 308:0.55, 310:0.80}
+BLOCKED = {201, 206, 301, 307, 515, 518, 521, 529, 520, 708, 709, 711}
+
+def cr(i):                                    # Minetti 2002 running cost, J/kg/m
+    return 155.4*i**5 - 30.4*i**4 - 43.3*i**3 + 46.3*i**2 + 19.5*i + 3.6
+
+CR0 = 3.6
+
+def f_grad(g):
+    g = max(-0.45, min(0.45, g))              # Minetti validity range
+    if g >= 0.0:      return CR0 / cr(g)
+    if g >= -0.18:    return 1.0 - 16.8*g*(g + 0.18)
+    return math.exp(-3.5*(abs(g) - 0.18))
+
+def terrain_mult(base_sym, overlays):
+    if base_sym in BLOCKED or any(o in BLOCKED for o in overlays):
+        return 0.0
+    m = M_BASE.get(base_sym, 1.0)
+    for o in overlays:
+        m *= M_OVER.get(o, 1.0)
+    if len(overlays) >= 2:
+        m *= 0.90                             # ISOM 2.3: worse than either in isolation
+    return m
+
+def speed(sex, base_sym, overlays, gradient, fatigue=1.0):
+    v = V_BASE[sex] * terrain_mult(base_sym, overlays) * f_grad(gradient) * fatigue
+    return min(v, V_MAX[sex])
+```
+
+## 8.8 Known gaps in the speed model (declare these to the auditor)
+
+1. **`D` (actual/stated length ratio) is not published anywhere.** Derived by inversion against WOC results.
+2. **Hébert-Losier et al. 2014** ([PubMed 24673160](https://pubmed.ncbi.nlm.nih.gov/24673160/)) has the absolute
+   road/path/forest velocities for elite vs amateur orienteers, but it is paywalled — the highest-value missing
+   datum. All that is public: elites retain ~3 % (2 km) / ~4 % (20 m) *more* of their road velocity in forest.
+3. **Marsh (308/310), broken ground (113/114), boulder field (209) and cultivated land (412) have no ISOM
+   percentage.** Those multipliers are inferred, not sourced.
+4. **The green multipliers cannot be validated from GPS data** because of the self-selection bias documented above.
+5. **Nazário & Correia's "running speed winner" row is internally inconsistent** (lower than their own top-30
+   mean, which is impossible). Use their **top-30 means**, not the winner row.
+6. **Fatigue is not modelled here at all.** An 88-minute Long is a paced effort; a 13-minute Sprint is near
+   threshold. Add a `fatigue(t)` term if you need the last 20 minutes of a Long to slow down realistically.
+
+---
+---
+
+# 9. Czech / Slovak / English terminology (i18n source of truth)
+
+Sources (all fetched):
+[ČSOS Pravidla orientačního běhu 2026](https://ok-bor.cz/jestedska/wp-content/uploads/2025/12/Pravidla-OB-2026.pdf) ·
+[ČSOS Pravidla OB 2022](https://www.ceskyorientak.cz/wp-content/uploads/sites/2/2025/05/pravidla-ob-2022.pdf) ·
+[ISOM 2017-2 — Czech translation (ČSOS)](https://www.ceskyorientak.cz/wp-content/uploads/2025/04/csos-isom2017-2i22cz.pdf) ·
+[Mezinárodní popisy kontrol 2024 — Czech (ČSOS)](https://www.ceskyorientak.cz/wp-content/uploads/sites/2/2025/04/ob-mezinarodni-popisy-kontrol-2024.pdf) ·
+[**ČSOS Orienťácký slovník / Orienteering dictionary v2.0**](https://metodika.ceskyorientak.cz/upload/2019/11/Orienteering-english-CSOS-dictionary.pdf) ·
+[J. Procházka — Rozvoj mapové techniky (ČSOS metodika)](https://metodika.ceskyorientak.cz/upload/2020/05/Prochazka-Mapova-technika.pdf) ·
+[ČSOS metodický portál — mapové klíče](https://metodika.orientacnisporty.cz/materialy/mapovani/mapove-klice) ·
+[SZOŠ Pravidlá orientačného behu 2025](https://www.orienteering.sk/public/files/Dokumenty%20SZO%C5%A0/OB/Pravidla%202025%20%E2%80%93%20zmeny.pdf) ·
+[ORIS](https://oris.orientacnisporty.cz/) ·
+[MU FSpS — Orientační běh, výstroj](https://is.muni.cz/do/rect/el/estud/fsps/ps10/beh/web/pages/03-vystroj.html)
+
+Gender is marked **m / f / n**; `pl.` = plural-only.
+
+## 9.0 ⚠️ Six terms that are commonly got WRONG — fix these before shipping
+
+| Naive/dictionary form | Verdict | What Czech orienteers actually say |
+|---|---|---|
+| *souběžná chyba* | ✗ **not used** | **paralelní chyba** (f) — the ČSOS coaching material lists "Paralelní chyby" verbatim. Short form **paralelka** (f). |
+| *opěrný bod* | ✗ not established (military calque) | attack point = **odrazový bod (dohledávky)** (m), also *vytyčný bod*. Note **záchytný bod** is a *different* concept (catching feature). |
+| *houština* | ✗ wrong register | **hustník** (m) — the official control-description word. |
+| *úžlabina* / *rokle* | ✗ neither is official | re-entrant = **údolíčko** (n); gully = **rýha / erozní rýha** (f). *Úžlabina* and *rokle* are civilian hiking words. |
+| *postup* = "leg" | ⚠ half-right | **postup** = the **route / route choice**. The **leg** is **úsek (trati)** (m): *"Část trati mezi jejími základními místy se nazývá 'úsek trati'."* |
+| *mapový start / K-bod* | ⚠ colloquial | the rules term is **začátek orientace** (m). *Mapový start* is the everyday word; *K-bod* is dated. |
+
+**Generation shift in format names.** The ČSOS dictionary maps `long = klasická`, `middle = krátká`,
+`ultra long = dlouhá`. The **current rules** use **dlouhá trať** (long) and **střední trať** (middle). Older runners
+say *klasika / krátká*; the federation says *dlouhá / střední*. **Support both as aliases.**
+
+## 9.1 Race & competition
+
+| Czech | Slovak (if different) | English | Note |
+|---|---|---|---|
+| orientační běh (m), *OB* | orientačný beh | orienteering | colloquially **orienťák** (m) |
+| závod (m) | **preteky** (pl. only) | race, event | SK has no singular: *"na pretekoch"* |
+| závodník (m) / závodnice (f) | pretekár / pretekárka | competitor | |
+| kategorie (f) | kategória | class | H = muži, D = ženy (e.g. H21, D18) |
+| dlouhá trať (f) | dlhá trať | long distance | older/colloquial **klasika** (f) |
+| střední trať (f) | stredná trať | middle distance | older/colloquial **krátká trať** |
+| sprint (m) | **šprint** | sprint | |
+| štafeta (f) | štafeta | relay | |
+| předávka (f) | odovzdávka | changeover | *prostor předávky* = changeover area |
+| úsek štafety (m) | úsek štafety | relay leg | |
+| kvalifikace (f) | kvalifikácia | qualification | |
+| finále (n) | finále | final | |
+| hromadný start (m) | hromadný štart | mass start | |
+| intervalový start (m) | intervalový štart | interval start | |
+| stíhačka (f) | — | chasing start | |
+| vyřazovací sprint (m) | — | knock-out sprint | |
+| startovní listina (f) | štartová listina | start list | colloquial **startovka** (f) |
+| výsledková listina (f) | výsledková listina | results | colloquial **výsledky** (m pl.) |
+| průběžné výsledky (m pl.) | priebežné výsledky | live/preliminary results | |
+| diskvalifikace (f) | diskvalifikácia | disqualification | **DISK**; verb *diskvalifikovat* |
+| oddíl (m) | — | club (section) | SK uses only *klub* |
+| klub (m) | klub | club | |
+| mistrovství (n) | **majstrovstvá** (pl.) | championship | *MČR* |
+| žebříček (m) | **rebríček** | ranking list | |
+| ranking (m) | ranking | ranking | loanword |
+| oblastní žebříček (m) | oblastný rebríček | regional ranking | |
+| Český pohár (m) | Slovenský pohár | Czech Cup | |
+| rozpis (m) | **propozície** (pl.) | event bulletin | genuine false friend — do not translate literally |
+| pokyny (m pl.) | pokyny | final instructions | published ≤ 48 h before |
+| přihláška (f) | prihláška | entry | *startovné* (n) = entry fee |
+| etapa (f) | etapa | stage | *etapový závod* = multi-day |
+| shromaždiště (n) | zhromaždisko | arena, event centre | |
+| pořadatel (m) | organizátor | organiser | |
+| stavitel tratí (m) | staviteľ tratí | course setter | verb *stavět tratě* |
+| ředitel závodu (m) | riaditeľ pretekov | event director | |
+| hlavní rozhodčí (m) | hlavný rozhodca | main referee | |
+| karanténa (f) | karanténa | quarantine | |
+| soutěžní řád (m) | súťažný poriadok | competition regulations | |
+
+## 9.2 Course & controls
+
+| Czech | Slovak (if different) | English | Note |
+|---|---|---|---|
+| trať (f) | trať | course | soft-stem f. |
+| **úsek (trati)** (m) | úsek trate | **leg** | the correct word for a leg |
+| **postup** (m) | postup | **route, route choice** | *volba postupu* = route choice |
+| kontrola (f) | **kontrolné stanovište** (KS) | control | SK officially abbreviates *KS* |
+| lampion (m) | **lampión** | control flag | 30×30 cm, white/orange |
+| kód kontroly (m) | kód KS | control code | ≥ 31 |
+| popisy kontrol (m pl.) | popisy KS | control descriptions | colloquial **popisky**; holder = *popisník* (m) |
+| razit / orazit | raziť | to punch | |
+| ražení (n) | razenie | punching | rules word is *označování*, but *ražení* is universal |
+| chybné ražení (n) | chybné razenie | mispunch (MP) | |
+| kleště (f pl.) | — | pin punch | mechanical backup |
+| čip (m) | čip | SI-card, e-card | *SIAC* as-is; EMIT card = **emitka** (f) |
+| **krabička** (f) | — | SI control unit | slang but universal ("little box") |
+| vyčítání (n) | vyčítanie | card read-out / download | *vyčíst čip* |
+| mazání (n) | mazanie | clearing | + *kontrola mazání* = check |
+| mezičas (m), usually **mezičasy** (pl.) | medzičas | split time | |
+| start (m) | štart | start | |
+| **začátek orientace** (m) | — | start point (map start) | rules term; colloquial *mapový start*, *K-bod*; marked by the triangle |
+| cíl (m) | **cieľ** | finish | |
+| cílová čára (f) | cieľová čiara | finish line | |
+| doběh / cílový doběh (m) | dobeh | finish chute | |
+| předstart (m) | predštart | pre-start | |
+| **sběrka** (f) | zberná kontrola | last control | slang but universal; formal *sběrná kontrola*; traditionally code 100 |
+| předsběrka (f) | — | pre-warning control | also *předkontrola* |
+| divácká kontrola (f) | divácka kontrola | spectator control | |
+| průběh arénou (m) | priebeh arénou | arena passage | also *divácký úsek* |
+| občerstvovací stanice (f) | občerstvovacia stanica | refreshment point | slang **občerstvovačka** (f) |
+| povinný úsek (m) | značený úsek | marked / compulsory route | also *fáborkovaný úsek*; ISOM 707 |
+| povinný průchod (m) | povinný prechod | compulsory passage | |
+| přeběh (m) | prebeh | crossing point | over a fence/wall |
+| zakázaný prostor (m) | zakázaný priestor | out-of-bounds, embargo | ISOM 709 *nepřístupná oblast* |
+| koridor (m) | koridor | corridor | also a training format |
+| spojnice (f) | spojnica | course line | |
+| kolečko (n) | koliesko | control circle | |
+| trojúhelník (m) | trojuholník | start triangle | |
+| rozdělovací metoda (f) | — | forking | slang **farstování** (n), from Swedish |
+| volné pořadí (n) | voľné poradie | free order | |
+| skorelauf (m) | skorelauf | score event | |
+| roznášet / sbírat kontroly | roznášať / zbierať | to put out / collect controls | |
+
+## 9.3 Map & terrain
+
+### Colour categories and symbol groups (ISOM 2017-2 ch. 3, Czech edition)
+
+| Czech | English | Colour |
+|---|---|---|
+| Terénní tvary (m pl.) | Landforms | **hnědá** (brown) |
+| Skály a balvany | Rock and boulders | **černá + šedá** |
+| Voda a bažiny | Water and marsh | **modrá** |
+| Vegetace (f) | Vegetation | **zelená + žlutá** |
+| Umělé objekty (m pl.) | Man-made features | **černá** |
+| Technické značky (f pl.) | Technical symbols | černá + modrá |
+| Značky pro dotisk (f pl.) | Course-planning / overprint symbols | **fialová** (purple) |
+
+### Map generalities
+
+| Czech | Slovak | English | Note |
+|---|---|---|---|
+| mapa (f) | mapa | map | |
+| mapový klíč (m) | mapový kľúč | map specification / legend | |
+| měřítko (n) | **mierka** | scale | |
+| vrstevnice (f) | vrstevnica | contour | *základní / zdůrazněná / doplňková* = normal / index / form line |
+| ekvidistance (f) | ekvidistancia | contour interval | rules: *interval vrstevnic (ekvidistance)* |
+| výšková kóta (f) | výšková kóta | spot height | ISOM 603 |
+| magnetický poledník (m) | magnetický poludník | magnetic north line | ISOM 601 |
+| **průběžnost** (f) | priebežnosť | **runnability** | the ISOM term; colloquially **běhatelnost** (f) |
+| terén (m) | terén | terrain | |
+| porost (m) | porast | vegetation, undergrowth | |
+
+### Landforms
+
+| Czech | English | ISOM |
+|---|---|---|
+| kopec (m) / kupa (f) | hill | 101–103 |
+| údolí (n) | valley | |
+| **údolíčko** (n) | **re-entrant** | D 1.3 |
+| **hřbítek** (m) | **spur** | D 1.2; colloquially **nos** (m); *hřbet* = larger ridge |
+| sedlo (n) | saddle | D 1.11 |
+| terasa (f) | terrace | D 1.1 |
+| plošina (f) | plateau | |
+| zemní sráz (m) | earth bank | 104 |
+| zemní val (m) | earth wall | 105; *rozpadlý* 106 |
+| **rýha / erozní rýha** (f) | **erosion gully** | 107; *malá rýha* 108 |
+| příkop (m) | ditch, trench | 215 |
+| **kupka** (f) | **knoll** | 109; *malá protáhlá kupka* 110 |
+| **prohlubeň** (f) | **depression** | 111 (gen. *prohlubně*) |
+| **jáma** (f) | **pit** | 112; *jáma s vodou* 303 |
+| rozbitý povrch (m) | broken ground | 113; *velmi rozbitý* 114 |
+| lom (m) | quarry | D 1.5 |
+| svah (m) | slope | |
+
+### Rock and boulders
+
+| Czech | English | ISOM |
+|---|---|---|
+| **sráz** (m) / skalní sráz | cliff | 202; *nepřekonatelný sráz* 201; diminutive **srázek** very common |
+| skála (f) | rock, crag | *holá skála* 214 |
+| skalní stěna (f) | rock face | |
+| **balvan** (m) | boulder | 204; *velký balvan* 205; *obrovský balvan / skalní věž* 206 |
+| kámen (m) | boulder (everyday word) | |
+| shluk balvanů (m) | boulder cluster | 207 |
+| balvanové pole (n) | boulder field | 208; *husté* 209 |
+| kamenitý povrch (m) | stony ground | 210–212 |
+| jeskyně (f) | cave | 203 |
+
+### Water and marsh
+
+| Czech | Slovak | English | ISOM |
+|---|---|---|---|
+| bažina (f) | močiar / bažina | marsh | 308; *nepřekonatelná* 307; *úzká* 309; *nezřetelná* 310 |
+| močál (m) | močiar | swamp, bog | generic |
+| pevná půda v bažině (f) | — | firm ground in marsh | D 3.8 |
+| potok (m) | potok | stream | 304/305 |
+| řeka (f) | rieka | river | |
+| rybník (m) | rybník | pond | |
+| jezero (n) | **jazero** | lake | |
+| pramen (m) | prameň | spring | 312 |
+| studna (f) | studňa | well | 311 |
+| vodní nádrž (f) | vodná nádrž | reservoir | |
+
+### Vegetation
+
+| Czech | Slovak | English | Note |
+|---|---|---|---|
+| les (m) | les | forest | 405 |
+| otevřený prostor (m) | otvorený priestor | open land | D 4.1 |
+| polootevřený prostor (m) | polootvorený priestor | semi-open land | D 4.2 |
+| **světlina** (f) | svetlina | **clearing** | D 4.4 |
+| **paseka** (f) | rúbanisko | **clearcut, felled area** | not an ISOM name but what orienteers say; usually slow, full of *klest* |
+| mýtina (f) | mýtina | glade | literary synonym of *paseka*; orienteers rarely use it |
+| **hustník** (m) | hustník | **thicket / fight** | D 4.5 |
+| úzký hustník / živý plot (m) | živý plot | linear thicket / hedge | D 4.6 |
+| hranice vegetace (f) | hranica vegetácie | vegetation boundary | D 4.7; ISOM 416; also *rozhraní porostů* |
+| roh lesa (m) | roh lesa | forest corner | D 4.3 |
+| skupina stromů (f) | skupina stromov | copse | D 4.8 |
+| výrazný strom (m) | výrazný strom | prominent tree | 417/418 |
+| vývrat (m) | vývrat | root stock | D 4.10; *pařez* (m) = stump |
+| louka (f) | lúka | meadow | |
+| pole (n) | pole | field | *obdělávaná půda* 412 |
+| sad (m) | sad | orchard | 413 |
+
+### Man-made features
+
+| Czech | Slovak | English | ISOM |
+|---|---|---|---|
+| silnice (f) | cesta, asfaltka | road | 502/503 |
+| cesta (f) | cesta | track | 504 *vozová cesta*, 505 *pěší cesta* |
+| pěšina (f) | **chodník** | path | 506; *nezřetelná pěšina* 507 |
+| **průsek** (m) | priesek | **forest ride, firebreak** | 508 |
+| plot (m) | plot | fence | 516; *rozpadlý* 517; *nepřekonatelný* 518 |
+| zeď (f) | **múr** | wall | 513–515 |
+| ohrada (f) | ohrada | enclosure, paddock | non-ISOM |
+| budova (f) | budova | building | 521 |
+| zastřešení (n) | zastrešenie | canopy | 522 |
+| zřícenina (f) | zrúcanina | ruin | 523 |
+| most (m) | most | bridge | 512 |
+| schodiště (n) | schodisko | stairway | 532 |
+| průchod (m) | prechod | crossing point / passage | 519 |
+| **posed** (m) | posed | hunting stand | 525 — a classic Czech control feature |
+| **krmelec** (m) | kŕmidlo | fodder rack | 527 — ditto |
+| mohyla (f) | mohyla | cairn | 526 |
+| železnice (f) | železnica | railway | 509 |
+| elektrické vedení (n) | elektrické vedenie | power line | 510/511 |
+| zpevněná plocha (f) | spevnená plocha | paved area | 501 |
+
+## 9.4 Technique
+
+| Czech | Slovak | English | Note |
+|---|---|---|---|
+| **dohledávka** (f) | dohľadávka | **final approach / spiking the control** | The key Czech technique noun — the last 50–150 m into the circle. Verb *dohledat*. ČSOS coaching treats it as its own trainable phase. English has no clean single word. |
+| **odrazový bod (dohledávky)** (m) | — | **attack point** | also *vytyčný bod* |
+| **záchytný bod** (m) | záchytný bod | **catching feature / check point** | |
+| orientační bod (m) | orientačný bod | navigational feature | |
+| **vodicí linie** (f) | vodiaca línia | **handrail** | *vodicí* is the correct spelling (not *vodící*) |
+| záchytná linie (f) | záchytná línia | catching feature (linear) / backstop | |
+| azimut (m) | azimut | bearing | *hrubý azimut* = rough; *přesný azimut* = precise |
+| **buzola** (f) | buzola | **compass** | the normal word; *kompas* sounds civilian/hiking |
+| **palcovka** (f) | palcovka | thumb compass | vs **desková** (f) = baseplate compass |
+| palcování (n) | palcovanie | thumbing | |
+| krokování (n) | krokovanie | pace counting | also *měření krokem*; *odhad vzdálenosti* = distance estimation |
+| čtení mapy (n) | čítanie mapy | map reading | |
+| orientace mapy (f) | orientácia mapy | orienting the map | *zorientovat mapu* |
+| zjednodušení (n) | zjednodušenie | simplification | |
+| generalizace (f) | generalizácia | generalisation | |
+| volba postupu (f) | voľba postupu | route choice | often shortened to **volba** |
+| směr (m) | smer | direction | *směr odběhu* = direction out of a control |
+| vzdálenost (f) | vzdialenosť | distance | |
+| **paralelní chyba** (f) | paralelná chyba | **parallel error** | short form **paralelka** |
+| chyba (f) | chyba | mistake | *udělat chybu* |
+| **ztráta** (f) | strata | time loss | *ztrátová (kontrola)* = the leg where time was lost |
+| ztratit kontakt | stratiť kontakt | to lose map contact | |
+| zabloudit | zablúdiť | to get lost | |
+| relokace (f) / zorientovat se | relokácia | relocation | *zorientovat se* is the everyday phrasing |
+| plánování odzadu (n) | — | planning backwards | |
+| paměťák (m) | — | memory-O | training format |
+| had kontrol (m) | — | control picking | dense string of controls |
+
+## 9.5 Physical & equipment
+
+| Czech | Slovak | English | Note |
+|---|---|---|---|
+| běh (m) | beh | running | |
+| tempo (n) | tempo | pace | |
+| **převýšení** (n) | prevýšenie | **climb** | required in the bulletin |
+| délka trati (f) | dĺžka trate | course length | |
+| stoupání (n) | stúpanie | ascent | |
+| klesání (n) | klesanie | descent | |
+| kondice (f) | kondícia | fitness | |
+| dres (m) | dres | jersey, o-top | |
+| **elasťáky** (m pl.) | elasťáky | leggings, o-pants | *šusťáky* = nylon trousers |
+| **návleky** (m pl.) | návleky | **gaiters** | |
+| **prorážečky** (f pl.) | — | o-socks / shin guards | *chrániče holení* — for nettles and brambles |
+| podkolenky (f pl.) | podkolienky | knee socks | |
+| **hřebové boty** (f pl.) | — | o-shoes | *hřeby* = metal dobs; colloquial **hřebouny**; *tretry* = track spikes |
+| **mapník** (m) | mapník | map case / map holder | |
+| **popisník** (m) | popisník | description holder | wrist holder |
+| **čelovka** (f) | čelovka | headlamp | for **noční OB / NOB** (night-O) |
+| startovní číslo (n) | štartové číslo | bib number | |
+| gumička (f) | gumička | rubber band | holds the map/card |
+| lupa (f) | lupa | magnifier | common in veteran classes |
+| rozklus (m) | rozklus | warm-up | *výklus* = cool-down |
+
+## 9.6 Slang & interjections (for in-game copy)
+
+| Czech | English | Register |
+|---|---|---|
+| **orienťák** (m) | orienteering; also "an orienteer" | universal informal |
+| **kufrovat / kufr** (m) | to wander lost, to boom | **the classic**: *"Kufroval jsem tam pět minut."* A big mistake = *kufr*. |
+| **zaběhl jsem to** | "I ran it clean / nailed it" | positive; also *čistý závod* |
+| **šlo to** | "it went OK" | understated approval — very Czech |
+| **bylo to blbě** | "that was bad" | |
+| **díra** (f) | a blank, a total miss | *"Udělal jsem tam díru."* |
+| **bomba / bombová trať** | brilliant course | |
+| **na tušáka** | by guesswork, blind | attested in ČSOS coaching as a named error: *dohledávka "na tušáka"* |
+| **hanba start** (m) | relay restart | lit. "shame start" — the mass restart for lapped relay teams |
+| **bedna** (f) | the podium | *"Byl jsem na bedně."* |
+| **paralelka** (f) | a parallel error | |
+| **spíkr** (m) | announcer | also *hlasatel* |
+| **klest** (m) | brash, logging slash | on a *paseka* |
+| **kopřivy** (f pl.) | nettles | |
+| **nos** (m) | spur, "nose" | informal for *hřbítek* |
+| **DISK** | DSQ | |
+| **MP** | mispunch | *chybné ražení* |
+
+## 9.7 i18n implementation notes
+
+* **Slovak `preteky` is plural-only.** Any pluralisation rule for "race" breaks: CZ `závod / závody`, SK
+  `preteky / preteky`. Treat as an irregular special case.
+* **Soft-stem feminines** need explicit declension data: *trať, zeď, prohlubeň, vrstevnice*
+  (`prohlubeň` → gen. `prohlubně`).
+* **`kontrola` is a false friend** — in ordinary Czech it also means "a check/inspection". Namespace the keys
+  (`control.flag`, not a bare `kontrola`).
+* Czech uses **H** (*muži*) and **D** (*ženy*) for class prefixes, not M/W — `H21E`, `D18`. Slovak uses **M/Ž**.
+* The Slovak terrain rows above (*jazero, múr, chodník, rieka*) are standard-language equivalents and were verified
+  less directly than the Slovak race-admin vocabulary — worth a spot-check by a Slovak reviewer. **[flagged]**
+---
+---
+
+# Appendix A — Consolidated audit risks and open questions
+
+Everything below is a place where a national-team orienteer or an IOF-qualified mapper could legitimately push
+back. They are listed so they can be checked rather than discovered.
+
+## A.1 Version currency
+
+| Item | Version used here | Risk |
+|---|---|---|
+| ISOM | **2017-2, Revision 6, January 2024** | Mandatory from 1 Jan 2025. Current at time of writing. Revisions arrive roughly annually — re-check the errata table at the back of the PDF. |
+| ISSprOM | **2019-2, Revision 6, January 2024** | Same. |
+| Printing & Colour Definitions | **Revision 4, September 2024** (valid 1 Dec 2024) | **Brown changed in this revision** (0/56/100/18 → 25/75/100/0); brown 50 % and 30 % likewise. Anything older is wrong. |
+| Control Descriptions | **2024** | Supersedes 2018. 2018 lacks symbols 5.24 (Railway) and 15.6 (Map flip), and lacks the ISSprOM cross-references. |
+| IOF Competition Rules | **Foot Orienteering 2025** | Rule numbering shifted between 2024 and 2025 (competition **formats** moved from Appendix 2 to **Appendix 6**; Appendix 2 is now *Principles for course planning*). Third-party summaries quoting "Appendix 2 §1.1 Sprint profile" are using the 2024 numbering. |
+
+## A.2 Things stated in this document that are NOT IOF-normative
+
+| Claim | Status |
+|---|---|
+| All RGB / hex colour values | **[derived]** — the IOF publishes CMYK only. The sRGB column is a Euroscale-Coated-v2 conversion computed locally. |
+| Colour render z-order as a canvas painting order | **[derived]** from the normative *colour order* table, which is a printing order. |
+| Course-line ↔ circle gap of ~1.0 mm | **[estimate]** — ISOM mandates a gap but gives no number. |
+| Pictogram geometry descriptions in §3 | **[reconstructed]** — the pictograms are raster images in the IOF PDF; no official vector source exists. Cross-check against Purple Pen / OCAD / OpenOrienteering `Course_Design` symbol sets. |
+| Derived course-length envelope (§7.3) | **[derived]** — the IOF specifies **winning time only**, never length or control count. |
+| Terrain multipliers for marsh, broken ground, dense boulder field, cultivated land, shallow water | **[UNCERTAIN]** — ISOM deliberately gives no percentage for these. |
+| Detour factor `D` (§8.7) | **[derived]** by inverting the model against WOC results. The one genuinely free parameter. |
+| Aim-off offset formula (§6.6) | **[derived]** — no orienteering source gives a number. |
+| Farsta / Motala / phi-loop definitions (§7.5) | **[UNVERIFIED]** — these terms appear **nowhere** in the IOF rules. Only *forking*, *butterfly loops* and *course choice forking* are IOF terms. |
+| "Boom" and "bailing out" as standard terminology (§6.14) | **[UNCERTAIN]** — not in any major club glossary checked. |
+| SIAC feedback duration in milliseconds | **[UNCERTAIN]** — SportIdent publishes only ~3 s / 5 s / < 1 s categories. |
+| SIAC AIR+ range | **Sources conflict** (30 vs 50 cm). Resolved via the Organiser Guide's anisotropic figure: **~30 cm lateral, ~60 cm vertical**. |
+| SI-Card 11 flash duration | **Conflict**: British Orienteering says ~7 s, SportIdent Config+ says ~3 s default. Probably a firmware-era difference. |
+| Slovak terrain vocabulary (§9.3) | Verified less directly than the Slovak race-admin vocabulary — worth a Slovak reviewer's spot-check. |
+
+## A.3 Corrections to widely-held but wrong priors
+
+These are the specific points most likely to be got wrong by someone working from memory:
+
+1. **ISOM white forest is the 80–100 % band, not 100 %.** 100 % is the *reference* (flat open runnable forest);
+   **paths and lawns are explicitly > 100 %**.
+2. **ISOM 2017-2 has no symbol 411.** ISOM 2017 (1st edition) had *411 Vegetation, impassable*; it was deleted.
+   **ISSprOM 2019-2 411 = Uncrossable vegetation.**
+3. **ISOM control circle is ø 5.0 mm, not 6.0 mm** — ISOM 2017 *reduced* the overprint sizes from ISOM 2000.
+   The start triangle is **6.0 mm** (ISOM) but **7.0 mm** (ISSprOM); the finish is 4/6 mm (ISOM) but 5/7 mm (ISSprOM).
+4. **Green CMYK is 80/0/100/0, brown is 25/75/100/0.** OpenOrienteering Mapper's shipped ISOM 2017-2 file still
+   carries the old 76/0/91/0 and 0/56/100/18. Do not copy colours from an OOM/OCAD file.
+5. **The men : women elite base-speed ratio is 1.15–1.17, not 1.28.** The 1.28 figure predates the 2024
+   equalisation of winning times.
+6. **Walking pace count is 57–64 per 100 m, not 40–50.** 38–50 is the *running* band.
+7. **Tobler is a walking function** — its gradient penalty is too gentle for runners (0.705 vs 0.603 at +10 %).
+8. **In the forest, "impassable" is not "forbidden".** Only ISOM 520/708/709/711 are DSQ. In sprint, thirteen
+   ISSprOM symbols are DSQ under Rule 17.2 — including **every building**.
+9. **The IOF rules say "must not be placed", never "DSQ" or "MP".** Those are national/software conventions.
+10. **The 4 % climb guideline is "should normally not exceed"** and is routinely exceeded at WOC Long
+    (Doksy 2021: 7.7 %).
+11. **Women's WOC Long times jumped in 2024 because of a rule change** (equalised to 88–92 min), not fitness.
+
+## A.4 What could not be obtained
+
+* **Hébert-Losier et al. 2014** absolute road/path/forest velocities (paywalled).
+* Official vector sources for the control-description pictograms (raster-only in the IOF PDF).
+* `orienteering.sport` blocks scraping (HTTP 403) — every IOF document here was obtained from a national-federation
+  or club mirror. The mirrors were checked to be the correct revision by reading each PDF's own title page and
+  errata table.

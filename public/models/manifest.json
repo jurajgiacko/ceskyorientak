@@ -2,91 +2,138 @@
   "generator": "blender-asset-pipeline (Blender 4.5.12 LTS)",
   "generatedAt": "2026-08-01",
   "seed": 20260805,
-  "totalLod0Tris": 9644,
-  "totalBytes": 223340,
+  "totalLod0Tris": 33838,
+  "totalBytes": 2149024,
   "assets": [
+    {
+      "name": "beech",
+      "file": "beech.glb",
+      "bytes": 1157632,
+      "tris": 10100,
+      "lods": [
+        {
+          "node": "beech_v0_LOD0",
+          "tris": 1400
+        },
+        {
+          "node": "beech_v0_LOD1",
+          "tris": 700
+        },
+        {
+          "node": "beech_v0_LOD2",
+          "tris": 4
+        },
+        {
+          "node": "beech_v1_LOD0",
+          "tris": 4300
+        },
+        {
+          "node": "beech_v1_LOD1",
+          "tris": 1200
+        },
+        {
+          "node": "beech_v1_LOD2",
+          "tris": 4
+        },
+        {
+          "node": "beech_v2_LOD0",
+          "tris": 4400
+        },
+        {
+          "node": "beech_v2_LOD1",
+          "tris": 1250
+        },
+        {
+          "node": "beech_v2_LOD2",
+          "tris": 4
+        }
+      ],
+      "variants": 3,
+      "notes": "LOD2 is a rendered crossed-quad imposter (2 planes, shared 2x2 atlas)",
+      "originNote": "base of trunk on the ground, centred in XY, +Z up"
+    },
     {
       "name": "boulder-set",
       "file": "boulder-set.glb",
-      "bytes": 153148,
-      "tris": 8520,
+      "bytes": 161904,
+      "tris": 8820,
       "lods": [
         {
           "node": "boulder-set_v0_LOD0",
-          "tris": 1420
+          "tris": 1470
         },
         {
           "node": "boulder-set_v0_LOD1",
-          "tris": 568
+          "tris": 588
         },
         {
           "node": "boulder-set_v0_LOD2",
-          "tris": 142
+          "tris": 146
         },
         {
           "node": "boulder-set_v1_LOD0",
-          "tris": 1420
+          "tris": 1470
         },
         {
           "node": "boulder-set_v1_LOD1",
-          "tris": 568
+          "tris": 588
         },
         {
           "node": "boulder-set_v1_LOD2",
-          "tris": 142
+          "tris": 146
         },
         {
           "node": "boulder-set_v2_LOD0",
-          "tris": 1420
+          "tris": 1470
         },
         {
           "node": "boulder-set_v2_LOD1",
-          "tris": 568
+          "tris": 588
         },
         {
           "node": "boulder-set_v2_LOD2",
-          "tris": 142
+          "tris": 146
         },
         {
           "node": "boulder-set_v3_LOD0",
-          "tris": 1420
+          "tris": 1470
         },
         {
           "node": "boulder-set_v3_LOD1",
-          "tris": 568
+          "tris": 588
         },
         {
           "node": "boulder-set_v3_LOD2",
-          "tris": 142
+          "tris": 146
         },
         {
           "node": "boulder-set_v4_LOD0",
-          "tris": 1420
+          "tris": 1470
         },
         {
           "node": "boulder-set_v4_LOD1",
-          "tris": 568
+          "tris": 588
         },
         {
           "node": "boulder-set_v4_LOD2",
-          "tris": 142
+          "tris": 146
         },
         {
           "node": "boulder-set_v5_LOD0",
-          "tris": 1420
+          "tris": 1470
         },
         {
           "node": "boulder-set_v5_LOD1",
-          "tris": 568
+          "tris": 588
         },
         {
           "node": "boulder-set_v5_LOD2",
-          "tris": 142
+          "tris": 146
         }
       ],
       "variants": 6,
-      "notes": "wool-sack weathered granite; lichen on upward faces",
-      "originNote": "row centred on world origin, +X spacing; base bedded just below z=0"
+      "notes": "wool-sack weathered Sumava granite, 3 palette tones + sage lichen",
+      "originNote": "every variant XY-centred on the origin, base at z=0 (bottom dips slightly under); no layout offset baked in"
     },
     {
       "name": "control-flag",
@@ -113,24 +160,140 @@
     {
       "name": "control-stand",
       "file": "control-stand.glb",
-      "bytes": 36532,
-      "tris": 660,
+      "bytes": 40948,
+      "tris": 740,
       "lods": [
         {
           "node": "control-stand_LOD0",
-          "tris": 660
+          "tris": 740
         },
         {
           "node": "control-stand_LOD1",
-          "tris": 264
+          "tris": 296
         },
         {
           "node": "control-stand_LOD2",
-          "tris": 77
+          "tris": 87
         }
       ],
       "notes": "hang control-flag so its hookTopZ meets flagHangZ at x=flagHangX; sit si-unit's foot on siMountZ",
       "originNote": "ground level, centre of the tripod footprint, +Z up"
+    },
+    {
+      "name": "deadwood",
+      "file": "deadwood.glb",
+      "bytes": 83868,
+      "tris": 2876,
+      "lods": [
+        {
+          "node": "deadwood_v0_LOD0",
+          "tris": 912
+        },
+        {
+          "node": "deadwood_v0_LOD1",
+          "tris": 364
+        },
+        {
+          "node": "deadwood_v0_LOD2",
+          "tris": 106
+        },
+        {
+          "node": "deadwood_v1_LOD0",
+          "tris": 892
+        },
+        {
+          "node": "deadwood_v1_LOD1",
+          "tris": 356
+        },
+        {
+          "node": "deadwood_v1_LOD2",
+          "tris": 99
+        },
+        {
+          "node": "deadwood_v2_LOD0",
+          "tris": 1072
+        },
+        {
+          "node": "deadwood_v2_LOD1",
+          "tris": 428
+        },
+        {
+          "node": "deadwood_v2_LOD2",
+          "tris": 118
+        }
+      ],
+      "variants": [
+        "v0_fallen_log",
+        "v1_stump",
+        "v2_root_plate"
+      ],
+      "notes": "Sumava bark-beetle deadwood: fallen log, snapped stump, windthrow root plate",
+      "originNote": "every variant is XY-centred on the origin and sits on the ground at z=0 (buried undersides dip below); no layout offset is baked in"
+    },
+    {
+      "name": "finish-gantry",
+      "file": "finish-gantry.glb",
+      "bytes": 21304,
+      "tris": 1636,
+      "lods": [
+        {
+          "node": "finish-gantry_LOD0",
+          "tris": 1636
+        },
+        {
+          "node": "finish-gantry_LOD1",
+          "tris": 637
+        }
+      ],
+      "originNote": "ground level at mid-span, arch along +X, +Z up",
+      "brandUV": "BRAND_BANNER material, UV island fills 0..1"
+    },
+    {
+      "name": "spruce",
+      "file": "spruce.glb",
+      "bytes": 649708,
+      "tris": 9202,
+      "lods": [
+        {
+          "node": "spruce_v0_LOD0",
+          "tris": 2622
+        },
+        {
+          "node": "spruce_v0_LOD1",
+          "tris": 810
+        },
+        {
+          "node": "spruce_v0_LOD2",
+          "tris": 4
+        },
+        {
+          "node": "spruce_v1_LOD0",
+          "tris": 3750
+        },
+        {
+          "node": "spruce_v1_LOD1",
+          "tris": 1072
+        },
+        {
+          "node": "spruce_v1_LOD2",
+          "tris": 4
+        },
+        {
+          "node": "spruce_v2_LOD0",
+          "tris": 2830
+        },
+        {
+          "node": "spruce_v2_LOD1",
+          "tris": 750
+        },
+        {
+          "node": "spruce_v2_LOD2",
+          "tris": 4
+        }
+      ],
+      "variants": 3,
+      "notes": "v0 young / v1 mature / v2 old-with-dead-branches; LOD1 rebuilt not decimated, LOD2 crossed-quad imposter baked from each variant's own LOD0",
+      "originNote": "base of trunk on the ground, +Z up; every variant is centred on its own origin (no baked offsets)"
     }
   ]
 }

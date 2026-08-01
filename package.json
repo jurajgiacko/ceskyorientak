@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "ORIENTAK: VYŠŠÍ BROD — browser orienteering race simulator. Orienteering World Cup 2026, Vyšší Brod (CZ), 5–9 August 2026. Enervit × Český orientak.",
+  "description": "ORIENTAK: VY\u0160\u0160\u00cd BROD \u2014 browser orienteering race simulator. Orienteering World Cup 2026, Vy\u0161\u0161\u00ed Brod (CZ), 5\u20139 August 2026. Enervit \u00d7 \u010cesk\u00fd orientak.",
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
@@ -12,6 +12,8 @@
     "gen:images": "node tools/imagegen/generate.mjs",
     "gen:terrain": "node tools/terrain/build.mjs",
     "gen:models": "node tools/blender/build.mjs",
+    "validate:models": "node tools/blender/validate.mjs",
+    "preview:models": "node tools/blender/build.mjs --previews",
     "perf": "node tools/perf/budget.mjs",
     "gen:pbr": "node tools/imagegen/pbr.mjs",
     "gen:validate": "node tools/imagegen/validate.mjs"

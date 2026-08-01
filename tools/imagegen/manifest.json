@@ -319,7 +319,10 @@
         "aoStrength": 0.95,
         "heightBlur": 0.55
       },
-      "notes": "Krumlov / Vyšší Brod rooftops seen from the sprint-leg camera."
+      "notes": "Krumlov / Vyšší Brod rooftops seen from the sprint-leg camera. Genuinely periodic material: the ACF peaks at the tile-course spacing (~152px at 1024, ~38px at 256). That rhythm is the roof, not a tiling defect, so acfPeak is relaxed for this asset only.",
+      "validate": {
+        "acfPeak": 0.45
+      }
     },
     {
       "id": "stone-wall-castle",
@@ -405,7 +408,8 @@
       "tileable": false,
       "pbr": false,
       "prompt": "Circular game achievement badge illustration. A generic orange and white orienteering control flag — a three-panel fabric prism hanging from a slim stake — standing on mossy forest floor, centred in the frame, dense dark spruce forest softly blurred behind it, warm morning light. Painterly semi-realistic style, rich but restrained colour, strong silhouette, subject centred with clear margin, plain dark vignette-free background at the edges of the circle. No text, no numerals, no ribbon, no crest, no medal, no electronic device.",
-      "notes": "Achievement: punch your first control."
+      "notes": "Achievement: punch your first control.",
+      "mask": "circle"
     },
     {
       "id": "badge-clean-run",
@@ -416,7 +420,8 @@
       "tileable": false,
       "pbr": false,
       "prompt": "Circular game achievement badge illustration. A folded orienteering-style topographic map lying on green moss with a plain thumb compass resting on it, seen from above, centred in the frame, soft forest light. The map shows only abstract unreadable contour lines and green and white shading with no text, no numbers, no legend and no control circles. Painterly semi-realistic style, rich but restrained colour, subject centred with clear margin.",
-      "notes": "Achievement: complete a course with no mistakes."
+      "notes": "Achievement: complete a course with no mistakes.",
+      "mask": "circle"
     },
     {
       "id": "badge-night-owl",
@@ -426,8 +431,9 @@
       "seed": 20203,
       "tileable": false,
       "pbr": false,
-      "prompt": "Circular game achievement badge illustration. A headlamp beam cutting through night forest — a cone of pale light picking spruce trunks and drifting mist out of deep blue-black darkness, centred in the frame, cool moonlit blues against the warm lamp beam. Painterly semi-realistic style, strong tonal contrast, subject centred with clear margin. No person visible, no face, no text.",
-      "notes": "Achievement: finish a night leg."
+      "prompt": "Circular game achievement badge illustration. Night orienteering seen from behind: a single narrow white-hot headlamp beam cutting low through pitch-dark spruce forest, the cone of light catching drifting mist and picking two or three nearby trunks and a patch of forest floor out of near-total blackness. Overwhelmingly dark — most of the frame is deep blue-black night with only a faint cold moonlit rim on the far trunks. Painterly semi-realistic style, very high tonal contrast, single warm light source low in the frame, subject centred with clear margin. No person visible, no face, no daylight, no sky, no sun, no god rays, no text.",
+      "notes": "Achievement: finish a night leg.",
+      "mask": "circle"
     },
     {
       "id": "badge-marsh-runner",
@@ -438,7 +444,8 @@
       "tileable": false,
       "pbr": false,
       "prompt": "Circular game achievement badge illustration. A pair of muddy orienteering shoes and gaiters mid-stride through a peat bog, splashing dark water among rust-coloured sphagnum tussocks, seen from low and close, legs cropped at the knee so no person and no face is visible, centred in the frame. Painterly semi-realistic style, earthy olive and rust palette, subject centred with clear margin. No text, no brand marks on the shoes, plain unbranded footwear.",
-      "notes": "Achievement: cross the bog without losing time."
+      "notes": "Achievement: cross the bog without losing time.",
+      "mask": "circle"
     },
     {
       "id": "badge-sprint-krumlov",
@@ -449,7 +456,8 @@
       "tileable": false,
       "pbr": false,
       "prompt": "Circular game achievement badge illustration. A narrow historic Bohemian cobbled alley opening between two weathered ochre plastered walls, a stone archway framing bright daylight beyond, seen straight down the alley and centred in the frame. Painterly semi-realistic style, warm stone and cream palette against cool shadow. No people, no text, no signs, no banners, no shop fronts.",
-      "notes": "Achievement: win a sprint stage."
+      "notes": "Achievement: win a sprint stage.",
+      "mask": "circle"
     },
     {
       "id": "badge-summit-boulder",
@@ -460,7 +468,8 @@
       "tileable": false,
       "pbr": false,
       "prompt": "Circular game achievement badge illustration. A large lichen-crusted granite boulder crowning a forested Šumava ridge, mint-green and rust lichen mottling the grey stone, bilberry scrub at its base, spruce tops and layered blue ridgelines falling away behind it in morning haze, centred in the frame. Painterly semi-realistic style, restrained natural colour, subject centred with clear margin. No text, no flag, no marker, no person.",
-      "notes": "Achievement: reach the highest control on the course."
+      "notes": "Achievement: reach the highest control on the course.",
+      "mask": "circle"
     }
   ]
 }

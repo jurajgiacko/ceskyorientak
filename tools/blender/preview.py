@@ -1,15 +1,22 @@
 """Headless turntable preview renderer.
 
-Imports an exported .glb back into a clean scene and renders four yaw angles
-side by side, so previews validate the *shipped* file rather than the
-in-memory scene that produced it.
+Imports an exported .glb back into a clean scene and renders it, so previews
+validate the *shipped* file rather than the in-memory scene that produced it.
 
-    Blender --background --python preview.py -- --glb <file> --out <png>
+Layout is this tool's job, not the asset's: each variant (`<asset>_v<N>_LOD<L>`)
+is re-centred on its own bounds and placed in its own column, so asset scripts
+can — and should — keep every variant at the origin for clean instancing.
+
+  single variant   -> 2x2 grid of four yaw angles
+  N variants       -> N columns x 2 yaw angles
+
+    Blender --background --python preview.py -- --glb <file> --out <png> [--lod 0]
 """
 
 import argparse
 import math
 import os
+import re
 import sys
 
 import bpy
@@ -24,7 +31,8 @@ def parse():
     p = argparse.ArgumentParser()
     p.add_argument("--glb", required=True)
     p.add_argument("--out", required=True)
-    p.add_argument("--size", type=int, default=1100)
+    p.add_argument("--cell", type=int, default=560, help="pixels per grid cell")
+    p.add_argument("--max-width", type=int, default=2000)
     p.add_argument("--lod", type=int, default=0)
     p.add_argument("--samples", type=int, default=48)
     p.add_argument("--engine", default="BLENDER_EEVEE_NEXT")
@@ -48,12 +56,12 @@ def world_bg(value):
 def three_point():
     """Key / fill / rim -- enough separation to judge silhouette and bevels."""
     specs = [
-        ("key", "SUN", 4.2, (math.radians(52), 0.0, math.radians(38)), (1.0, 0.97, 0.92)),
-        ("fill", "SUN", 1.5, (math.radians(66), 0.0, math.radians(-115)), (0.80, 0.86, 1.0)),
-        ("rim", "SUN", 3.0, (math.radians(105), 0.0, math.radians(196)), (1.0, 0.99, 0.95)),
+        ("key", 4.2, (math.radians(52), 0.0, math.radians(38)), (1.0, 0.97, 0.92)),
+        ("fill", 1.5, (math.radians(66), 0.0, math.radians(-115)), (0.80, 0.86, 1.0)),
+        ("rim", 3.0, (math.radians(105), 0.0, math.radians(196)), (1.0, 0.99, 0.95)),
     ]
-    for name, kind, energy, rot, color in specs:
-        data = bpy.data.lights.new(name, kind)
+    for name, energy, rot, color in specs:
+        data = bpy.data.lights.new(name, "SUN")
         data.energy = energy
         data.color = color
         try:
@@ -63,6 +71,17 @@ def three_point():
         obj = bpy.data.objects.new(name, data)
         bpy.context.scene.collection.objects.link(obj)
         obj.rotation_euler = rot
+
+
+def world_bounds(objs):
+    lo = Vector((1e18, 1e18, 1e18))
+    hi = Vector((-1e18, -1e18, -1e18))
+    for o in objs:
+        for corner in o.bound_box:
+            p = o.matrix_world @ Vector(corner)
+            lo = Vector((min(lo.x, p.x), min(lo.y, p.y), min(lo.z, p.z)))
+            hi = Vector((max(hi.x, p.x), max(hi.y, p.y), max(hi.z, p.z)))
+    return lo, hi
 
 
 def main():
@@ -79,61 +98,85 @@ def main():
     suffix = "_LOD%d" % args.lod
     chosen = [o for o in meshes if o.name.split(".")[0].endswith(suffix)]
     if not chosen:
-        lod_any = [o for o in meshes if "_LOD" in o.name]
-        chosen = [o for o in meshes if o not in lod_any] or meshes
+        lodded = [o for o in meshes if "_LOD" in o.name]
+        chosen = [o for o in meshes if o not in lodded] or meshes
+        suffix = ""
 
     for o in meshes:
         if o not in chosen:
             bpy.data.objects.remove(o, do_unlink=True)
 
-    # world-space bounds of everything we kept
-    lo = Vector((1e9, 1e9, 1e9))
-    hi = Vector((-1e9, -1e9, -1e9))
+    # group by variant: strip the _LOD<n> suffix (and any glTF .001 dedupe tail)
+    groups = {}
     for o in chosen:
-        for corner in o.bound_box:
-            p = o.matrix_world @ Vector(corner)
-            lo = Vector((min(lo.x, p.x), min(lo.y, p.y), min(lo.z, p.z)))
-            hi = Vector((max(hi.x, p.x), max(hi.y, p.y), max(hi.z, p.z)))
-    center = (lo + hi) * 0.5
-    size = max((hi - lo).x, (hi - lo).y, (hi - lo).z, 1e-3)
+        base = o.name.split(".")[0]
+        key = re.sub(r"_LOD\d+$", "", base)
+        groups.setdefault(key, []).append(o)
+    keys = sorted(groups)
 
-    # one parent empty per yaw angle, arranged 2x2 on screen
-    cell = size * 1.30
-    root = bpy.data.objects.new("root", None)
-    bpy.context.scene.collection.objects.link(root)
-    for o in chosen:
-        o.parent = root
-    root.location = -center
+    # Re-centre each variant on its own bounds (XY centred, base at z=0) so a
+    # baked-in layout offset in the asset does not wreck the framing.
+    protos = []
+    span = 0.0
+    for key in keys:
+        objs = groups[key]
+        lo, hi = world_bounds(objs)
+        root = bpy.data.objects.new("proto_" + key, None)
+        bpy.context.scene.collection.objects.link(root)
+        for o in objs:
+            o.parent = root
+        # centre on all three axes: the grid cell is centred on the holder, so
+        # putting the base at z=0 here would push tall assets out of frame
+        root.location = (-(lo.x + hi.x) * 0.5, -(lo.y + hi.y) * 0.5,
+                         -(lo.z + hi.z) * 0.5)
+        protos.append((key, root, objs, hi - lo))
+        span = max(span, (hi - lo).x, (hi - lo).y, (hi - lo).z)
 
-    holder = bpy.data.objects.new("holder", None)
-    bpy.context.scene.collection.objects.link(holder)
-    root.parent = holder
+    span = max(span, 1e-3)
+    cell = span * 1.22
 
-    grid = [(-0.5, 0.5), (0.5, 0.5), (-0.5, -0.5), (0.5, -0.5)]
-    copies = []
-    for i, (gx, gz) in enumerate(grid):
-        if i == 0:
-            dup = holder
-        else:
-            dup = holder.copy()
-            bpy.context.scene.collection.objects.link(dup)
-            sub = root.copy()
-            bpy.context.scene.collection.objects.link(sub)
-            sub.parent = dup
-            for o in chosen:
-                c = o.copy()
-                bpy.context.scene.collection.objects.link(c)
-                c.parent = sub
-        dup.rotation_euler = (0.0, 0.0, math.radians(90 * i))
-        dup.location = (gx * cell * 1.06, 0.0, gz * cell * 1.06)
-        copies.append(dup)
+    if len(protos) == 1:
+        angles = [0, 90, 180, 270]
+        cols, rows = 2, 2
+        slots = [(i % 2, i // 2, angles[i]) for i in range(4)]
+    else:
+        angles = [0, 90]
+        cols, rows = len(protos), 2
+        slots = [(c, r, angles[r]) for r in range(rows) for c in range(cols)]
+
+    for (col, row, yaw) in slots:
+        key, root, objs, _ = protos[col if len(protos) > 1 else 0]
+        holder = bpy.data.objects.new("h_%s_%d_%d" % (key, col, row), None)
+        bpy.context.scene.collection.objects.link(holder)
+
+        sub = root.copy()
+        bpy.context.scene.collection.objects.link(sub)
+        sub.parent = holder
+        for o in objs:
+            c = o.copy()
+            bpy.context.scene.collection.objects.link(c)
+            c.parent = sub
+
+        holder.rotation_euler = (0.0, 0.0, math.radians(yaw))
+        holder.location = ((col - (cols - 1) * 0.5) * cell,
+                           0.0,
+                           ((rows - 1) * 0.5 - row) * cell)
+
+    # the originals were only templates
+    for _key, root, objs, _ in protos:
+        for o in objs:
+            bpy.data.objects.remove(o, do_unlink=True)
+        bpy.data.objects.remove(root, do_unlink=True)
 
     world_bg(args.bg)
     three_point()
 
+    width = min(args.max_width, args.cell * cols)
+    height = int(width * rows / float(cols))
+
     sc = bpy.context.scene
-    sc.render.resolution_x = args.size
-    sc.render.resolution_y = args.size
+    sc.render.resolution_x = width
+    sc.render.resolution_y = height
     sc.render.resolution_percentage = 100
     sc.render.film_transparent = False
     sc.render.image_settings.file_format = "PNG"
@@ -154,18 +197,18 @@ def main():
 
     cam_d = bpy.data.cameras.new("cam")
     cam_d.type = "ORTHO"
-    cam_d.ortho_scale = cell * 2.16
+    cam_d.ortho_scale = cols * cell
     cam = bpy.data.objects.new("cam", cam_d)
     bpy.context.scene.collection.objects.link(cam)
     sc.camera = cam
 
     direction = Vector((0.0, 1.0, -0.30)).normalized()
-    cam.location = -direction * (size * 8.0 + 6.0)
+    cam.location = -direction * (span * 10.0 + 20.0)
     cam.rotation_euler = direction.to_track_quat("-Z", "Y").to_euler()
 
     os.makedirs(os.path.dirname(os.path.abspath(args.out)), exist_ok=True)
     bpy.ops.render.render(write_still=True)
-    print("PREVIEW OK %s" % args.out)
+    print("PREVIEW OK %s  (%d variants, %dx%d)" % (args.out, len(protos), width, height))
 
 
 main()

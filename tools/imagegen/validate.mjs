@@ -18,9 +18,12 @@
  *      acf    = peak over lags [N/8, N/2] — periods of 2..8 repeats per tile.
  *               This is the gated number. A structure at that scale is what
  *               makes the eye lock onto the tile grid across a terrain patch.
- *      acfAll = peak over lags [4, N/2], informational only. High values here
- *               are usually the material's own rhythm (roof tile courses,
- *               masonry beds) and are not a defect, so they do not fail.
+ *      acfAll = strongest local maximum over lags [8, N/2], informational
+ *               only: the material's own rhythm (roof tile courses, masonry
+ *               beds, bark ribs). Not a defect, so it does not fail. A local
+ *               maximum is used rather than a plain max because the plain max
+ *               over short lags is just the short-range correlation decay
+ *               every photograph has, which carries no information.
  *
  * C) BAKED ILLUMINATION.  Least-squares fit of a linear ramp (a*x+b*y+c) and
  *    of a radial vignette term to the luminance field. Reported as the
@@ -41,10 +44,24 @@ const ROOT = resolve(__dirname, '../..');
 const TEX_DIR = resolve(ROOT, 'public/textures');
 const MANIFEST_PATH = resolve(__dirname, 'manifest.json');
 
+/**
+ * Thresholds calibrated against a control set, not guessed. Measuring the raw
+ * generated PNGs (whose wrap boundary is a real photographic cut) against the
+ * shipped tiles gave:
+ *
+ *   raw / untreated : seam ratio 1.18 .. 2.29, z 2.8 .. 16.6
+ *   shipped tiles   : seam ratio 0.92 .. 1.11, z -1.3 .. 1.5
+ *
+ * so 1.25 / 2.5 sits in the gap and separates the two populations. It flags 11
+ * of the 12 control axes and clears all 16 shipped textures.
+ *
+ * Per-asset overrides live in manifest.json under `validate`, so any exception
+ * is visible in version control next to the reason for it.
+ */
 export const THRESHOLDS = {
-  seamRatio: 1.35,   // boundary MAD may not exceed 1.35x the interior mean
-  seamZ: 4.0,        // ...nor sit 4 sigma out in the interior MAD distribution
-  acfPeak: 0.30,     // normalised autocorrelation peak at lag >= N/16
+  seamRatio: 1.25,   // boundary MAD may not exceed 1.25x the interior mean
+  seamZ: 2.5,        // ...nor sit 2.5 sigma out in the interior MAD spread
+  acfPeak: 0.30,     // autocorrelation peak over lags [N/8, N/2]
   illumRamp: 0.06,   // linear brightness ramp, fraction of mean luminance
   illumVignette: 0.05 // radial falloff, fraction of mean luminance
 };
@@ -164,14 +181,27 @@ function repetition(L, w, h) {
     }
     return { peak, lag };
   };
+  /* A period shows up as a local maximum. The plain max over short lags is
+     just the monotone short-range decay every photograph has, so it says
+     nothing — only turning points are evidence of a repeating structure. */
+  const scanPeriodic = (acc, a0, lo, hi) => {
+    let peak = -Infinity, lag = -1;
+    for (let k = lo; k <= hi; k++) {
+      if (acc[k] > acc[k - 1] && acc[k] >= acc[k + 1]) {
+        const v = acc[k] / (a0 || 1e-9);
+        if (v > peak) { peak = v; lag = k; }
+      }
+    }
+    return { peak: peak === -Infinity ? 0 : peak, lag: lag < 0 ? 0 : lag };
+  };
   const best = (a, b) => (a.peak >= b.peak ? a : b);
   const lowFreq = best(
     { ...scan(acc, acc0, Math.max(2, w >> 3), w >> 1), axis: 'x' },
     { ...scan(accV, accV0, Math.max(2, h >> 3), h >> 1), axis: 'y' }
   );
   const all = best(
-    { ...scan(acc, acc0, 4, w >> 1), axis: 'x' },
-    { ...scan(accV, accV0, 4, h >> 1), axis: 'y' }
+    { ...scanPeriodic(acc, acc0, 8, (w >> 1) - 1), axis: 'x' },
+    { ...scanPeriodic(accV, accV0, 8, (h >> 1) - 1), axis: 'y' }
   );
   return { ...lowFreq, allPeak: all.peak, allLag: all.lag };
 }
@@ -239,14 +269,15 @@ for (const a of targets) {
   const rep = repetition(L, w, h);
   const ill = illumination(L, w, h);
 
+  const th = { ...THRESHOLDS, ...(a.validate || {}) };
   const fail = [];
-  if (sx.ratio > THRESHOLDS.seamRatio || sx.z > THRESHOLDS.seamZ) fail.push('seam-x');
-  if (sy.ratio > THRESHOLDS.seamRatio || sy.z > THRESHOLDS.seamZ) fail.push('seam-y');
-  if (rep.peak > THRESHOLDS.acfPeak) fail.push('repeat');
-  if (ill.ramp > THRESHOLDS.illumRamp) fail.push('ramp');
-  if (ill.vignette > THRESHOLDS.illumVignette) fail.push('vignette');
+  if (sx.ratio > th.seamRatio || sx.z > th.seamZ) fail.push('seam-x');
+  if (sy.ratio > th.seamRatio || sy.z > th.seamZ) fail.push('seam-y');
+  if (rep.peak > th.acfPeak) fail.push('repeat');
+  if (ill.ramp > th.illumRamp) fail.push('ramp');
+  if (ill.vignette > th.illumVignette) fail.push('vignette');
 
-  rows.push({ id: a.id, sx, sy, rep, ill, fail, pass: fail.length === 0 });
+  rows.push({ id: a.id, sx, sy, rep, ill, th, fail, pass: fail.length === 0, override: !!a.validate });
 }
 
 if (JSON_OUT) {
@@ -274,12 +305,15 @@ if (JSON_OUT) {
       f(r.rep.peak, 3).padStart(7) + String(r.rep.lag).padStart(6) +
       f(r.rep.allPeak, 3).padStart(8) + String(r.rep.allLag).padStart(6) +
       f(r.ill.ramp, 3).padStart(7) + f(r.ill.vignette, 3).padStart(7) +
-      '  ' + (r.pass ? 'PASS' : 'FAIL ' + r.fail.join(','))
+      '  ' + (r.pass ? 'PASS' : 'FAIL ' + r.fail.join(',')) + (r.override ? ' *' : '')
     );
   }
   const checked = rows.filter((r) => !r.missing);
   console.log(`\n${checked.filter((r) => r.pass).length}/${checked.length} pass` +
     (rows.length - checked.length ? ` · ${rows.length - checked.length} not generated` : ''));
+  if (checked.some((r) => r.override)) {
+    console.log('* judged against a per-asset threshold override from manifest.json');
+  }
 }
 
 if (rows.some((r) => !r.missing && !r.pass)) process.exit(2);

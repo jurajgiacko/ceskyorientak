@@ -137,18 +137,55 @@ async function fetchImage(asset, attempt = 1) {
 
 /* ----------------------------------------------------------- art encoding */
 
+/**
+ * Circular alpha mask. The model returns badge art on whatever corner
+ * background it feels like (black, white, green), which reads as an
+ * inconsistent set once six of them sit in a row in the UI. Masking to the
+ * circle the art is already composed for removes the corners entirely.
+ */
+async function circleMask(src, size) {
+  const { data } = await sharp(src)
+    .removeAlpha()
+    .resize(size, size, { fit: 'cover', kernel: 'lanczos3' })
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+  const out = Buffer.alloc(size * size * 4);
+  const c = (size - 1) / 2, r = size / 2, feather = size * 0.006;
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const i = y * size + x;
+      const d = Math.hypot(x - c, y - c);
+      const t = Math.max(0, Math.min(1, (r - d) / feather));
+      out[i * 4] = data[i * 3];
+      out[i * 4 + 1] = data[i * 3 + 1];
+      out[i * 4 + 2] = data[i * 3 + 2];
+      out[i * 4 + 3] = Math.round(t * t * (3 - 2 * t) * 255);
+    }
+  }
+  return sharp(out, { raw: { width: size, height: size, channels: 4 } });
+}
+
 async function encodeArt(asset) {
   const outDir = resolve(ART_DIR, asset.category);
   mkdirSync(outDir, { recursive: true });
   const src = cachePath(asset);
   const meta = await sharp(src).metadata();
+  const masked = asset.mask === 'circle';
+
   const full = resolve(outDir, `${asset.id}.webp`);
-  await sharp(src).webp({ quality: 88, effort: 5 }).toFile(full);
   const half = resolve(outDir, `${asset.id}@half.webp`);
-  await sharp(src)
-    .resize(Math.round(meta.width / 2), Math.round(meta.height / 2), { kernel: 'lanczos3' })
-    .webp({ quality: 84, effort: 5 })
-    .toFile(half);
+
+  if (masked) {
+    const size = Math.min(meta.width, meta.height);
+    await (await circleMask(src, size)).webp({ quality: 90, effort: 5, alphaQuality: 100 }).toFile(full);
+    await (await circleMask(src, Math.round(size / 2))).webp({ quality: 86, effort: 5, alphaQuality: 100 }).toFile(half);
+  } else {
+    await sharp(src).webp({ quality: 88, effort: 5 }).toFile(full);
+    await sharp(src)
+      .resize(Math.round(meta.width / 2), Math.round(meta.height / 2), { kernel: 'lanczos3' })
+      .webp({ quality: 84, effort: 5 })
+      .toFile(half);
+  }
   return [full, half];
 }
 
