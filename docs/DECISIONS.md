@@ -362,6 +362,10 @@ Distress is capped so that being wrong costs time rather than ending the race.
 
 ## D-015 — Build the forest on permitted training terrain, not the embargoed courses
 
+**Status: CONFIRMED BY CLIENT.** Raised with Juraj with the reasoning below and
+the alternative (ship the real Martínkov courses now, with organiser sign-off).
+Decision: Lachovice. `MARTINKOV_AOI` stays implemented for a post-event switch.
+
 **Decision.** The forest venue is generated from **Lachovice**, one of four
 areas the organisers themselves designated as permitted training terrain.
 `MARTINKOV_AOI` — the real competition area — is implemented and ready, and is

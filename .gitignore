@@ -12,3 +12,6 @@ tools/blender/.cache/
 tools/audio/renders/
 tools/imagegen/.cache/
 tools/blender/previews/*.blend
+
+# basisu -unpack ignores -output_path and writes into cwd; belt and braces
+*_unpacked_*.png

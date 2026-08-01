@@ -59,9 +59,17 @@ function findBasisu() {
 }
 const BASISU = findBasisu();
 
-function basisu(args, { quiet = true } = {}) {
+/**
+ * Always run basisu with cwd inside .cache/. In -unpack mode it ignores
+ * -output_path and writes one PNG per transcode target per mip level into the
+ * current directory — 209 files from a single 1024 normal map. Run from the
+ * repo root once and they land next to package.json, where the next `git add`
+ * sweeps them into a commit.
+ */
+function basisu(args, { cwd = TMP, quiet = true } = {}) {
+  mkdirSync(cwd, { recursive: true });
   try {
-    return execFileSync(BASISU, args, { encoding: 'utf8', stdio: quiet ? 'pipe' : 'inherit' });
+    return execFileSync(BASISU, args, { encoding: 'utf8', cwd, stdio: quiet ? 'pipe' : 'inherit' });
   } catch (e) {
     throw new Error(`basisu failed: ${(e.stdout || '') + (e.stderr || e.message)}`.slice(0, 600));
   }
@@ -121,7 +129,8 @@ function measure(inPng, ktx2Path) {
   rmSync(dir, { recursive: true, force: true });
   mkdirSync(dir, { recursive: true });
   try {
-    basisu(['-unpack', '-file', ktx2Path, '-output_path', dir, '-no_ktx']);
+    /* cwd, not -output_path: unpack ignores the latter. See basisu() above. */
+    basisu(['-unpack', '-file', resolve(ktx2Path), '-no_ktx'], { cwd: dir });
   } catch {
     return null;
   }
@@ -132,7 +141,7 @@ function measure(inPng, ktx2Path) {
   const got = resolve(dir, cands.sort()[0]);
   let out;
   try {
-    out = basisu(['-compare', '-file', inPng, '-file', got]);
+    out = basisu(['-compare', '-file', resolve(inPng), '-file', got], { cwd: dir });
   } catch {
     return null;
   }
