@@ -1,0 +1,117 @@
+@import url("./shell.css");
+
+/*
+ * Base layer. Design tokens live here and nowhere else.
+ *
+ * The palette is provisional until docs/BRAND.md lands the confirmed WCUP26 and
+ * Enervit values — every colour below is a token precisely so that retune is a
+ * single-file edit. Do not hardcode a colour anywhere else.
+ */
+
+:root {
+  /* Forest — the Šumava spruce/granite base the UI sits on. */
+  --c-ink: #0a1410;
+  --c-ink-2: #101f18;
+  --c-ink-3: #182c22;
+  --c-line: #2a4335;
+
+  /* Paper — the orienteering map is white, and so is our type. */
+  --c-paper: #f4f1e8;
+  --c-paper-dim: #c3c8bd;
+
+  /* Overprint purple — IOF course overprint. Our primary accent, and it is
+     *the* colour of the sport. ISOM 2017-2 purple. */
+  --c-purple: #d13aa0;
+
+  /* Control flag orange/white. Secondary accent, used for calls to action. */
+  --c-flag: #f25c19;
+
+  /* Enervit red — placeholder until BRAND-ENERVIT.md confirms the exact value. */
+  --c-brand: #e2001a;
+
+  /* State */
+  --c-good: #4caf72;
+  --c-warn: #e8a33d;
+  --c-bad: #d6453c;
+
+  --font-ui:
+    'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-num: ui-monospace, 'SF Mono', 'Roboto Mono', Menlo, monospace;
+
+  --r-sm: 4px;
+  --r-md: 10px;
+  --r-lg: 18px;
+
+  /* Safe areas — the HUD must clear notches and home indicators. */
+  --safe-t: env(safe-area-inset-top, 0px);
+  --safe-b: env(safe-area-inset-bottom, 0px);
+  --safe-l: env(safe-area-inset-left, 0px);
+  --safe-r: env(safe-area-inset-right, 0px);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  overflow: hidden;
+  background: var(--c-ink);
+  color: var(--c-paper);
+  font-family: var(--font-ui);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  /* A game: never let the page rubber-band or text-select under a drag. */
+  overscroll-behavior: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: none;
+}
+
+#app {
+  position: fixed;
+  inset: 0;
+  display: grid;
+}
+
+canvas {
+  display: block;
+}
+
+.fatal {
+  place-self: center;
+  max-width: 34ch;
+  padding: 2rem;
+  text-align: center;
+  line-height: 1.5;
+}
+
+.fatal h1 {
+  font-size: 1.1rem;
+  letter-spacing: 0.14em;
+  font-weight: 700;
+  color: var(--c-flag);
+  margin: 0 0 0.75rem;
+}
+
+.fatal p {
+  margin: 0;
+  color: var(--c-paper-dim);
+  font-size: 0.9rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

@@ -1,0 +1,67 @@
+/* Screen host and transitions. Owned by src/ui/shell.ts. */
+
+.screen-host {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  opacity: 0;
+  transition:
+    opacity 260ms cubic-bezier(0.4, 0, 0.2, 1),
+    transform 260ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.screen-host[data-state='in'] {
+  opacity: 1;
+  transform: none;
+}
+
+.screen-host[data-state='out'] {
+  opacity: 0;
+  transform: scale(1.015);
+}
+
+/* --- boot screen ------------------------------------------------------- */
+
+.boot {
+  place-self: center;
+  text-align: center;
+  padding: 2rem calc(1.5rem + var(--safe-r)) 2rem calc(1.5rem + var(--safe-l));
+  max-width: 40ch;
+}
+
+.boot__kicker {
+  margin: 0 0 0.6rem;
+  font-size: 0.7rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--c-purple);
+  font-weight: 600;
+}
+
+.boot__title {
+  margin: 0;
+  font-size: clamp(1.6rem, 7vw, 3rem);
+  line-height: 1.02;
+  letter-spacing: -0.01em;
+  font-weight: 800;
+}
+
+.boot__meta {
+  margin: 0.9rem 0 0;
+  font-size: 0.82rem;
+  color: var(--c-paper-dim);
+}
+
+.boot__status {
+  margin: 2rem 0 0;
+  font-size: 0.8rem;
+  color: var(--c-paper-dim);
+}
+
+/* Diagnostic line — visible during development, hidden once the menu ships. */
+.boot__tier {
+  margin: 0.5rem 0 0;
+  font-family: var(--font-num);
+  font-size: 0.65rem;
+  color: var(--c-line);
+}

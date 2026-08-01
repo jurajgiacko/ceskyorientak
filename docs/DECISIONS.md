@@ -1,0 +1,102 @@
+# Decisions
+
+Every non-obvious call, with the reasoning. Newest last.
+
+---
+
+## D-001 — Local tangent plane instead of a projection library
+
+**Decision.** Runtime uses an equirectangular local frame anchored per venue
+(`src/core/geo.ts`). No proj4 in the bundle. All S-JTSK / EPSG:5514 (Krovák)
+work happens once, offline, in `tools/terrain/`.
+
+**Why.** Both venues are ~4 km across. Across that span the tangent-plane
+approximation errs by well under 1 cm — two orders of magnitude below the
+~0.2 m vertical accuracy of the DMR 5G source. Shipping proj4 would cost
+~40 kB gzip and CPU in a hot path (the map renderer transforms thousands of
+vertices per frame) to buy accuracy we cannot perceive.
+
+**Cost.** A third venue far from these two needs its own anchor. That is one
+line of config.
+
+---
+
+## D-002 — Runnability encoded as a speed multiplier in the enum
+
+**Decision.** `Runnability` (`src/core/types.ts`) is an enum whose members map
+directly to ISOM vegetation symbols, and the speed table is keyed off it.
+
+**Why.** The brief's hard requirement is that "vegetation slows you the way the
+green shades promise." The failure mode is drift: the map renderer draws medium
+green while the physics applies light-green speed. One shared enum, one table,
+makes that class of bug impossible rather than merely unlikely. An orienteer
+would spot the drift instantly, so it is worth structural prevention.
+
+---
+
+## D-003 — Headless Blender CLI, not Blender MCP, as the asset pipeline
+
+**Decision.** 3D assets are authored by committed Python scripts run through
+`blender --background --python` and driven by `tools/blender/build.mjs`.
+`blender-mcp` is configured for interactive use but is not the pipeline.
+
+**Why.** Three reasons, in order of weight:
+1. **Reproducibility.** An asset that exists as a committed `.py` rebuilds
+   identically on any machine and in CI. An asset produced by GUI actions
+   through MCP exists only as its output `.glb` — the recipe is lost.
+2. **No GUI dependency.** `blender-mcp` requires Blender running with its addon
+   enabled and a socket server started from the 3D viewport sidebar. That is a
+   manual step before every session, and it cannot happen in CI.
+3. **Availability.** Blender was not installed on this machine, and MCP servers
+   only register at session start — so MCP could not have been used in the
+   session where the assets were needed regardless.
+
+**Cost.** Scripted modelling is slower to iterate than direct manipulation. We
+mitigate with headless turntable preview renders that are inspected each build.
+`docs/BLENDER_MCP_SETUP.md` covers enabling MCP for interactive sculpting when
+that is the better tool.
+
+---
+
+## D-004 — Quality tier decided at boot, not left to the user
+
+**Decision.** `src/core/capabilities.ts` probes the device and sets a
+`low | medium | high` tier before anything heavy loads. Settings can override,
+but the default is automatic.
+
+**Why.** The brief requires one build to hold 60 fps on a 2021 laptop iGPU and
+≥30 fps on a mid-range Android phone. The target player is a spectator standing
+in Arena Martínkov on a phone who has 60 seconds of patience — they will not
+find a graphics menu, and if the first frame stutters they leave. Device memory
+turned out to be a better phone signal than `hardwareConcurrency`, which
+over-reports on big.LITTLE designs.
+
+---
+
+## D-005 — `ScoreStore` interface defined before any storage code
+
+**Decision.** `src/core/types.ts` declares `ScoreStore`; `LocalStore` is the
+only implementation in the MVP, and nothing outside `src/store/` touches
+`localStorage`.
+
+**Why.** The brief wants Firebase as a post-MVP flag flip. That only stays true
+if no caller ever depends on storage being synchronous or local — hence every
+method returns a Promise even though `LocalStore` resolves immediately.
+
+**Note.** `LocalStore.submitRun` degrades deliberately on quota exhaustion: it
+drops ghost route data from older runs and retries, because a recorded time
+without a ghost is still worth keeping and a storage error must never take down
+a race that was just completed.
+
+---
+
+## D-006 — Provisional palette, tokenised
+
+**Decision.** `src/styles/base.css` defines all colour as custom properties, with
+values marked provisional pending confirmed brand research.
+
+**Why.** Brand assets are being gathered in parallel with scaffolding. Tokenising
+up front means the confirmed WCUP26 / Enervit values land as a single-file edit
+rather than a hunt through components. The IOF overprint purple and control-flag
+orange are already correct in character — they are the colours of the sport
+itself, not of any sponsor.
