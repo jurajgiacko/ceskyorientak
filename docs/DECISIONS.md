@@ -525,3 +525,56 @@ measurement artefacts, not faults. `drawCalls: 0` was a background-tab
 `requestAnimationFrame` throttle, and `window.__perf` appearing undefined was
 the browser tool evaluating in an isolated world. Both would have sent a fix in
 the wrong direction. Confirm the instrument before trusting the reading.
+
+---
+
+## D-020 — The claims boundary is now a build flag, defaulting to off
+
+**Decision.** In-race products move stats, caffeine included, and the HUD shows
+it. The constrained behaviour described by D-013 and `CLAIMS_TO_REVIEW.md` is
+retained in full and is reached by building with `VITE_CLAIMS_SAFE=1`.
+
+**Who decided.** The client — Vitar Sport, the Enervit CZ/SK distributor —
+lifted the restriction explicitly, on the basis that this build is for a private
+audience. It is his product and his exposure. This entry records the decision;
+it does not re-argue it.
+
+**What each build is.**
+
+| | default build | `VITE_CLAIMS_SAFE=1` |
+|---|---|---|
+| Carbohydrate → `glycogen`, `bloodSugar` | applied, named in the UI | applied, not attributed |
+| Isotonic drink → `hydration` | applied, named in the UI | applied, not attributed |
+| Caffeine → `focus` | applied | **not applied** |
+| Take confirmation | composition, time cost, stats that moved | composition and time cost |
+| Focus row in the HUD | shown | absent |
+
+Caffeine is suppressed rather than hidden in the constrained build. D-013's
+whole content is that no product touches `focus`; a mechanic that still decided
+the race while invisible would leave that build a different game wearing the
+same UI.
+
+**Where it lives.** `src/core/compliance.ts` reads the flag. `src/nutrition/
+intake.ts` is the only place in the codebase that moves a stat in response to a
+product, and the only place that consults the flag for physiology.
+`src/race/hud.ts` consults it for what to draw. The dose–response model itself
+(`caffeineFocus()` in `src/sim/athlete.ts`) is unconditional, so both builds
+share one physiology.
+
+**Two properties that are not flag-governed**, because they are game design
+before they are compliance:
+
+1. **Nothing is framed as a penalty for not consuming.** Depletion is caused by
+   pace, terrain, climb and heat, which are the only inputs `depleteStats()`
+   takes. The belt dock hides itself when empty and never prompts.
+2. **More is not monotonically better.** Intake is applied toward a ceiling so a
+   second identical item is nearly worthless; carbohydrate is counted against
+   `overfuellingPenalty()`; and `caffeineFocus()` turns over past ~3.5 mg/kg, so
+   a third caffeinated gel leaves the athlete navigating worse than the second
+   one did. A loadout with no wrong answer is not a decision.
+
+**Standing risk to flag, not to solve here.** The repository is public and the
+Vercel deployment is live. "Private audience" is a property of who is told the
+URL, not of the artefact. If this build is to sit alongside the World Cup, the
+flag is the switch — but someone has to throw it, and that is a release
+decision rather than a code one.

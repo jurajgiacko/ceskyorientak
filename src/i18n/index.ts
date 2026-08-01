@@ -111,6 +111,15 @@ export function formatDelta(seconds: number): string {
   return sign + formatRaceTime(Math.abs(seconds));
 }
 
+/**
+ * A plain number, decimal-separated the way the current locale writes it.
+ *
+ * Czech and Slovak use a comma, and "3.5 s" on a Czech HUD reads as a typo.
+ */
+export function formatNumber(value: number, maximumFractionDigits = 1): string {
+  return new Intl.NumberFormat(current, { maximumFractionDigits }).format(value);
+}
+
 export function formatDistance(metres: number): string {
   return metres >= 1000
     ? new Intl.NumberFormat(current, { maximumFractionDigits: 1 }).format(metres / 1000) + ' km'

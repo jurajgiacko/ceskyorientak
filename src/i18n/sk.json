@@ -100,5 +100,16 @@
   "nutrition.summary": "Pred štartom {carbs} g sacharidov · na páse {items}",
   "nutrition.dataNote": "Údaje o zložení na jednu dávku podľa obalu. Herné zjednodušenie, nejde o výživové odporúčanie.",
   "results.mispunchAt": "Chybné razenie na kontrole {n}",
-  "race.relocatedBy": "Zorientované {m} m"
+  "race.relocatedBy": "Zorientované {m} m",
+  "hud.energy": "ENERGIA",
+  "hud.energyCause": "Energia klesá tempom, stúpaním a teplom. Nič iné ju neznižuje.",
+  "hud.band.strong": "Máš silu",
+  "hud.band.steady": "Držíš tempo",
+  "hud.band.digging": "Zaberáš",
+  "hud.band.empty": "Na dne",
+  "hud.water": "VODA",
+  "hud.gut": "ŽALÚDOK",
+  "hud.takeCost": "Spomalenie {s} s",
+  "hud.focus": "HLAVA",
+  "nutrition.caffeine": "Kofeín {mg} mg"
 }

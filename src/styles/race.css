@@ -204,48 +204,543 @@
   }
 }
 
-.hud__belt {
-  position: absolute;
-  right: calc(0.7rem + var(--safe-r));
-  bottom: calc(6.6rem + var(--safe-b));
-  display: grid;
-  gap: 0.4rem;
-  justify-items: end;
-}
+/* --- the energy meter ---------------------------------------------------- *
+ *
+ * The athlete's own state, and the only stat plate on the screen. Everything it
+ * draws is spent by running: pace, terrain, climb, heat. Nothing in the race
+ * puts any of it back, which is what keeps an emptying bar a statement about
+ * effort rather than about a product — see the header of src/race/hud.ts and
+ * docs/CLAIMS_TO_REVIEW.md §5.
+ *
+ * There is no focus bar here and there must never be one.
+ *
+ * Sunlight rules apply harder to this than to anything else on screen, because
+ * it is read at a glance while running: an opaque plate, a bar thick enough to
+ * be a shape rather than a line, and a state word big enough to read without
+ * looking directly at it.
+ */
 
-.hud__beltItem {
-  appearance: none;
-  border: 0;
+/* Below the compass, not beside it: the top bar's rose runs to about 5.5rem and
+   the plate is on the same side of the screen. */
+.hud__energy {
+  position: absolute;
+  top: calc(var(--safe-t) + 6.2rem);
+  right: calc(0.7rem + var(--safe-r));
+  width: clamp(168px, 44vw, 252px);
+  display: grid;
+  gap: 0.3rem;
+  padding: 0.5rem 0.6rem 0.55rem;
   border-radius: var(--r-md);
   background: rgba(10, 20, 16, 0.86);
-  color: var(--c-paper);
-  font: inherit;
-  font-size: 0.62rem;
-  display: grid;
-  grid-template-columns: 34px 1fr;
-  align-items: center;
-  gap: 0.4rem;
-  padding: 0.35rem 0.6rem 0.35rem 0.35rem;
-  min-height: 46px;
-  max-width: 46vw;
-  text-align: left;
-  cursor: pointer;
+  border-right: 4px solid var(--c-good);
+  /* The state word is long in some locales; it must ellipsis rather than run
+     off the side of the phone. */
+  overflow: hidden;
+  pointer-events: none;
 }
 
-.hud__beltItem img {
-  width: 34px;
-  height: 34px;
+.hud__energy[data-band='steady'] {
+  border-right-color: var(--c-lime);
+}
+
+.hud__energy[data-band='digging'] {
+  border-right-color: var(--c-warn);
+}
+
+.hud__energy[data-band='empty'] {
+  border-right-color: var(--c-bad);
+}
+
+/* A grid rather than a flex row, so the state word gets a track that can
+   actually shrink — `min-width: auto` on a flex item is what lets long
+   translations push the plate off the screen. */
+.hud__energyHead {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: baseline;
+  gap: 0.4rem;
+}
+
+.hud__energyLabel {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  color: var(--c-paper-dim);
+}
+
+/* The word carries the meter at a glance, so it gets the weight and the
+   colour. It names a state of the athlete — never an effect of a product. */
+.hud__energyState {
+  font-size: 0.86rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--c-good);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+  text-align: right;
+}
+
+.hud__energy[data-band='steady'] .hud__energyState {
+  color: var(--c-lime);
+}
+
+.hud__energy[data-band='digging'] .hud__energyState {
+  color: var(--c-warn);
+}
+
+.hud__energy[data-band='empty'] .hud__energyState {
+  color: var(--c-bad);
+}
+
+/* The border rather than an inset shadow, so the ring stays visible over a
+   full bar: a bordered box clips its children to the padding box. */
+.hud__gauge {
+  position: relative;
+  height: 22px;
+  border-radius: var(--r-sm);
+  background: rgba(10, 20, 16, 0.9);
+  border: 2px solid rgba(244, 241, 232, 0.2);
+  overflow: hidden;
+}
+
+.hud__gaugeFill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 100%;
+  background: var(--c-good);
+  transition:
+    width 240ms linear,
+    background-color 400ms ease;
+}
+
+.hud__energy[data-band='steady'] .hud__gaugeFill {
+  background: var(--c-lime);
+}
+
+.hud__energy[data-band='digging'] .hud__gaugeFill {
+  background: var(--c-warn);
+}
+
+.hud__energy[data-band='empty'] .hud__gaugeFill {
+  background: var(--c-bad);
+}
+
+/* The two knees where speedFactor() actually starts capping pace, drawn so the
+   player can learn where the ground changes under them rather than guess. */
+.hud__gaugeTick {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: rgba(10, 20, 16, 0.8);
+}
+
+/* Pace is capped right now. An honest "this is why you are slow", and it is
+   caused by how hard the race has been run. */
+.hud__energy[data-capped='1'] .hud__gauge {
+  border-color: var(--c-warn);
+}
+
+.hud__energy[data-band='empty'][data-capped='1'] .hud__gaugeFill {
+  animation: energyPulse 1.1s ease-in-out infinite;
+}
+
+@keyframes energyPulse {
+  50% {
+    opacity: 0.55;
+  }
+}
+
+/* The meter acknowledges an item coming off the belt. It fires whether or not
+   anything moved: the player pressed a control and is paying seconds for it,
+   and a silent HUD reads as a bug. */
+.hud__energy[data-bump='1'] {
+  animation: energyBump 620ms cubic-bezier(0.2, 0.8, 0.3, 1);
+}
+
+@keyframes energyBump {
+  30% {
+    transform: scale(1.045);
+  }
+}
+
+.hud__sub {
+  display: grid;
+  grid-template-columns: 3.6rem 1fr;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.hud__subLabel {
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: var(--c-paper-dim);
+}
+
+.hud__subGauge {
+  position: relative;
+  height: 8px;
+  border-radius: 4px;
+  background: rgba(244, 241, 232, 0.16);
+  overflow: hidden;
+}
+
+.hud__subGauge > i {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 100%;
+  border-radius: 4px;
+  background: var(--c-paper-dim);
+  transition: width 300ms linear;
+}
+
+/* Below the hydration knee in speedFactor(), water is costing pace. Say so. */
+.hud__sub[data-low='1'] .hud__subGauge > i {
+  background: var(--c-warn);
+}
+
+/* Over-fuelling. Art. 3(c): the mechanic may never reward consumption without
+   limit, so this is the one row that fills as more is consumed — and filling it
+   is bad news. Hidden at zero, which is where a race run on protocol sits. */
+.hud__sub--gut .hud__subGauge > i {
+  width: 0;
+  background: var(--c-warn);
+}
+
+.hud__sub--gut[data-heavy='1'] .hud__subGauge > i {
+  background: var(--c-bad);
+}
+
+.hud__sub--gut[hidden] {
+  display: none;
+}
+
+/* --- taking something off the belt --------------------------------------- *
+ *
+ * What it was, what it is made of, what it cost. The composition line is
+ * nutrition information under Reg. 1169/2011, not a claim, and there is
+ * deliberately no gain printed anywhere: nothing in the simulation raises a
+ * stat when an item is taken, and attributing one to a named SKU would be the
+ * symbolic health claim CLAIMS_TO_REVIEW.md §3.6 rules out.
+ */
+
+.hud__take {
+  position: absolute;
+  /* Clear of the target card above it and of the minimap below. */
+  top: calc(var(--safe-t) + 11.8rem);
+  left: 50%;
+  transform: translateX(-50%);
+  display: grid;
+  /* `minmax(0, 1fr)` and not `1fr`: the body must be allowed to be narrower
+     than its longest word, or a product name pushes the cost off the card. */
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-areas: 'shot body cost';
+  align-items: center;
+  gap: 0.6rem;
+  min-height: 60px;
+  width: min(30rem, 92vw);
+  padding: 0.5rem 0.75rem 0.6rem;
+  border-radius: var(--r-md);
+  background: rgba(10, 20, 16, 0.92);
+  border-left: 4px solid var(--c-brand);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+  overflow: hidden;
+  pointer-events: none;
+  animation: takeIn 260ms cubic-bezier(0.2, 0.8, 0.3, 1);
+}
+
+.hud__take[hidden] {
+  display: none;
+}
+
+@keyframes takeIn {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-10px);
+  }
+}
+
+.hud__takeShot {
+  grid-area: shot;
+  width: 40px;
+  height: 40px;
   object-fit: contain;
 }
 
-.hud__beltItem span {
+.hud__takeBody {
+  grid-area: body;
+  display: grid;
+  gap: 0.1rem;
+  min-width: 0;
+}
+
+.hud__takeName {
+  font-size: 0.86rem;
+  font-weight: 700;
+  color: var(--c-paper);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+.hud__takeFacts {
+  font-family: var(--font-num);
+  font-size: 0.72rem;
+  color: var(--c-paper-dim);
+}
+
+/* What moved in the athlete. Rendered only by the full-mechanic build, and a
+   chip can point down — the third caffeinated gel is worse than the second. */
+.hud__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin-top: 0.2rem;
+}
+
+.hud__chip {
+  font-family: var(--font-num);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 0.1rem 0.4rem;
+  border-radius: var(--r-sm);
+  background: rgba(244, 241, 232, 0.12);
+  animation: chipIn 320ms cubic-bezier(0.2, 0.8, 0.3, 1) backwards;
+}
+
+.hud__chip[data-dir='up'] {
+  color: var(--c-lime);
+}
+
+.hud__chip[data-dir='down'] {
+  color: var(--c-warn);
+}
+
+@keyframes chipIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.9);
+  }
+}
+
+/* The cost, in the same weight as the clock, because it is time off the clock. */
+.hud__takeCost {
+  grid-area: cost;
+  font-family: var(--font-num);
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--c-warn);
+  white-space: nowrap;
+}
+
+/* On a phone there is no room for three columns, so the cost drops under the
+   body rather than colliding with it. */
+@media (max-width: 560px) {
+  .hud__take {
+    top: calc(var(--safe-t) + 12.9rem);
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-areas:
+      'shot body'
+      'shot cost';
+    row-gap: 0.25rem;
+  }
+
+  .hud__takeCost {
+    justify-self: start;
+  }
+}
+
+/* Drains for exactly as long as the athlete is actually slowed. */
+.hud__takeBar {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 4px;
+  width: 100%;
+  background: var(--c-warn);
+  transform-origin: left center;
+  animation: takeDrain linear forwards;
+}
+
+@keyframes takeDrain {
+  to {
+    transform: scaleX(0);
+  }
+}
+
+/* --- the belt ------------------------------------------------------------ *
+ *
+ * A named, counted button that opens a tray, rather than four unlabelled tiles
+ * bound to digit keys. The reader is on a phone with a thumb on the stick and a
+ * thumb on the look area; the belt has to be reachable without either.
+ *
+ * The whole dock is hidden when there is nothing left to take. It must never
+ * linger as a reminder: taking nothing is the correct protocol for Sprint and
+ * Middle, and an empty-belt prompt would be exactly the "you will suffer
+ * without it" framing Art. 12(a) prohibits outright.
+ */
+
+.hud__beltDock {
+  position: absolute;
+  right: calc(0.7rem + var(--safe-r));
+  bottom: calc(5.9rem + var(--safe-b));
+  display: grid;
+  gap: 0.4rem;
+  justify-items: stretch;
+  /* On touch the minimap lives in this corner and is painted after the HUD, so
+     an open tray would sit underneath it. The tray is transient and was asked
+     for; the minimap can wait the two seconds. */
+  z-index: 5;
+}
+
+.hud__beltDock[hidden] {
+  display: none;
+}
+
+.hud__beltToggle {
+  appearance: none;
+  border: 0;
+  min-width: 108px;
+  min-height: 56px;
+  padding: 0 0.7rem;
+  border-radius: var(--r-lg);
+  background: var(--c-ink-3);
+  color: var(--c-paper);
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
+}
+
+.hud__beltDock[data-open='1'] .hud__beltToggle {
+  background: var(--c-lime);
+  color: var(--c-ink);
+}
+
+.hud__beltStrap {
+  fill: currentColor;
+  opacity: 0.55;
+}
+
+.hud__beltBuckle {
+  fill: currentColor;
+}
+
+.hud__beltCount {
+  font-family: var(--font-num);
+  font-size: 1rem;
+  min-width: 1.4rem;
+  height: 1.4rem;
+  line-height: 1.4rem;
+  border-radius: 0.7rem;
+  background: rgba(244, 241, 232, 0.16);
+  text-align: center;
+}
+
+.hud__beltDock[data-open='1'] .hud__beltCount {
+  background: rgba(10, 20, 16, 0.2);
+}
+
+/* The tray gets its own opaque plate rather than floating tiles: on touch it
+   opens over the minimap, and a printed map showing through the gaps between
+   tiles is unreadable for both of them. */
+.hud__belt {
+  display: grid;
+  gap: 0.4rem;
+  justify-items: stretch;
+  padding: 0.4rem;
+  border-radius: var(--r-md);
+  background: rgba(10, 20, 16, 0.92);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+  animation: trayIn 180ms cubic-bezier(0.2, 0.8, 0.3, 1);
+}
+
+.hud__belt[hidden] {
+  display: none;
+}
+
+@keyframes trayIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+.hud__beltItem {
+  appearance: none;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: var(--c-ink-3);
+  color: var(--c-paper);
+  font: inherit;
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr) auto;
+  grid-template-areas:
+    'shot name key'
+    'shot facts key';
+  align-items: center;
+  gap: 0 0.5rem;
+  padding: 0.4rem 0.6rem;
+  min-height: 60px;
+  width: min(19rem, 80vw);
+  text-align: left;
+  cursor: pointer;
+}
+
+.hud__beltItem img {
+  grid-area: shot;
+  width: 40px;
+  height: 40px;
+  object-fit: contain;
+}
+
+.hud__beltItemName {
+  grid-area: name;
+  font-size: 0.8rem;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Composition only, off the pack. Never an effect. */
+.hud__beltItemFacts {
+  grid-area: facts;
+  font-family: var(--font-num);
+  font-size: 0.7rem;
+  color: var(--c-paper-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hud__beltItemKey {
+  grid-area: key;
+  font-family: var(--font-num);
+  font-size: 0.68rem;
+  font-weight: 500;
+  color: var(--c-paper-dim);
+  border: 1px solid rgba(244, 241, 232, 0.28);
+  border-radius: var(--r-sm);
+  padding: 0.05rem 0.32rem;
+}
+
+/* Spent. Kept in place for a beat so the slot is seen to empty, then the whole
+   dock disappears once the last one has gone. */
 .hud__beltItem:disabled {
-  opacity: 0.3;
+  opacity: 0.32;
   cursor: default;
 }
 

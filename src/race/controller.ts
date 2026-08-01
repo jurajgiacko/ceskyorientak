@@ -28,11 +28,13 @@ import { FieldTerrain } from './terrainAdapter';
 import { buildMapData } from './mapData';
 import { RaceMap } from './raceMap';
 import { RaceHud } from './hud';
+import { readEnergy } from './energy';
 import { RaceControls } from './controls';
 import { punch as playPunch, updateAudio, setEnvironment, duckForMap } from '@/audio';
 import type { EnvironmentId } from '@/audio';
 import type { Sku } from '@/data/enervit';
 import { takeCostS } from '@/nutrition/protocol';
+import { applyIntake } from '@/nutrition/intake';
 import { formatRaceTime, formatDistance, t } from '@/i18n';
 import type { RunResult } from '@/core/types';
 
@@ -90,6 +92,16 @@ export class RaceController {
   private readonly panel: HTMLElement;
 
   private beltLeft: boolean[];
+  /**
+   * Read-only mirrors of two numbers `Race` owns privately, kept so the HUD can
+   * be shown the over-fuelling state without `RaceView` having to grow fields
+   * or `src/sim` having to change. They are written in exactly one place — the
+   * same call that hands them to `Race.takeNutrition()` — so they cannot drift.
+   */
+  private consumedG = 0;
+  private itemsOnBelt: number;
+  /** Cumulative caffeine this race, mg. Drives the dose–response turnover. */
+  private caffeineMg = 0;
   /** Seconds still owed for taking an item — paid as a forced slow. */
   private takePenaltyS = 0;
   private started = false;
@@ -129,6 +141,7 @@ export class RaceController {
     Object.assign(this.race.athlete.stats, setup.startStats);
     this.race.setBeltItems(setup.belt.length);
     this.beltLeft = setup.belt.map(() => true);
+    this.itemsOnBelt = setup.belt.length;
 
     this.root = document.createElement('div');
     this.root.className = 'race';
@@ -237,6 +250,13 @@ export class RaceController {
           <div><dt>${esc(t('race.scale'))}</dt><dd>1:${this.setup.anchor.mapScale}</dd></div>
         </dl>
         <p class="racepanel__note">${esc(t('race.prestartHint'))}</p>
+        <!--
+          Says out loud what the meter measures, before the meter is on screen.
+          The causes named here — pace, climb, heat — are the only causes there
+          are (see depleteStats), and stating them is what stops an emptying bar
+          being read as a consequence of not taking a product. Art. 12(a).
+        -->
+        <p class="racepanel__note">${esc(t('hud.energyCause'))}</p>
         <button class="racepanel__go" data-act="begin">${esc(t('race.goStart'))}</button>
       </div>`;
     const go = this.panel.querySelector('[data-act="begin"]');
@@ -293,7 +313,11 @@ export class RaceController {
       playPunch('touchfree');
     }
 
-    this.hud.update(v, now);
+    this.hud.update(
+      v,
+      now,
+      readEnergy({ view: v, beltItems: this.itemsOnBelt, consumedG: this.consumedG }),
+    );
     this.map.update(now);
 
     const cls = this.terrain.runnabilityAt(p.x, p.z);
@@ -323,14 +347,48 @@ export class RaceController {
     duckForMap(reading);
   }
 
+  /**
+   * Take an item off the belt.
+   *
+   * Three real consequences, in this order:
+   *
+   *  1. **It costs seconds.** `takePenaltyS` is paid in `frame()` as a forced
+   *     slow rather than a pause, because that is what it is — you jog, you
+   *     fumble with a sachet, you swallow, you get going again.
+   *  2. **The athlete responds.** `applyIntake()` is the one place in the
+   *     codebase that moves a stat in response to a product, and what it moves
+   *     depends on `CLAIMS_SAFE` — see `src/core/compliance.ts`. It writes into
+   *     the same `stats` object the simulation steps, so the next frame's
+   *     `speedFactor()` and `navigationQuality()` see it immediately. `Race`
+   *     still owns the intake log and the carbohydrate total.
+   *  3. **The belt gets lighter**, which really does relieve the carry term in
+   *     `overfuellingPenalty()`.
+   *
+   * Note what is *not* here: any path by which taking more is reliably better.
+   * The intake ceiling makes a second identical item nearly worthless, the
+   * carbohydrate is counted toward the gut limit for the elapsed duration, and
+   * the caffeine dose–response turns over. Loading the belt is a decision, not
+   * a shopping list.
+   */
   private takeBelt(index: number): void {
     if (!this.started || this.ended) return;
     const sku = this.setup.belt[index];
     if (!sku || !this.beltLeft[index]) return;
     this.beltLeft[index] = false;
+
     this.race.takeNutrition(sku.id, sku.carbsG ?? 0);
-    this.takePenaltyS = takeCostS(this.setup.discipline);
+    const effect = applyIntake(this.race.athlete.stats, sku, {
+      caffeineBeforeMg: this.caffeineMg,
+    });
+
+    this.consumedG += sku.carbsG ?? 0;
+    this.caffeineMg += sku.caffeineMg ?? 0;
+    this.itemsOnBelt = Math.max(0, this.itemsOnBelt - 1);
+
+    const cost = takeCostS(this.setup.discipline);
+    this.takePenaltyS = cost;
     this.hud.renderBelt(this.beltLeft);
+    this.hud.showTake(sku, cost, performance.now(), effect);
   }
 
   // -------------------------------------------------------------------------

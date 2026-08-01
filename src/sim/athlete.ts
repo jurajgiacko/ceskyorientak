@@ -343,6 +343,55 @@ export function overfuellingPenalty(
 }
 
 // ---------------------------------------------------------------------------
+// Caffeine
+// ---------------------------------------------------------------------------
+
+/**
+ * Reference body mass, kg. Caffeine dosing is per-kilogram everywhere in the
+ * literature, and the game has no body-mass model, so it assumes one athlete.
+ */
+export const REFERENCE_MASS_KG = 70;
+
+/**
+ * Total focus offset from the caffeine taken so far in this race, as a function
+ * of cumulative dose.
+ *
+ * **This function is pure and unconditional.** It is the physiology, stated
+ * once. Whether the game *applies* it is decided at a single call site in
+ * `src/nutrition/intake.ts` and governed by `src/core/compliance.ts` — see the
+ * table there, and D-013/D-020 in docs/DECISIONS.md for why that switch exists.
+ * Keeping the model here rather than behind the flag means both builds share
+ * one physics and only one of them draws it.
+ *
+ * The shape, and why it is a hump rather than a ramp:
+ *
+ * - **It rises fast and then stops rising.** Ergogenic effects plateau around
+ *   3 mg/kg; the dose–response literature is consistent that 6 mg/kg does no
+ *   more than 3 mg/kg for endurance or vigilance. So the exponential
+ *   saturation, not a linear term.
+ * - **It turns over.** Past roughly 3.5 mg/kg the costs start showing up —
+ *   restlessness, heart-rate drift, GI upset — and for a task that is
+ *   *decision-making under load*, which is what Focus governs in this game,
+ *   those are not neutral. A third caffeinated gel leaves an orienteer worse at
+ *   reading a contour than a second one did.
+ *
+ * That turnover is deliberate and is not negotiable by a flag: a mechanic where
+ * the optimum is "consume everything" has no decision in it. It is also what
+ * keeps the design clear of Art. 3(c), in the build that needs to be.
+ *
+ * @param totalMg cumulative caffeine consumed in this race, milligrams
+ * @returns focus offset, roughly −0.12 … +0.22
+ */
+export function caffeineFocus(totalMg: number, massKg = REFERENCE_MASS_KG): number {
+  const perKg = Math.max(0, totalMg) / massKg;
+  // Saturating rise: ~63% of the ceiling by 1.1 mg/kg, ~95% by 3.3 mg/kg.
+  const rise = 1 - Math.exp(-perKg / 1.1);
+  const over = Math.max(0, perKg - 3.5);
+  const v = 0.22 * rise - 0.09 * over;
+  return v < -0.12 ? -0.12 : v;
+}
+
+// ---------------------------------------------------------------------------
 // The control-approach mechanic
 // ---------------------------------------------------------------------------
 

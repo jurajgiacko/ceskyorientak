@@ -60,12 +60,19 @@ const BEFORE_CHOICES = [
  * Isotonic Gel is deliberately absent: the client confirmed it is discontinued
  * in CZ/SK, and offering a product that cannot be bought is worse than
  * offering one fewer. Replaced by the C2:1 Carbo Bar, which is current.
+ *
+ * The two caffeinated gels are here because in the default build caffeine is
+ * modelled (D-020) and a modelled effect no player can reach is not a mechanic.
+ * They also carry the range's only real dose decision: 20 mg and 100 mg sit
+ * either side of the point where `caffeineFocus()` stops paying, so the choice
+ * between them is a choice rather than a bigger-is-better ramp.
  */
 const BELT_CHOICES = [
   'gel-citrus',
+  'gel-raspberry-caffeine',
+  'carbo-gel-cola-caffeine',
   'liquid-gel-orange',
   'carbo-bar-peanut',
-  'carbo-bar-brownie',
   'carbo-gel-orange',
 ] as const;
 
@@ -160,6 +167,11 @@ export function makeBeforeScreen(req: RaceRequest): Screen {
         const facts: string[] = [];
         if (s.carbsG !== null) facts.push(t('nutrition.carbs', { g: s.carbsG }));
         if (s.sodiumMg !== null) facts.push(t('nutrition.sodium', { mg: s.sodiumMg }));
+        // Load-bearing, not decoration: two SKUs in the belt list share the
+        // Czech pack name "ENERVIT Gel" and differ only by flavour and
+        // caffeine, so without this line the player is choosing between two
+        // identical cards. Composition, stated as composition.
+        if (s.caffeineMg) facts.push(t('nutrition.caffeine', { mg: s.caffeineMg }));
         if (s.volumeMl !== null) facts.push(`${s.volumeMl} ml`);
         return `
           <article class="skucard${n ? ' is-on' : ''}">

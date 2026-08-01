@@ -100,5 +100,16 @@
   "nutrition.summary": "Before the start {carbs} g carbohydrate · on the belt {items}",
   "nutrition.dataNote": "Composition per serving, from the pack. Simplified for the game; not nutrition advice.",
   "results.mispunchAt": "Mispunch at control {n}",
-  "race.relocatedBy": "Relocated {m} m"
+  "race.relocatedBy": "Relocated {m} m",
+  "hud.energy": "ENERGY",
+  "hud.energyCause": "Energy falls with pace, climb and heat. Nothing else lowers it.",
+  "hud.band.strong": "Running strong",
+  "hud.band.steady": "Holding pace",
+  "hud.band.digging": "Digging in",
+  "hud.band.empty": "Running on empty",
+  "hud.water": "WATER",
+  "hud.gut": "STOMACH",
+  "hud.takeCost": "Slowed {s} s",
+  "hud.focus": "FOCUS",
+  "nutrition.caffeine": "Caffeine {mg} mg"
 }

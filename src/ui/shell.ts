@@ -13,7 +13,9 @@
 import type { Capabilities } from '@/core/capabilities';
 import type { Discipline } from '@/core/types';
 import type { RaceRequest, ScreenRaceSetup } from '@/ui/beforeScreen';
-import { applyPreRace } from '@/nutrition/protocol';
+import { applyPreRace, FORMAT } from '@/nutrition/protocol';
+import { SKUS } from '@/data/enervit';
+import type { Sku } from '@/data/enervit';
 
 export interface Screen {
   readonly id: string;
@@ -85,9 +87,28 @@ export function getCapabilities(): Capabilities {
   return caps;
 }
 
-/** Build the setup a `&race=1` deep link implies. Nothing is consumed. */
+/**
+ * Build the setup a `&race=1` deep link implies. Nothing is consumed.
+ *
+ * Two extra knobs, for the same reason `&tier=` exists: QA has to be able to
+ * reach states the menu does not offer, and an unreachable state is an
+ * unchecked one.
+ *
+ *  - `&discipline=long` — the only format whose protocol calls for in-race
+ *    carbohydrate at all, and therefore the only one where the belt is more
+ *    than an option. The menu offers Middle and Sprint only.
+ *  - `&belt=N` — carry N items, so the belt UI can be exercised without going
+ *    through the BEFORE screen. Bounded by the format's real slot count, so
+ *    this cannot manufacture a loadout a player could not build.
+ */
 function deepLinkRace(scene: 'forest' | 'sprint', params: URLSearchParams): ScreenRaceSetup {
-  const discipline: Discipline = scene === 'sprint' ? 'sprint' : 'middle';
+  const wanted = params.get('discipline');
+  const discipline: Discipline =
+    scene === 'sprint'
+      ? 'sprint'
+      : wanted === 'long' || wanted === 'middle'
+        ? wanted
+        : 'middle';
   const heat = scene === 'sprint' ? 0.45 : 0.4;
   const request: RaceRequest = {
     venue: scene === 'sprint' ? 'krumlov' : 'martinkov',
@@ -96,13 +117,31 @@ function deepLinkRace(scene: 'forest' | 'sprint', params: URLSearchParams): Scre
     heat,
     startInMin: 60,
   };
+
+  const want = Math.max(0, Math.min(FORMAT[discipline].beltSlots, Number(params.get('belt') ?? 0) || 0));
+  const belt = QA_BELT.slice(0, want)
+    .map((id) => SKUS.find((s) => s.id === id))
+    .filter((s): s is Sku => s !== undefined);
+
   return {
     request,
     preRace: [],
-    belt: [],
+    belt,
     startStats: applyPreRace([], discipline, { heat }).stats,
   };
 }
+
+/**
+ * The same during-race items the BEFORE screen offers, ordered so that a
+ * one-item QA belt is the caffeinated 100 mg gel: it is the only loadout that
+ * exercises the caffeine path, and an unexercised path is an unchecked one.
+ */
+const QA_BELT = [
+  'carbo-gel-cola-caffeine',
+  'gel-raspberry-caffeine',
+  'gel-citrus',
+  'liquid-gel-orange',
+] as const;
 
 /** Cross-fade from the current screen to the next. Never cut. */
 export async function transitionTo(next: Screen): Promise<void> {
