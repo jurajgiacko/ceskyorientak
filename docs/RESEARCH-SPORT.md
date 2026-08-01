@@ -540,3 +540,443 @@ This is the part that is **not cartographic advice but law**. Rule 17.2 (Competi
 4. Rule 17.3: *"Compulsory routes, crossing points and passages must be marked clearly on the map and on the ground.
    Competitors must follow the **entire length** of any marked section of their course."*
 
+---
+---
+
+# 3. IOF Control Descriptions
+
+**Current version: "International Specification for Control Descriptions — 2024"** (IOF Rules Commission:
+David Rosen chair, Barry McCrae, Felix Büchi; editor Barry Elkington; artwork based on the 1990 edition with
+additional drawings by Matthew Cook 2004/2018).
+Source PDF: https://baoc.org/wiki/images/d/da/IOF_Control_Descriptions_2024.pdf
+Landing page: https://orienteering.sport/iof/rules/control-descriptions/
+
+## 3.0 What changed from the 2018 version (verbatim list from the 2024 PDF)
+
+1. Now covers **both ISOM and ISSprOM**.
+2. Description sheet **should be printed in black**.
+3. If the clarification symbol in column C is not sufficient to unambiguously define the placement of the control
+   flag, **then the feature is not suitable for a control site**.
+4. Use of **Copse** symbol extended to include a more runnable area of trees surrounded by thicker forest.
+5. Use of **Building** symbol extended to include **a pillar supporting a roof**.
+6. **New symbol** added for a **Railway or tramway** (5.24).
+7. Use of **Top** and **Beneath** symbols extended to include the **Upper / Lower of two levels**.
+8. **New symbol** added for a **map flip** (15.6).
+
+If you need to be 2018-compatible, drop 5.24 and 15.6 and reinstate the old wording; the rest of the table is
+unchanged in numbering.
+
+## 3.1 Sheet format (implement this exactly)
+
+| Property | Value |
+|---|---|
+| Boxes | **square, side between 5 mm and 7 mm** |
+| Print colour | **black** |
+| Column order | A B C D E F G H (left to right) |
+| Rule line | a **thicker horizontal line after every third description**, and on **both sides of any special instruction** |
+| Heading block | Event title; Classes (optional); **Course code · Course length in km to 0.1 km measured from the point at which timing starts · Height climb in m to the nearest 5 m** |
+| Start line | first row; described **as if the start were a control feature**. Codes `S1`, `S2` … may be used in column B |
+| Optional line above start | distance from the timed start to the start triangle (symbol 14.1), if they are not within a few metres |
+| Last line | nature of the route from the last control to the finish (symbols 16.1 / 16.2 / 16.3) |
+| Where it lives | *"must be fixed to or printed on the **front side** of the competition map"* (Rule 18.3). For interval starts, separate loose descriptions must be available at the pre-start / in the start lanes and **not before** (Rule 18.4). |
+
+### Column meanings
+
+| Col | Name | Content |
+|---|---|---|
+| **A** | Control number | Sequence order. For a Score competition, left blank or the control's point value. |
+| **B** | Control code | **Must be a number greater than 30** (Rule 19.6: "Numbers less than 31 must not be used"). |
+| **C** | Which of any similar feature | Only when more than one similar feature lies inside the circle; e.g. *south eastern*. |
+| **D** | **The control feature** | The feature **as shown on the map, at the centre of the circle**. **Exactly one symbol** — never two. |
+| **E** | Appearance | Further nature of the feature (*overgrown*, *ruined*), **or the second feature** for crossing / junction / between. |
+| **F** | Dimensions / Combinations / Bend | Dimensions when the map symbol is symbolic rather than to scale; the two combination symbols; the bend symbol. |
+| **G** | Location of the control flag | Position relative to the feature. **No symbol** is used when the flag is at (or as near as possible to) the **centre** of the feature — or the **centre of the foot** in the case of a cliff. |
+| **H** | Other information | First aid, refreshments, manned control. |
+
+---
+
+## 3.2 SVG drawing model
+
+The pictograms in the IOF PDF are embedded as **raster images**, so no official vector source can be extracted
+from it. The descriptions below are geometric reconstructions accurate enough to redraw. Recommended conventions:
+
+* **viewBox `0 0 100 100`**, one symbol per box, drawn inside the central ~**64 × 64** area (margin ≈ 18 units).
+* **`stroke-width` ≈ 7–8** units, `stroke-linecap="round"`, `stroke-linejoin="round"`, `fill="none"` unless the
+  description says *filled*.
+* Colour: pure black `#000000` on white.
+* **Direction-bearing symbols** (0.1, 0.2, 12.1–12.7, 12.12, and the tree symbols) are drawn once and **rotated in
+  45° steps** to encode the eight compass directions. N = 0°, NE = 45°, E = 90°, SE = 135°, S = 180°, SW = 225°,
+  W = 270°, NW = 315°. Implement one base path + a `transform="rotate(θ 50 50)"`.
+* Existing open-source vector implementations you can cross-check against: **Purple Pen** (course-setting software,
+  draws every description symbol programmatically), OCAD's `Course_Design` symbol sets, and OpenOrienteering
+  Mapper's `symbol sets/…/Course_Design_15000.omap`.
+
+---
+
+## 3.3 Column C — Which of any similar feature (5 symbols)
+
+| Ref | Name | Geometry |
+|---|---|---|
+| **0.1** | Northern | A **straight vertical line with an arrowhead at the top**. Shaft from (50,82) to (50,22); open V arrowhead of ~20 units span at the tip. **Rotate by 45° steps** to give NE, E, SE, S, SW, W, NW. |
+| **0.2** | South Eastern | The same arrow rotated 135° (pointing down-right). *(0.1 and 0.2 are one symbol, illustrated in two orientations.)* |
+| **0.3** | Upper | **Two short horizontal bars stacked** (y ≈ 38 and y ≈ 62, each ~40 units wide, centred). A **filled dot** (r ≈ 6) sits on the **upper** bar's centre. |
+| **0.4** | Lower | Mirror of 0.3 — the filled dot sits on the **lower** bar. |
+| **0.5** | Middle | **Three short vertical bars** side by side (x ≈ 32, 50, 68; y from 25 to 75). A **filled dot** (r ≈ 6) sits on the **middle** bar's centre. |
+
+---
+
+## 3.4 Column D — The control feature (the full ~72-symbol table)
+
+Column "ISOM/ISSprOM" is the cross-reference given in the spec; *"where a number is given it includes all symbols
+beginning with that number (e.g. 509 indicates 509.1 & 509.2)"*.
+
+### 3.4.1 Landforms (ISOM/ISSprOM §3.1) — 16 symbols
+
+| Ref | Name | ISOM/ISSprOM | Meaning | **Geometry for SVG** |
+|---|---|---|---|---|
+| 1.1 | **Terrace** | 101,102,103 | A level area on a slope | Two strokes forming a **contour step in profile**: a short, slightly-curved **vertical stroke on the left** (the slope above), and to its right an open **"Ɔ"** — a stroke that starts upper-left, runs right, turns down, and returns left at the bottom, i.e. a broad rounded bulge **open to the left**. The bulge is the shelf. |
+| 1.2 | **Spur** | 101,102,103 | A contour projection or "nose" | Same left vertical stroke, but the right shape is a **narrower, longer projection**: the stroke runs right, turns sharply down and returns left **past** the start, then drops — giving a nose pointing right with the contour wrapping it. |
+| 1.3 | **Re-entrant** | 101,102,103 | Contour indentation, a valley — the opposite of a spur | A single **arch: an inverted-U (∩)** with vertical legs at (32,85)→(32,50) and (68,85)→(68,50), joined by a semicircular cap. |
+| 1.4 | **Earth bank** | 104 | Abrupt change in ground level | A shallow **arc convex upward** spanning x 22→78, with **four short tags hanging down** from it, evenly spread, angled slightly (the classic "eyelash"). |
+| 1.5 | **Quarry** | 104 | Gravel/sand/stone working | A large **horseshoe arc**, open at the bottom (∩ with splayed feet), with **four short tags pointing inward** toward the centre. |
+| 1.6 | **Earth wall** | 105,106 | Narrow wall of earth projecting above the terrain | A **horizontal bar** crossed by **four short vertical ticks** (a stubby ladder / "▮╫▮"). |
+| 1.7 | **Erosion gully** | 107 | Normally-dry gully | A large **inverted V (∧)** — two straight strokes meeting at an apex near (50,25), feet at (32,80) and (68,80). |
+| 1.8 | **Small erosion gully** | 108 | Small dry gully | **Two parallel diagonal strokes** running lower-left → upper-right, with **four dots in a row between them**, on the same diagonal. |
+| 1.9 | **Hill** | 101,102,103 | A high point | A plain **ellipse outline**, wider than tall (rx ≈ 32, ry ≈ 20, centre 50,50). |
+| 1.10 | **Knoll** | 109,110 | A small obvious mound | A **filled black circle**, r ≈ 14. |
+| 1.11 | **Saddle** | 101,102,103 | Low point between two higher points | **Two facing arcs**: `)` on the left and `(` on the right — i.e. two vertical arcs bulging **away** from each other, leaving a waist in the middle. |
+| 1.12 | **Depression** | 101,102,103 | Ground rises on all sides | The **Hill ellipse plus a short horizontal slope-tick** entering from the left through the outline into the middle (`⊖` with the bar only on the left half). |
+| 1.13 | **Small depression** | 111 | Small shallow natural hollow | A **U** — a semicircle open at the top, legs at (30,30) and (70,30), bowl bottom at y ≈ 78. |
+| 1.14 | **Pit** | 112, 203 | Steep-sided pit or hole, usually man-made | A **V** — two straight strokes meeting at (50,80), tops at (28,28) and (72,28). *(With 8.6 Rocky = "rocky pit", ISOM 203.)* |
+| 1.15 | **Broken ground** | 113,114 | Too small / too numerous to map individually | **Three small "u" arcs** (semicircles open upward), scattered — two on an upper row, one below and between them. |
+| 1.16 | **Ant hill (termite mound)** | 115 | Ant/termite mound | An **eight-pointed asterisk** — four straight strokes through the centre at 0°, 45°, 90°, 135°. |
+
+### 3.4.2 Rock and boulders (§3.2) — 10 symbols
+
+| Ref | Name | ISOM/ISSprOM | **Geometry** |
+|---|---|---|---|
+| 2.1 | **Cliff, Crag** | 201, 202 | A **thick horizontal bar** with **three short thick tags hanging down** from it (a stubby comb, "**⌷⌷⌷**"). Passable or impassable — the description does not distinguish. |
+| 2.2 | **Rock Pillar** | 206 | A **tall narrow solid black triangle**, apex up. |
+| 2.3 | **Cave** | 203 | A stylised opening: a **long stroke from lower-left to upper-right crossed by a short "<" chevron** — reads as an arrow entering a mouth. |
+| 2.4 | **Boulder** | 204, 205 | A **solid black equilateral triangle, apex up**, side ≈ 44. *(This is the canonical "boulder = filled triangle".)* |
+| 2.5 | **Boulder field** | 208, 209 | **Four solid black triangles** in a 2 × 2 arrangement (upper-left, upper-right, lower-left, lower-right), each ~half the size of 2.4, with visible gaps. |
+| 2.6 | **Boulder cluster** | 207 | **Two solid black triangles overlapping / touching**, side by side, forming a twin-peak silhouette. |
+| 2.7 | **Stony ground** | 210, 211, 212 | A **regular grid of small filled dots**, ~5 columns × 5 rows, evenly spaced. |
+| 2.8 | **Bare rock** | 214 | An **eight-pointed star of short strokes radiating from a gap at the centre** — like a sunburst with a small hollow core (distinct from 1.16, whose strokes pass through the centre). |
+| 2.9 | **Narrow passage** | 201, 202 | Two mirrored bracket glyphs facing each other: **`]` on the left and `[` on the right**, each a vertical bar with short horizontal serifs turned inward — a gap between two cliffs. |
+| 2.10 | **Trench** | 215 | A **squared U** — vertical stroke down, horizontal stroke across the bottom, vertical stroke up (like `⌴`), with the left leg drawn taller. |
+
+### 3.4.3 Water and marsh (§3.3) — 11 symbols
+
+| Ref | Name | ISOM/ISSprOM | **Geometry** |
+|---|---|---|---|
+| 3.1 | **Lake** | 301 | A **closed rounded outline (a lake shape)** with a **wave (S-curve / ~) inside it**. |
+| 3.2 | **Pond** | 301, 302 | A **U (bowl)** with **a row of ~3 wave crests (∿∿∿) across its open top**. |
+| 3.3 | **Waterhole** | 303 | A **V** with the same **row of wave crests across its top**. *(= "Pit" 1.14 + water.)* |
+| 3.4 | **River, Stream, Watercourse** | 301, 304, 305 | A **long wavy line (a stretched sine, 3–4 crests)** running lower-left → upper-right. |
+| 3.5 | **Minor water channel, Ditch** | 306 | The wavy line of 3.4 **drawn between two parallel diagonal boundary strokes** (i.e. a narrow channel containing a wiggle). |
+| 3.6 | **Narrow marsh** | 309 | **A diagonal line of ~4 dots**, lower-left → upper-right. |
+| 3.7 | **Marsh** | 307, 308, 310 | **Three or four stacked horizontal bars of decreasing width**, centred — a small pyramid of lines (widest at the bottom in the drawn form). |
+| 3.8 | **Firm ground in marsh** | 307, 308, 310 | Same stacked horizontal bars, but **broken in the centre** to leave an island of white — a bar, then a short bar + short bar with a gap, then a bar. |
+| 3.9 | **Well** | 311 | A **ring (circle outline)** with a **small wave (∿) below it**. |
+| 3.10 | **Spring** | 312 | A **hook/curl at the top** (a small "Ɔ") continuing into a **wavy line flowing down-right**. |
+| 3.11 | **Water tank, Water trough** | 311 | A **rectangle open at the top** (a squared U) with a **row of wave crests above its rim**. |
+
+### 3.4.4 Vegetation (§3.4) — 10 symbols
+
+| Ref | Name | ISOM/ISSprOM | **Geometry** |
+|---|---|---|---|
+| 4.1 | **Open land** | 213, 401, 403, 412, 413, 414 | A **plain diamond outline** — a square rotated 45°, vertices at (50,20)(80,50)(50,80)(20,50). *(+ 8.8 Sandy → open sandy ground, ISOM 213.)* |
+| 4.2 | **Semi-open land** | 402, 404 | **The same diamond, drawn in dots** — ~12 evenly-spaced filled dots on the diamond's outline instead of a stroke. |
+| 4.3 | **Forest corner** | 405,406,408,410 | A **thick outlined arrowhead / pentagon pointing down-left** — a broad chevron shape with a squared back (a "flag" pointing into open land). |
+| 4.4 | **Clearing** | 401, 403 | **A circle drawn in dots** — ~12 evenly-spaced filled dots on a circle of r ≈ 28. |
+| 4.5 | **Thicket** | 406,408,410,411,418 | A **dense diagonal lattice**: 4 strokes at +45° crossed by 4 strokes at −45°, clipped so the whole figure reads as a **filled diamond of X's**. |
+| 4.6 | **Linear thicket** | 410, 411 | A **diagonal line (lower-left → upper-right) with three small open rings (unfilled circles) threaded on it**. Also used for a hedge. |
+| 4.7 | **Vegetation boundary** | 415, 416 | A **dotted line with a bend** — ~7 dots forming a shallow chevron. |
+| 4.8 | **Copse** | 405,406,408,410 | **Two small conifer glyphs side by side** (each a narrow triangular crown over a short trunk), touching. |
+| 4.9 | **Prominent tree** | 417, 418 | A **single conifer glyph**: a tall narrow triangle outline with a **vertical trunk descending below it** and one horizontal branch bar. |
+| 4.10 | **Prominent vegetation feature** (root stock, tree stump) | 419 | A **circle outline with a full X (saltire) inside it**, the X's arms reaching the circumference. |
+
+### 3.4.5 Man-made features (§3.5) — 24 symbols
+
+| Ref | Name | ISOM/ISSprOM | **Geometry** |
+|---|---|---|---|
+| 5.1 | **Road** | 502–503 | A **single thick solid diagonal line**, lower-left → upper-right, full width of the box. |
+| 5.2 | **Track / Path** | 504–507 | The same diagonal, **dashed** — two long dashes with one gap. |
+| 5.3 | **Ride** | 508; 401 or 403 /416 | A **diagonal band of dots**: two parallel diagonal rows of ~4 dots each. |
+| 5.4 | **Bridge** | 512 | A **diagonal line crossed by two short parallel strokes** near its middle (the deck). |
+| 5.5 | **Power line** | 510, 511 | A **diagonal line carrying two saltire crosses (✗ ✗)** along it. |
+| 5.6 | **Pylon** | 510, 511, 524 | The power line with **one cross replaced by a ringed cross** — a circle with an X inside, on the line. |
+| 5.7 | **Tunnel** | 512 | **Two parallel horizontal bars with a bow-tie/X shape between them** — the passage seen end-on, going under. |
+| 5.8 | **Wall** | 513, 515 (514 with 8.11) | A **diagonal line with three small filled dots** strung along it. *(Contrast 4.6 Linear thicket, which uses open rings.)* |
+| 5.9 | **Fence** | 516, 518 (517 with 8.11) | A **diagonal line with two short tags projecting upward at ~60°** — the ISOM fence symbol in miniature. |
+| 5.10 | **Crossing point** | 519 | A **vertical bar crossed by two collinear horizontal bars that stop short of it**, leaving a gap where the vertical passes — "`⊣|⊢`". |
+| 5.11 | **Building** | 521, 522.1 | A **solid filled black square**, side ≈ 40. *(Since 2024 also used for "a pillar supporting a roof".)* |
+| 5.12 | **Paved area** | 501 | A **square outline filled with parallel diagonal hatching** (3–4 hatch lines at 45°). |
+| 5.13 | **Ruin** | 523 | A **square drawn only at its four corners** — four short L-brackets, no continuous sides. |
+| 5.14 | **Prominent man-made line feature** (pipeline, bobsleigh/skeleton track) | 528, 529 | A **diagonal arrow pointing up-right with two short cross-ticks on its shaft**. |
+| 5.15 | **Tower / Pylon** | 524, 525 | A **T** — a horizontal bar over a central vertical stem. |
+| 5.16 | **Shooting platform** | 525 | An **Γ** — a vertical stem with a horizontal arm at the top extending to the right. |
+| 5.17 | **Boundary stone, Cairn** | 526 | A **circle outline with a filled dot at its centre** (a "target"). |
+| 5.18 | **Fodder rack** | 527 | A **vertical up-arrow standing on a horizontal base bar** ("⊥" with an arrowhead at the top). |
+| 5.19 | **Charcoal burning ground / Platform** | 530, 115 | A **circle outline containing a triangle** (apex up), the triangle inscribed. |
+| 5.20 | **Monument or Statue** | 530, 531 | A **triangle outline with a horizontal crossbar low down** — reads like an "A". |
+| 5.21 | **Canopy** | 522 | A **horizontal roof bar carried on two or three short vertical legs** ("ΠΠ"). |
+| 5.22 | **Stairway** | 532 | A **staircase profile**: two or three ascending steps drawn as one continuous stroke rising to the right. |
+| 5.23 | **Out of Bounds area** | 520 | A **rounded square outline containing a small rosette / flower** (typically a flower bed). |
+| 5.24 | **Railway** *(new 2024)* | 509 | A **diagonal ladder**: two parallel diagonal rails with 4–5 short cross-ties (sleepers). Covers railway, tramway or other railed track. |
+
+### 3.4.6 Prominent features / Special items — 2 symbols
+
+| Ref | Name | ISOM/ISSprOM | **Geometry** | Note |
+|---|---|---|---|---|
+| 6.1 | Prominent feature / Special item | 115, 313, 419, 531 | A **large bold X (saltire)**, no circle. | Meaning **must** be supplied to competitors in the pre-race information. |
+| 6.2 | Prominent feature / Special item | 530 | A **large plain circle outline** (thick stroke, no fill, nothing inside). | Same requirement. |
+
+### 3.4.7 Country-specific features — 7.n
+
+Reserved for national symbols. *"It is not generally recommended to introduce local symbols."* If used at an event
+likely to attract an international entry, the meaning **must** be supplied in the pre-race details. Number them
+`7.1`, `7.2`, …
+
+---
+
+## 3.5 Column E — Appearance (11 symbols)
+
+| Ref | Name | **Geometry** | Example |
+|---|---|---|---|
+| 8.1 | **Low** | A **very shallow arc, convex upward** (a flat "⌒"). | Hill, low |
+| 8.2 | **Shallow** | A **very shallow arc, concave upward** (a flat "⌣"). | Re-entrant, shallow |
+| 8.3 | **Deep** | A **tall narrow U** — deep bowl with near-vertical sides. | Pit, deep |
+| 8.4 | **Overgrown** | A **small square mesh**: 4 horizontal × 4 vertical lines crossing to form a grid. | Ruin, overgrown |
+| 8.5 | **Open** | **Two rows of 3–4 loosely-spaced dots** (a sparse dot field). | Marsh, open |
+| 8.6 | **Rocky, Stony** | **Three small solid black triangles** — two on top, one below and centred. | Knoll, rocky; with 1.14 Pit → **rocky pit (ISOM 203)** |
+| 8.7 | **Marshy** | **Three equal-length horizontal bars stacked** ("≡"). | Re-entrant, marshy |
+| 8.8 | **Sandy** | A **dense stipple of small dots** filling a rounded blob. | Depression, sandy; with 4.1 Open land → **sandy ground (ISOM 213)** |
+| 8.9 | **Needle leaved** | A **conifer**: a narrow triangular crown with a vertical trunk through it and one horizontal branch bar. | Prominent tree, needle leaved |
+| 8.10 | **Broad leaved** | A **deciduous canopy**: three rounded lobes (a clover / trefoil) over a short trunk. | Copse, broad leaved |
+| 8.11 | **Ruined** | A **right-angled line whose free limb curves over and down** — a "falling-over" glyph. | Fence, ruined; Wall, ruined |
+
+---
+
+## 3.6 Column F — Dimensions / Combinations / Bend
+
+### Dimensions (numeric, not pictograms)
+
+| Ref | Name | Rendering |
+|---|---|---|
+| 9.1 | Height or Depth | A single number in metres, centred, e.g. `2.5` |
+| 9.2 | Size | Two numbers with a lowercase x, e.g. `8 x 4` (horizontal dimensions in metres) |
+| 9.3 | Height on slope | Two numbers separated by a **diagonal stroke**: the upper-left number is the height on the upper side, the lower-right the height on the lower side, e.g. `0.5 ╱ 3` |
+| 9.4 | Heights of two features | Two numbers **stacked vertically** (upper number = first feature in column D, lower = second in column E); the control is **between** them, e.g. `2` over `3` |
+
+### Combinations
+
+| Ref | Name | **Geometry** | Rule |
+|---|---|---|---|
+| 10.1 | **Crossing** | A large **X (saltire)** filling the box. | The two features that cross **must** be in columns D and E. |
+| 10.2 | **Junction** | A **Y** — a vertical stem from the bottom-centre rising to a fork at mid-height, two arms to the upper-left and upper-right. | Two features meet, or a linear feature meets the side/edge of an areal feature. Features go in D and E. |
+
+Worked examples from the spec: *Path crossing* (D = path, E = path, F = crossing) · *Ride / Stream crossing* ·
+*Road junction* · *Stream / Narrow marsh junction* · *Fence / Building junction*.
+
+### Bend
+
+| Ref | Name | **Geometry** |
+|---|---|---|
+| 11.1 | **Bend** | A **chevron `<`** — two straight strokes meeting at a vertex on the left, opening to the right. Used where a linear feature makes a smooth change of direction (path bend, river bend). |
+
+---
+
+## 3.7 Column G — Location of the control flag (14 symbols)
+
+All direction-bearing symbols in this column are **rotated in 45° steps** to encode the compass direction.
+
+| Ref | Name | **Geometry** | Semantics |
+|---|---|---|---|
+| 12.1 | **Side** (e.g. north east side) | A **circle outline with a small filled dot sitting on/just outside the circumference** at the named bearing. | Feature extends **above** the ground; the control is on one side and will not be visible from the opposite side. |
+| 12.2 | **Edge** (e.g. south east edge) | A **circle outline with a short radial tick crossing the circumference** at the named bearing (a "Q" whose tail points SE). | (a) feature extends **down** from the surface and the flag is on the edge at ground level, or (b) feature covers a significant area and the flag is on its border. |
+| 12.3 | **Part** (e.g. west part) | A **circle outline with a filled dot inside**, offset from centre toward the named bearing. | Neither centre nor edge. |
+| 12.4 | **Corner (inside)** | A **chevron `>` with a filled dot on the concave (inner) side**, near the vertex. Rotate to point the corner. | Edge of a feature turns through **45°–135°**, or a linear feature turns a corner; the control is on the inside of the angle. |
+| 12.5 | **Corner (outside)** | A **chevron `∨` with the filled dot on the convex (outer) side**, just beyond the vertex. | Same angle range, control on the outside. *Note: "building, east corner (inside)" does NOT mean inside the building — a building side is treated as a linear feature.* |
+| 12.6 | **Tip** (e.g. south west tip) | A **narrow acute angle (< 45°) with a filled dot at the vertex**. | Edge turns through **less than 45°**. |
+| 12.7 | **End** (e.g. north west end) | A **plain straight stroke** oriented along the named bearing, terminating in the box. | The point where a linear feature starts or ends. |
+| 12.8 | **Upper Part** | **Two vertical bars** (left and right) with a **filled dot between them near the top**. | Feature spans ≥ 2 contours; flag near the top. |
+| 12.9 | **Lower Part** | Same two bars, **dot near the bottom**. | Flag near the bottom. |
+| 12.10 | **Top** | An **inverted U (∩) with a filled dot above it**. | Highest point of the feature when that is not the default. **Since 2024 also means "the Upper of two levels".** |
+| 12.11 | **Foot (no direction)** | An **L** (vertical stroke down, horizontal stroke right) with a **filled dot in the inner angle at the bottom**. | Lower junction of the feature's slope with the surrounding ground. |
+| 12.12 | **Foot (with direction)** | A **circle outline with a small L-corner mark outside it** at the named bearing. | For features large enough that the flag could be at more than one foot (e.g. Hill, north east foot). |
+| 12.13 | **Beneath** | A **small roof bracket `⌐` with a filled dot underneath it**. | Control located underneath the feature (e.g. Pipeline, beneath). **Since 2024 also means "the Lower of two levels".** |
+| 12.14 | **Between** | **Two short horizontal bars, one above and one below a filled dot** in the centre. | Control between two features — **both features must be given separately in columns D and E**. |
+
+---
+
+## 3.8 Column H — Other information (3 symbols)
+
+| Ref | Name | **Geometry** |
+|---|---|---|
+| 13.1 | **First Aid post** | A **bold Greek cross (+)** with equal arms, thick strokes, filled. |
+| 13.2 | **Refreshment point** | A **drinking cup**: a trapezoid outline, wider at the top than the bottom, with a slightly flared rim. |
+| 13.3 | **Manned control** | A **stick figure of a standing/running person** — head circle, body, two legs, one arm. |
+
+---
+
+## 3.9 Special-instruction rows (the "wide" symbols spanning all columns)
+
+These are drawn as a **wide rectangle spanning the whole width of the sheet**, containing a small glyph at the
+left, a distance in metres in the middle, and a glyph at the right.
+
+| Ref | Meaning | **Composition (left → right)** |
+|---|---|---|
+| **14.1** | Distance from the **timed start** to the **start triangle** | `— — —` dashed line · `150 m` · `— — →` arrow · **small triangle** |
+| **15.1** | Follow taped route **N m away from control** | **circle** · `— — —` · `60 m` · `— — →` (open arrow, no terminal symbol) |
+| **15.2** | Follow taped route **N m between controls** | **circle** · `— — —` · `300 m` · `— — →` · **circle** |
+| **15.3** | Mandatory **crossing point(s)** | **circle with an X through it** (= not taped from the control) · the **crossing-point glyph** (two lines curving outward, `)(` lying on its side) · `— — →` · **circle** |
+| **15.4** | Mandatory **passage through an out-of-bounds area** | **circle with X** · **two long parallel lines** (a corridor) · `— — →` · **circle** |
+| **15.5** | Follow taped route **N m to a map exchange** | **circle** · `— — —` · `50 m` · `— — →` · **triangle** |
+| **15.6** *(new 2024)* | **Map flip** (turn the map over) | a plain rectangle containing a **bold curved back-arrow** pointing left |
+| **16.1** | `N m` from last control to Finish — **follow taped route** | **circle** · `— — —` · `400 m` · `— — →` · **double concentric circle (finish)** |
+| **16.2** | `N m` from last control to Finish — **navigate to the finish funnel, then follow tapes** | **circle with a funnel `>` on its right** · `— — —` · `150 m` · `— — →` · **double circle** |
+| **16.3** | `N m` from last control to Finish — **navigate to the finish, no tapes** | **circle with an X through it** · `380 m` · `— — →` · **double circle** |
+
+**The encoding rule to implement:** a **plain leading circle + dashed line = taped**; a **leading circle with an X
+= untaped / navigate**; the **terminal symbol identifies the destination**: nothing = "away from control",
+circle = another control, triangle = start / map exchange, double circle = finish.
+
+## 3.10 Trail-O variation (for completeness)
+
+* **Column B** = **number of control flags** at the site (`A-C` = three flags to choose from, `A-D` = four).
+* **Column H** = **direction of observation** (an arrow; e.g. pointing north means the competitor must stand on the
+  path/track to the **south** of the circle).
+
+---
+---
+
+# 4. Course overprint (ISOM §3.7, ISSprOM §4.7, IOF Rules §15–19 + Appendix 2)
+
+## 4.0 The two governing sentences
+
+* ISOM §3.7 / ISSprOM §4.7: *"The dimensions of the course planning symbols are specified in mm at the printed
+  scale. For larger map scales the symbols shall be enlarged proportionally (**to 150 % for 1:10 000, to 300 % for
+  1:5 000**; ISSprOM: **to 133 % for 1:3 000**). All course planning symbols shall be printed over the map content.
+  **They shall not mask out map detail of at least black, brown and blue 100 %.**"*
+* IOF Rule 15.1: *"Maps, **course markings and additional overprinting** must be drawn and printed according to the
+  IOF ISOM or ISSprOM. Deviations need approval by the IOF Council."*
+
+## 4.1 The overprint symbol table — ISOM 1:15 000 vs ISSprOM 1:4 000
+
+**All measurements are mm. `(CC)` = centre-to-centre of the stroke, so the outer diameter is `CC + line width`.**
+
+| # | Symbol | ISOM 2017-2 @1:15 000 | → @1:10 000 (×1.5) | ISSprOM 2019-2 @1:4 000 | → @1:3 000 (×1.333) | Purple layer |
+|---|---|---|---|---|---|---|
+| **701** | **Start** — equilateral triangle, **pointing at the first control**, centre = the point where orienteering begins | **side 6.0**, line **0.35** | side 9.0, line 0.525 | **side 7.0**, line **0.35** | side 9.33, line 0.467 | **lower** |
+| **702** | **Map issue point** — a short thick bar across the marked route | bar **2.5 long × 0.6 thick** | 3.75 × 0.9 | bar **2.5 × 0.6** | 3.33 × 0.8 | **upper** |
+| **703** | **Control point** — circle | **ø 5.0 (CC)**, line **0.35** → footprint **75 m** | ø 7.5, line 0.525 | **ø 6.0 (CC)**, line **0.35** → footprint **24 m** | ø 8.0, line 0.467 | **lower** |
+| **704** | **Control number** — text | **Arial 4.0 mm**, non-bold, non-italic, **oriented to north** | 6.0 mm | **Arial 4.0 mm**; optional **white outline 0.1 or 0.15 mm** for building-dense maps | 5.33 mm | ISOM: **lower** (changed from upper, errata 07.04.2022) · ISSprOM: **upper** |
+| **705** | **Course line** | line **0.35** | 0.525 | line **0.35** | 0.467 | **lower** |
+| **706** | **Finish** — two concentric circles | **ø 4.0 and ø 6.0 (CC)**, line **0.35** | ø 6.0 / ø 9.0 | **ø 5.0 and ø 7.0 (CC)**, line **0.35** | ø 6.67 / ø 9.33 | **lower** |
+| **707** | **Marked route** — dashed | dash **2.0**, gap **0.5**, line **0.35**; min 2 dashes (4.5 mm = 67.5 m) | dash 3.0, gap 0.75 | dash **2.0**, gap **0.5**, line **0.35** | dash 2.67, gap 0.67 | **upper** |
+| **708** | **Out-of-bounds boundary** — solid thick line | width **0.7**; min length 1 mm (15 m) | 1.05 | width **1.0**; min length 1 mm | 1.33 | **lower** |
+| **709** | **Out-of-bounds area** — 45° cross-hatch | hatch line **0.2**, spacing **1.2 (CC)**, 45°; min width 3 mm; min area 3 × 3 mm (45 × 45 m) | 0.3 / 1.8 | hatch **0.2**, spacing **1.2 (CC)**, 45°; min width 3 mm; min area 9 mm² (144 m²) | 0.267 / 1.6 | **upper** |
+| **710** / 710.1 | **Crossing point** — two lines curving outward | ISOM 710: length **3.0**, inside gap **0.6 (IM)**, line 0.35 | 4.5 / 0.9 | ISSprOM 710.1: overall **4.5 (OM)**, bar 1.0 + 0.5, inside gap **1.0 (IM)** | ×1.333 | **lower** |
+| 710.2 | **Crossing section** (ISSprOM only) — a linear object drawn to plan shape | — | — | line **0.35**, offset 1.5 | ×1.333 | **upper** |
+| **711** | **Out-of-bounds route** — row of ✗ | cross size **3.0**, line **0.35**, spacing **4.0–6.0 (CC)**; min 2 symbols (6 mm = 90 m) | 4.5 / 0.525 / 6–9 | *(not in ISSprOM)* | — | **upper** |
+| **712** | **First aid post** — Greek cross | **4.0 × 4.0**, arm width **1.33** | 6.0 × 6.0 | *(not in ISSprOM)* | — | **lower** |
+| **713** | **Refreshment point** — cup | **3.5 (OM) wide × 3.5 (OM) tall**, base **2.1 (OM)**, line **0.4** | 5.25 | *(not in ISSprOM)* | — | **lower** |
+| **714** | **Temporary construction / closed area** (ISSprOM only) | — | — | outline **0.1**, fill **purple 50 %**; min width 0.5 mm; min area 0.25 mm² (4 m²) | ×1.333 | **upper** |
+| **715** | **Continuing point after map exchange / map flip** — a triangle **inscribed in a circle**, triangle points at the next control | **ø 6.0 (CC)**, line **0.35** | ø 9.0 | **ø 6.0 (CC)**, line **0.35** | ø 8.0 | **lower** |
+
+*(ISOM 714 does not exist; ISSprOM 711/712/713 do not exist. Symbol 715 was added in Revision 6, January 2024, to both specs.)*
+
+## 4.2 The gap rule (this is the single most visible overprint behaviour)
+
+Three separate statements, all normative:
+
+1. **703 Control point:** *"**Sections of the circle should be omitted to leave important detail showing.**"*
+2. **705 Course line:** *"**Sections of lines should be omitted to leave important detail showing.** The line should
+   be drawn via mandatory crossing points. **There should be gaps between the line and the control circle** in order
+   to increase the readability of the underlying detail close to the control."*
+3. **§3.7 blanket rule:** overprint *"shall not mask out map detail of at least black, brown and blue 100 %."*
+
+**Implementation recipe:**
+
+```
+for each control circle C:
+    render C as an arc set, cutting out any angular span where the circle
+    crosses a black / brown-100% / blue-100% line feature or point symbol
+for each course line L (start→c1, ci→ci+1, cn→finish):
+    trim L at both ends so it stops short of the circle (a visible gap, ~1 mm at map scale)
+    break L wherever it would obscure a control-relevant feature
+    route L through any mandatory crossing point (710)
+```
+
+The gap between the line and the circle is not given a number in ISOM; in practice course-setting software
+(Purple Pen, OCAD, Condes) defaults to leaving the line ending **on** the circle or with a ~0.5–1.0 mm gap.
+**[estimate]** Use **1.0 mm at map scale** for a clean look.
+
+The **control number (704)** is *"placed close to the control point circle in such a way that it does not obscure
+important detail"* and is **oriented to north** — i.e. the number never rotates with the course; only its
+*position* around the circle is chosen (typically at the 1–2 o'clock or 4–5 o'clock position, whichever is clearest).
+
+## 4.3 Start triangle geometry (exact)
+
+Equilateral triangle, **centroid** = the point where orienteering begins, **apex points at the first control**.
+
+For ISOM at 1:15 000 with side `a = 6.0 mm`:
+* height `h = a·√3/2 = 5.196 mm`
+* circumradius (centroid → apex) `R = a/√3 = 3.464 mm`
+* inradius (centroid → side midpoint) `r = a/(2√3) = 1.732 mm`
+* stroke `0.35 mm`, so the outer extent is `R + 0.175 ≈ 3.64 mm` from centre
+* ground footprint: side = 90 m at 1:15 000, 60 m at 1:10 000
+
+For ISSprOM at 1:4 000 with `a = 7.0 mm`: `h = 6.062`, `R = 4.041`, `r = 2.021`; footprint side = 28 m.
+
+**Rule 22.8:** *"The point where orienteering begins must be shown on the map with the start triangle and marked in
+the terrain by a control flag but **no punching unit**."* So the start triangle is **not** a punch — it is a
+map-and-flag rendezvous. If the timed start is elsewhere, the distance to the triangle goes on the description
+sheet (symbol 14.1).
+
+## 4.4 Finish, marked routes, crossing points
+
+* **706 Finish** is **two concentric circles** (ISOM ø 4.0 + ø 6.0; ISSprOM ø 5.0 + ø 7.0). Appendix 2 §3.6:
+  *"At least the last part of the route to the finish line should be a **compulsory marked route**."*
+* **707 Marked route** is *"a part of the course. **It is mandatory to follow the marked route**"* — and Rule 17.3:
+  *"Competitors must follow **the entire length** of any marked section of their course."*
+* **710 Crossing point** is drawn as *"two lines curving outwards. **The lines shall reflect the length of the
+  crossing**."* Used for: through/over a wall or fence, across a road or railway, through a tunnel, through an
+  out-of-bounds area, over an uncrossable boundary. In sprint, 710.1 (point) and 710.2 (section) additionally
+  **may be used to emphasise underpasses and tunnels that are in play**.
+* **711 Out-of-bounds route**: *"Competitors are allowed to **cross directly over** a forbidden route, but it is
+  forbidden to **go along** it."* Row of purple ✗ along the route.
+* **709 Out-of-bounds area** bounding line semantics:
+  * **solid line** → the boundary is **marked continuously** (tapes) in the terrain
+  * **dashed line** → **intermittent** marking in the terrain
+  * **no line** → **no** marking in the terrain
+
+## 4.5 Control-flag and control-unit rules (Rules 19.x)
+
+| Rule | Content |
+|---|---|
+| 19.2 | Control flag = **three squares of about 30 cm × 30 cm arranged in a triangular form**; each square divided **diagonally**, one half **white**, the other **orange (PMS 165)**. |
+| 19.3 | The flag hangs at the feature indicated by the map and description; **must be visible when the competitor can see the described position**. |
+| 19.4 | **Minimum control separation.** Scales 1:15 000 / 1:10 000 / 1:7 500: **≥ 30 m** between any two controls (including the start flag); **≥ 60 m** straight-line if the control features are **similar**. Sprint 1:4 000 / 1:3 000: minimum **running** distance **25 m**, minimum **straight-line** distance **15 m**, with no extra rule for similar features. |
+| 19.5 | A control must be sited so that *"the presence of a person punching does not significantly help nearby competitors to find the control."* |
+| 19.6 | Code number **> 30** (i.e. ≥ 31), **black on white**, **1.5–10 cm high**, line thickness **≥ 2 mm**; horizontally-displayed codes **underlined** if reversible (e.g. `161`). |
+| 19.7 | *"a sufficient number of punching units in the immediate vicinity of each flag."* |
+| 19.8 / 19.10 | Winning time ≥ **30 min** → refreshments at least every **25 minutes at the winner's pace**. Winning time ≥ **60 min** → WADA-compliant **sports drink** in addition to pure water (WOC/WCup/JWOC). |
+| 3.5.3 (App. 2) | *"a control flag should be placed in such a manner that competitors **first see it only when they have reached the described control feature**. … **On no account should the control flag be hidden**: when competitors reach the control they should not have to search for the flag."* |
+| 3.5.4 (App. 2) | Avoid the **'acute angle' effect** — incoming competitors being led into the control by outgoing ones. |
+
+## 4.6 Course measurement and climb
+
+| Rule | Content |
+|---|---|
+| 16.3 | *"The course lengths must be given as the **length of the straight line from the start via the controls to the finish**, deviating for, and only for, **physically impassable obstructions** (high fences, lakes, impassable cliffs etc.), **prohibited areas** and **marked routes**."* |
+| 16.4 | *"The total climb must be given as the **climb in metres along the shortest sensible route**."* |
+| App. 2 §3.11.6 | *"The total climb of a course should **normally not exceed 4 % of the length of the shortest sensible route**."* — **this is the only climb figure in the rules and it is not varied by format.** |
+| 16.9 | Where the winning time is an interval, plan for the **middle** of the interval. |
+
+**Consequence for the game:** the "official course length" is a *straight-line-through-controls* figure, not the
+distance the athlete actually runs. Real running distance is typically **10–25 % longer** than the stated length
+in forest and can be **30–60 % longer** in sprint. **[estimate — see §8.6]** Do not conflate the two.
+

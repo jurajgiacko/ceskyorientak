@@ -21,7 +21,10 @@
   },
   "devDependencies": {
     "@gltf-transform/core": "^4.4.2",
+    "@gltf-transform/extensions": "^4.4.2",
     "@gltf-transform/functions": "^4.4.2",
+    "draco3dgltf": "^1.5.7",
+    "node-web-audio-api": "^2.1.0",
     "sharp": "^0.35.3",
     "typescript": "^5.7.0",
     "vite": "^6.0.0",

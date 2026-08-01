@@ -57,5 +57,6 @@
   "common.close": "Zavřít",
   "common.next": "Další",
   "common.cancel": "Zrušit",
-  "error.noWebgl": "Tvůj prohlížeč nepodporuje WebGL2. Zkus aktuální Chrome, Safari nebo Firefox."
+  "error.noWebgl": "Tvůj prohlížeč nepodporuje WebGL2. Zkus aktuální Chrome, Safari nebo Firefox.",
+  "brand.mainPartner": "Hlavní partner"
 }

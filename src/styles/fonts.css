@@ -1,0 +1,42 @@
+/*
+ * Space Grotesk, self-hosted.
+ *
+ * Why this face: the event's own brand manual specifies GT Planar (Grilli Type,
+ * commercial) and names Space Grotesk as its sanctioned fallback. We cannot
+ * licence GT Planar for this build, so we use the federation's own stated
+ * substitute rather than picking one ourselves. See docs/BRAND.md and
+ * ASSETS_NEEDED.md — if the client licences GT Planar, this is where it swaps.
+ *
+ * Self-hosted, not loaded from Google, for two reasons: the game must work
+ * offline after first load, and a third-party font request would be a GDPR
+ * consideration we have no reason to take on.
+ *
+ * Two files, not six: Space Grotesk is a variable font, so one file per subset
+ * covers the whole 300–700 weight axis. 41 kB total.
+ *
+ * The latin-ext subset is NOT optional — Czech and Slovak carons (ě š č ř ž ů
+ * ť ď ň ľ ĺ) live there. Latin-1 alone would render half our primary locale in
+ * a fallback face.
+ */
+
+@font-face {
+  font-family: 'Space Grotesk';
+  font-style: normal;
+  font-weight: 300 700;
+  font-display: swap;
+  src: url('/fonts/space-grotesk-latin-ext.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF,
+    U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020,
+    U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+@font-face {
+  font-family: 'Space Grotesk';
+  font-style: normal;
+  font-weight: 300 700;
+  font-display: swap;
+  src: url('/fonts/space-grotesk-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
+    U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193,
+    U+2212, U+2215, U+FEFF, U+FFFD;
+}

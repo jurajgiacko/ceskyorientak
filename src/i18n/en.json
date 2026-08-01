@@ -57,5 +57,6 @@
   "common.close": "Close",
   "common.next": "Next",
   "common.cancel": "Cancel",
-  "error.noWebgl": "Your browser does not support WebGL2. Try a current Chrome, Safari or Firefox."
+  "error.noWebgl": "Your browser does not support WebGL2. Try a current Chrome, Safari or Firefox.",
+  "brand.mainPartner": "Main partner"
 }

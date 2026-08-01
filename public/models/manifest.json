@@ -1,0 +1,31 @@
+{
+  "generator": "blender-asset-pipeline (Blender 4.5.12 LTS)",
+  "generatedAt": "2026-08-01",
+  "seed": 20260805,
+  "totalLod0Tris": 464,
+  "totalBytes": 33660,
+  "assets": [
+    {
+      "name": "control-flag",
+      "file": "control-flag.glb",
+      "bytes": 33660,
+      "tris": 464,
+      "lods": [
+        {
+          "node": "control-flag_LOD0",
+          "tris": 464
+        },
+        {
+          "node": "control-flag_LOD1",
+          "tris": 184
+        },
+        {
+          "node": "control-flag_LOD2",
+          "tris": 55
+        }
+      ],
+      "hookTopZ": 0.354,
+      "originNote": "centre of fabric bottom opening, +Z up"
+    }
+  ]
+}

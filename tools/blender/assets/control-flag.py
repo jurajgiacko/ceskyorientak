@@ -48,17 +48,19 @@ def build_panel(index, corners, rng, white, orange):
 
     def fn(u, v):
         p = a.lerp(b, u) + Vector((0.0, 0.0, HEIGHT * v))
-        # bulge: zero at the vertical corner seams, largest mid-panel, and
-        # bigger low down where the fabric hangs free
+        # Bulge and wrinkle act along the panel normal, so they must vanish at
+        # u=0/u=1 or adjacent panels would pull apart at the shared corner.
         span = math.sin(math.pi * u)
         vertical = 0.35 + 0.65 * (1.0 - v)
         bulge = span * vertical * BILLOW
-        # free bottom hem flares out slightly
-        hem = (1.0 - v) ** 3 * 0.006
-        # faint wrinkles so the panel is not a perfect ruled surface
-        wrinkle = math.sin(u * 9.4 + index * 2.1) * math.cos(v * 6.1) * 0.0016
-        p = p + outward * (bulge + hem + wrinkle)
-        p.z += math.sin(u * math.pi) * (1.0 - v) * -0.004
+        wrinkle = span * math.sin(u * 9.4 + index * 2.1) * math.cos(v * 6.1) * 0.0016
+        p = p + outward * (bulge + wrinkle)
+        # The free bottom hem flares *radially* instead: both panels meeting at
+        # a corner agree on the radial direction, so the seam stays closed.
+        radial = Vector((p.x, p.y, 0.0))
+        if radial.length > 1e-6:
+            p += radial.normalized() * ((1.0 - v) ** 3 * 0.006)
+        p.z += span * (1.0 - v) * -0.004
         return tuple(p)
 
     obj = M.param_surface("%s_panel%d" % (NAME, index), fn, GRID, GRID,
@@ -114,18 +116,18 @@ def build_top_plate(z0, thickness, radius, material):
 def build_hook(z0, material):
     """Small J-hook: straight stem out of the plate, then a hooked arc."""
     stem_h = 0.026
-    r = 0.019
+    r = 0.022
     path = [(0.0, 0.0, z0 - 0.004),
             (0.0, 0.0, z0 + stem_h * 0.5),
             (0.0, 0.0, z0 + stem_h)]
-    radii = [0.0026, 0.0026, 0.0025]
+    radii = [0.0033, 0.0033, 0.0032]
 
     zc = z0 + stem_h
     steps = 9
     for s in range(1, steps + 1):
         a = math.pi - (s / float(steps)) * (math.pi + math.radians(34))
         path.append((r + r * math.cos(a), 0.0, zc + r * math.sin(a)))
-        radii.append(0.0025 - 0.0011 * (s / float(steps)))
+        radii.append(0.0032 - 0.0012 * (s / float(steps)))
 
     obj = M.tube("%s_hook" % NAME, path, radii, sides=6, caps=True)
     M.shade_smooth(obj, 50.0)
@@ -142,7 +144,7 @@ def main():
                                   specular=0.28, sheen=0.35)
     fabric_orange = mat.principled("flag_orange", mat.IOF_ORANGE, roughness=0.86,
                                    specular=0.28, sheen=0.35)
-    plastic = mat.principled("flag_plate", (0.055, 0.057, 0.062), roughness=0.55)
+    plastic = mat.principled("flag_plate", (0.085, 0.088, 0.095), roughness=0.50)
     steel = mat.principled("flag_hook", mat.STEEL, roughness=0.34, metallic=1.0)
 
     radius = SIDE / math.sqrt(3.0)
@@ -150,7 +152,7 @@ def main():
 
     parts = [build_panel(i, corners, rng.sub("panel%d" % i), fabric_white,
                          fabric_orange) for i in range(3)]
-    parts.append(build_top_plate(HEIGHT, 0.009, radius * 1.05, plastic))
+    parts.append(build_top_plate(HEIGHT, 0.008, radius * 1.015, plastic))
     hook_z = HEIGHT + 0.009
     parts.append(build_hook(hook_z, steel))
 

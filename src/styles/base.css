@@ -1,15 +1,33 @@
+@import url("./fonts.css");
 @import url("./shell.css");
 
 /*
  * Base layer. Design tokens live here and nowhere else.
+ * Do not hardcode a colour anywhere else in the codebase.
  *
- * The palette is provisional until docs/BRAND.md lands the confirmed WCUP26 and
- * Enervit values — every colour below is a token precisely so that retune is a
- * single-file edit. Do not hardcode a colour anywhere else.
+ * Event values are the official ones, taken from the Czech federation's brand
+ * manual at manual.ceskyorientak.cz — published HEX/RGB/CMYK/Pantone, and
+ * cross-checked against the fills of the official logo SVGs in assets/brand/.
+ * Nothing here was sampled by eye. See docs/BRAND.md.
  */
 
 :root {
-  /* Forest — the Šumava spruce/granite base the UI sits on. */
+  /* --- Event identity (OWCUP26 / ČSOS, official) ----------------------- */
+
+  /* The event orange. Pantone 1575 C. Verified three ways: the manual's colour
+     table, the logo SVG fills, and the palette artwork. */
+  --c-event: #fe5900;
+
+  /* Lime — the federation's designated *connecting* colour for world events.
+     Pantone 381 C. This is what marks WCUP26 as a world round rather than a
+     domestic race, so it earns a real role in the UI, not a decorative one. */
+  --c-lime: #d0ec34;
+
+  /* Beige. Pantone 9224 C. The manual's neutral ground — and the surface we
+     use for the partner band (see --c-brand below for why that matters). */
+  --c-beige: #edece3;
+
+  /* --- Forest — the Šumava base the UI sits on ------------------------- */
   --c-ink: #0a1410;
   --c-ink-2: #101f18;
   --c-ink-3: #182c22;
@@ -19,16 +37,24 @@
   --c-paper: #f4f1e8;
   --c-paper-dim: #c3c8bd;
 
-  /* Overprint purple — IOF course overprint. Our primary accent, and it is
-     *the* colour of the sport. ISOM 2017-2 purple. */
+  /* Overprint purple — IOF course overprint. The colour of the sport itself,
+     and the only accent allowed to sit on the map. ISOM 2017-2. */
   --c-purple: #d13aa0;
 
-  /* Control flag orange/white. Secondary accent, used for calls to action. */
+  /* Control flag orange. Note this is deliberately NOT --c-event: the kite is
+     a physical object with its own IOF colour, and conflating the two would
+     make the event brand look like course furniture. */
   --c-flag: #f25c19;
 
   /* Enervit red. Confirmed from the 2022 logo guidelines: C0 M100 Y90 K0.
-     The reference video's red is #FF0000 — gamut-clipped and broadcast-illegal;
-     we build to the spec value. See docs/BRAND-ENERVIT.md. */
+     The reference video grades red at #FF0000 — gamut-clipped and
+     broadcast-illegal; we build to the spec value. See docs/BRAND-ENERVIT.md.
+
+     CONFLICT, resolved by separation: this red and --c-event orange are
+     adjacent hues, and Enervit's guidelines forbid modifying its red
+     rectangle. So partner logos live in a dedicated beige band and never
+     share a surface with the event orange. Do not "solve" this by tinting
+     either value. */
   --c-brand: #e40521;
 
   /* Acid yellow — undocumented in the guidelines but used consistently on
@@ -42,7 +68,7 @@
   --c-bad: #d6453c;
 
   --font-ui:
-    'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    'Space Grotesk', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   --font-num: ui-monospace, 'SF Mono', 'Roboto Mono', Menlo, monospace;
 
   --r-sm: 4px;

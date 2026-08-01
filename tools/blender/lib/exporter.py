@@ -73,11 +73,14 @@ def emit_meta(name, path, lod_objects, extra=None):
     lods = []
     for o in lod_objects:
         lods.append({"node": o.name, "tris": M.tri_count(o)})
+    # "tris" is the LOD0 cost of one full instance of the asset -- summed over
+    # every variant, since a multi-variant asset ships them in one file.
+    lod0 = sum(l["tris"] for l in lods if l["node"].endswith("_LOD0"))
     meta = {
         "name": name,
         "file": os.path.basename(path),
         "bytes": os.path.getsize(path) if os.path.exists(path) else 0,
-        "tris": sum(l["tris"] for l in lods[:1]) if lods else 0,
+        "tris": lod0 if lod0 else (lods[0]["tris"] if lods else 0),
         "trisAllLods": sum(l["tris"] for l in lods),
         "lods": lods,
     }

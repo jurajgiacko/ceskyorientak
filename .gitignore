@@ -7,3 +7,5 @@ dist/
 research/raw/
 .vercel/
 tools/imagegen/.cache/
+
+tools/blender/.cache/

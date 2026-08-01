@@ -66,14 +66,22 @@ function makeBootScreen(): Screen {
   return {
     id: 'boot',
     mount(h) {
+      // The official OWCUP26 lockup, not a typeset imitation of it.
+      // Partner marks sit in their own band — see the colour-conflict note in
+      // src/styles/base.css: Enervit red and event orange may not share a surface.
       h.innerHTML = `
         <div class="boot">
-          <p class="boot__kicker">${t('app.subtitle')}</p>
+          <img class="boot__logo" src="/brand/owcup26-ver.svg"
+               alt="Orienteering World Cup 2026" width="354" height="186" />
           <h1 class="boot__title">${t('app.title')}</h1>
           <p class="boot__meta">Vyšší Brod &middot; Český Krumlov &middot; 5–9. 8. 2026</p>
           <p class="boot__status">${t('app.loading')}</p>
-          <p class="boot__tier">tier: ${caps.tier} &middot; webgl2: ${caps.webgl2} &middot; dpr: ${caps.dpr}</p>
-        </div>`;
+        </div>
+        <div class="boot__partners">
+          <span class="boot__partnerLabel">${t('brand.mainPartner')}</span>
+          <img src="/brand/enervit.png" alt="Enervit" class="boot__enervit" />
+        </div>
+        <p class="boot__tier">tier ${caps.tier} &middot; webgl2 ${caps.webgl2} &middot; dpr ${caps.dpr}</p>`;
     },
     unmount() {
       /* nothing to release yet */

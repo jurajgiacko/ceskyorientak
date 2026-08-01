@@ -42,7 +42,14 @@ const DEFAULT_MATERIAL = {
   /* fraction of half-width used by the membrane solve; 1.0 = harmonic */
   membrane: 1.0,
   /* mirrored blend band, fraction of width */
-  mirrorBand: 0.02
+  mirrorBand: 0.012,
+  /* homomorphic de-shading strength 0..1 and its blur radius as 1/N of width */
+  deshade: 1.0,
+  deshadeDiv: 9,
+  /* fixed-point iterations; one pass leaves ~25% of a strong vignette behind */
+  deshadePasses: 2,
+  /* max gain the de-shade may apply, guards against blowing out dark detail */
+  deshadeClamp: 1.9
 };
 
 /* ---------------------------------------------------------------- helpers */
@@ -190,42 +197,101 @@ function membraneH(plane, w, h, c, bandFrac) {
 }
 
 /**
- * Mirrored cross-blend over a narrow band around the seam.
- * out[c+k] = (1-t)I[c+k] + t*I[c-1-k], out[c-1-k] = (1-t)I[c-1-k] + t*I[c+k]
- * with t = 0.5 at k=0 -> the two pixels straddling the seam become identical,
- * i.e. C0 continuity is guaranteed, not merely faded towards.
+ * Variance-preserving mirrored cross-blend over a narrow band at the seam.
+ *
+ *   raw_a = (1-t)*I[c+k] + t*I[c-1-k]      (and mirrored for raw_b)
+ *
+ * with t = 0.5 exactly at the seam, so the two pixels straddling it become
+ * identical -> C0 continuity is guaranteed, not merely faded towards.
+ *
+ * A plain blend of two independent texture samples scales the local standard
+ * deviation by sqrt((1-t)^2 + t^2) — 0.707 at the seam. That shows up as a
+ * soft low-contrast stripe down the middle of the tile, which is exactly the
+ * artefact a crude alpha fade produces. So the deviation from the (also
+ * blended) local mean is divided back out by that factor. The correction is
+ * symmetric in a<->b, so continuity survives it exactly.
  */
-function mirrorBlendV(plane, w, h, c, band) {
+function mirrorBlend(plane, w, h, c, band, axis) {
   const B = Math.max(2, band);
   const src = Float32Array.from(plane);
-  for (let y = 0; y < h; y++) {
-    const row = y * w;
+  const lm = blurWrap(plane, w, h, Math.max(2, B * 0.9));
+  const idx = axis === 'v'
+    ? (i, j) => j * w + i     // i = x, j = y
+    : (i, j) => i * w + j;    // i = y, j = x
+  const along = axis === 'v' ? h : w;
+  const across = axis === 'v' ? w : h;
+
+  for (let j = 0; j < along; j++) {
     for (let k = 0; k < B; k++) {
-      const s = 1 - k / B;              // 1 -> 0
-      const t = 0.5 * s * s * (3 - 2 * s); // smoothstep, 0.5 at the seam
-      const xr = c + k, xl = c - 1 - k;
-      if (xr >= w || xl < 0) break;
-      const a = src[row + xr], b = src[row + xl];
-      plane[row + xr] = a * (1 - t) + b * t;
-      plane[row + xl] = b * (1 - t) + a * t;
+      const hi = c + k, lo = c - 1 - k;
+      if (hi >= across || lo < 0) break;
+      const s = 1 - k / B;                    // 1 at the seam -> 0
+      const t = 0.5 * s * s * (3 - 2 * s);    // smoothstep, 0.5 at the seam
+      const gain = 1 / Math.sqrt((1 - t) * (1 - t) + t * t);
+      const iHi = idx(hi, j), iLo = idx(lo, j);
+      const a = src[iHi], b = src[iLo];
+      const ma = lm[iHi], mb = lm[iLo];
+
+      const mA = ma * (1 - t) + mb * t;
+      const mB = mb * (1 - t) + ma * t;
+      plane[iHi] = mA + (a * (1 - t) + b * t - mA) * gain;
+      plane[iLo] = mB + (b * (1 - t) + a * t - mB) * gain;
     }
   }
 }
 
-function mirrorBlendH(plane, w, h, c, band) {
-  const B = Math.max(2, band);
-  const src = Float32Array.from(plane);
-  for (let x = 0; x < w; x++) {
-    for (let k = 0; k < B; k++) {
-      const s = 1 - k / B;
-      const t = 0.5 * s * s * (3 - 2 * s);
-      const yb = c + k, yt = c - 1 - k;
-      if (yb >= h || yt < 0) break;
-      const a = src[yb * w + x], b = src[yt * w + x];
-      plane[yb * w + x] = a * (1 - t) + b * t;
-      plane[yt * w + x] = b * (1 - t) + a * t;
+/* --------------------------------------------------------------- deshade */
+
+/**
+ * Homomorphic de-shading: divide by a heavily blurred luminance field so the
+ * material is genuinely flat-lit.
+ *
+ * Two jobs at once:
+ *  - the model bakes some broad illumination into every generation no matter
+ *    what the prompt says; this removes it, which is a hard requirement here.
+ *  - the membrane seam solve leaves a constant-slope ramp across the tile by
+ *    construction. That ramp is purely low-frequency, so this removes it too.
+ *
+ * Run AFTER the tiling pass: the blur wraps, so the correction field is itself
+ * tileable and the seam fix is preserved exactly.
+ */
+export function deshade(planes, w, h, mat) {
+  if (!(mat.deshade > 0)) return planes;
+  const passes = mat.deshadePasses ?? 2;
+  for (let p = 0; p < passes; p++) deshadePass(planes, w, h, mat);
+  return planes;
+}
+
+function deshadePass(planes, w, h, mat) {
+  const n = w * h;
+  const lin = planes.map((p) => {
+    const o = new Float32Array(n);
+    for (let i = 0; i < n; i++) {
+      const c = p[i];
+      o[i] = c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+    }
+    return o;
+  });
+  const lum = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    lum[i] = 0.2126 * lin[0][i] + 0.7152 * lin[1][i] + 0.0722 * lin[2][i];
+  }
+  const field = blurWrap(lum, w, h, w / mat.deshadeDiv);
+  let mean = 0;
+  for (let i = 0; i < n; i++) mean += lum[i];
+  mean /= n;
+
+  const kMax = mat.deshadeClamp, kMin = 1 / kMax;
+  for (let i = 0; i < n; i++) {
+    let g = mean / Math.max(field[i], 1e-4);
+    g = clamp(g, kMin, kMax);
+    if (mat.deshade < 1) g = Math.pow(g, mat.deshade);
+    for (let c = 0; c < 3; c++) {
+      const v = clamp(lin[c][i] * g, 0, 1);
+      planes[c][i] = v <= 0.0031308 ? v * 12.92 : 1.055 * Math.pow(v, 1 / 2.4) - 0.055;
     }
   }
+  return planes;
 }
 
 export function makeTileable(planes, w, h, mat) {
@@ -235,8 +301,8 @@ export function makeTileable(planes, w, h, mat) {
   for (const p of out) {
     membraneV(p, w, h, cx, mat.membrane);
     membraneH(p, w, h, cy, mat.membrane);
-    mirrorBlendV(p, w, h, cx, band);
-    mirrorBlendH(p, w, h, cy, band);
+    mirrorBlend(p, w, h, cx, band, 'v');
+    mirrorBlend(p, w, h, cy, band, 'h');
     for (let i = 0; i < p.length; i++) p[i] = clamp(p[i], 0, 1);
   }
   return out;
@@ -399,7 +465,9 @@ export async function buildPbrSet(asset, opts = {}) {
     planes[2][i] = data[i * 3 + 2] / 255;
   }
 
-  const tiled = asset.tileable === false ? planes : makeTileable(planes, w, h, mat);
+  const tiled = asset.tileable === false
+    ? planes
+    : deshade(makeTileable(planes, w, h, mat), w, h, mat);
 
   /* albedo bytes */
   const albedo = Buffer.alloc(n * 3);
