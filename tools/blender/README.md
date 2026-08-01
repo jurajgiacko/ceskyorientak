@@ -192,19 +192,20 @@ _Generated 2026-08-01 by `node tools/blender/validate.mjs --write-readme`._
 | Asset | LOD0 tris | All LODs | Meshes | Materials | Textures | Size | Draco | Status |
 |---|---:|---:|---:|---:|---:|---:|:-:|---|
 | `arena-tent` | 912 | 1276 (LOD0:912 LOD1:364) | 2 | 2 | 0 | 52.9 KB | no | OK |
-| `beech` | 10840 | 13922 (LOD0:10840 LOD1:3070 LOD2:12) | 9 | 3 | 3 | 472.0 KB | yes | OK |
+| `beech` | 10840 | 13922 (LOD0:10840 LOD1:3070 LOD2:12) | 9 | 3 | 3 | 471.9 KB | yes | OK |
 | `boulder-set` | 8520 | 12780 (LOD0:8520 LOD1:3408 LOD2:852) | 18 | 4 | 0 | 141.8 KB | yes | OK |
 | `control-flag` | 464 | 703 (LOD0:464 LOD1:184 LOD2:55) | 3 | 4 | 0 | 38.4 KB | no | OK |
 | `control-stand` | 756 | 1146 (LOD0:756 LOD1:302 LOD2:88) | 3 | 2 | 0 | 43.8 KB | no | OK |
 | `deadwood` | 3038 | 4582 (LOD0:3038 LOD1:1212 LOD2:332) | 9 | 4 | 0 | 83.1 KB | yes | OK |
 | `finish-gantry` | 1728 | 2404 (LOD0:1728 LOD1:676) | 2 | 3 | 0 | 36.4 KB | yes | OK |
 | `orienteer-hands` | 5768 | 5768 (LOD0:5768) | 1 | 8 | 0 | 280.0 KB | no | OK |
+| `orienteer` | 12736 | 12736 (LOD0:12736) | 1 | 10 | 0 | 580.0 KB | no | OK |
 | `race-belt` | 880 | 880 (LOD0:880) | 1 | 3 | 0 | 38.3 KB | no | OK |
 | `si-unit` | 450 | 684 (LOD0:450 LOD1:180 LOD2:54) | 3 | 3 | 0 | 39.6 KB | no | OK |
 | `spectator-fence` | 480 | 721 (LOD0:480 LOD1:191 LOD2:50) | 3 | 2 | 0 | 48.2 KB | no | OK |
 | `spruce` | 18904 | 26178 (LOD0:18904 LOD1:7258 LOD2:16) | 12 | 7 | 6 | 987.4 KB | yes | OK |
 
-**Total: 12 assets, 52740 LOD0 triangles, 2261.9 KB on disk.**
+**Total: 13 assets, 65476 LOD0 triangles, 2841.9 KB on disk.**
 <!-- VALIDATION_TABLE_END -->
 
 Preview sheets for every asset are in [`previews/`](previews/), rendered from
