@@ -151,7 +151,14 @@ export async function loadGroundTextures(tier: QualityTier): Promise<GroundTextu
     for (let i = 0; i < px; i++) {
       // AO folded into albedo. Lifted off zero so a dark AO map cannot crush a
       // surface to black — the reference's shadows are deep but never dead.
-      const occ = 0.25 + 0.75 * ((o[i * 4] as number) / 255);
+      //
+      // Relaxed from 0.25 + 0.75·ao. That range darkens a fully occluded texel
+      // by 4×, which was defensible when this was the *only* occlusion term.
+      // The terrain material now also applies a curvature term derived from the
+      // heightfield, and the two stack multiplicatively: a hollow with dense
+      // texture AO in it was going down by nearly 7×, which is what crushed the
+      // floor detail to near-black. This is the texture-scale half only.
+      const occ = 0.45 + 0.55 * ((o[i * 4] as number) / 255);
       albedoData[base + i * 4] = (a[i * 4] as number) * occ;
       albedoData[base + i * 4 + 1] = (a[i * 4 + 1] as number) * occ;
       albedoData[base + i * 4 + 2] = (a[i * 4 + 2] as number) * occ;
@@ -204,6 +211,55 @@ export async function loadGroundTextures(tier: QualityTier): Promise<GroundTextu
 }
 
 // ---------------------------------------------------------------------------
+// Canopy light — shared between the ground and everything growing out of it
+// ---------------------------------------------------------------------------
+
+/**
+ * The gap field that decides how much sun reaches the forest floor.
+ *
+ * This lives here, in one place, because it has to be applied to *every* surface
+ * near the ground or the surfaces disagree with each other. It was written for
+ * the terrain first, and the undergrowth — a separate `MeshStandardMaterial`
+ * with no idea any of this existed — kept the full unattenuated key. The result
+ * was visible immediately in a backlit frame: the ground correctly dropped to a
+ * tenth of the sun while the tufts standing in it took all of it, so every tuft
+ * lit up as a pale spike against dark moss. That is the exact failure this whole
+ * pass started from, reintroduced through the back door.
+ *
+ * `ol_` prefixes because the terrain's own `<common>` block already defines
+ * `hash21` and `vnoise` and GLSL has no namespaces.
+ */
+const CANOPY_LIGHT_GLSL = /* glsl */ `
+  float ol_hash21( vec2 p ) {
+    p = fract( p * vec2( 123.34, 456.21 ) );
+    p += dot( p, p + 45.32 );
+    return fract( p.x * p.y );
+  }
+  float ol_vnoise( vec2 p ) {
+    vec2 i = floor( p );
+    vec2 f = fract( p );
+    f = f * f * ( 3.0 - 2.0 * f );
+    float a = ol_hash21( i );
+    float b = ol_hash21( i + vec2( 1.0, 0.0 ) );
+    float c = ol_hash21( i + vec2( 0.0, 1.0 ) );
+    float d = ol_hash21( i + vec2( 1.0, 1.0 ) );
+    return mix( mix( a, b, f.x ), mix( c, d, f.x ), f.y );
+  }
+  // canopyOpen: 1 for a clearing, ~0.55 under a closed 24 m stand.
+  float ol_canopyLight( vec2 pp, float canopyOpen ) {
+    float gap = 0.45 * ol_vnoise( pp / 9.0 + 3.3 )
+              + 0.33 * ol_vnoise( pp / 3.2 - 11.7 )
+              + 0.22 * ol_vnoise( pp / 1.1 + 27.4 );
+    float pool = smoothstep( 0.46, 0.68, gap );
+    float fine = 0.62 + 0.76 * ol_vnoise( pp / 0.62 + 5.1 );
+    return 0.03 + 1.9 * pool * fine * canopyOpen;
+  }
+`;
+
+/** Warm bias applied to the direct term wherever the canopy lets sun through. */
+const SUN_POOL_TINT = 'vec3( 1.17, 1.0, 0.66 )';
+
+// ---------------------------------------------------------------------------
 // Terrain material
 // ---------------------------------------------------------------------------
 
@@ -253,9 +309,9 @@ export function createTerrainMaterial(
         /* glsl */ `
         #include <common>
         attribute vec4 splat;
-        attribute float curv;
+        attribute vec2 ground;
         varying vec4 vSplat;
-        varying float vCurv;
+        varying vec2 vGround;
         varying vec3 vWorldPos;
         varying vec3 vWorldNrm;
         `,
@@ -265,7 +321,7 @@ export function createTerrainMaterial(
         /* glsl */ `
         #include <worldpos_vertex>
         vSplat = splat;
-        vCurv = curv;
+        vGround = ground;
         vWorldPos = ( modelMatrix * vec4( transformed, 1.0 ) ).xyz;
         vWorldNrm = normalize( mat3( modelMatrix ) * objectNormal );
         `,
@@ -284,11 +340,13 @@ export function createTerrainMaterial(
         uniform float uLayerScale[ ${GROUND_LAYERS.length} ];
         uniform float uLayerGain[ ${GROUND_LAYERS.length} ];
         varying vec4 vSplat;
-        varying float vCurv;
+        varying vec2 vGround;
         varying vec3 vWorldPos;
         varying vec3 vWorldNrm;
 
         #define LAYERS ${GROUND_LAYERS.length}
+
+        ${CANOPY_LIGHT_GLSL}
 
         struct Surf { vec3 albedo; vec3 normal; float rough; };
 
@@ -441,7 +499,7 @@ export function createTerrainMaterial(
             // and a high mid-scale noise. Capped low — this is Sumava spruce, a
             // beech-litter floor would put the venue in the wrong region (D-007).
             float leafFrac = smoothstep( 0.58, 0.92, fn.y * 0.65 + fn.z * 0.35 )
-                           * smoothstep( 1.0, 0.72, vCurv ) * 0.45;
+                           * smoothstep( 1.0, 0.72, vGround.x ) * 0.45;
 
             // Bare mineral soil scuffed through on the fine octave's peaks. This
             // is what puts actual gaps in the ground cover, which is what makes
@@ -472,10 +530,22 @@ export function createTerrainMaterial(
         // rather than neutral: the light that survives into a hollow has bounced
         // off moss and litter on the way in, so it arrives green-brown. A flat
         // grey multiply here reads as dirt, not as shadow.
-        float ao = clamp( vCurv, 0.35, 1.12 );
+        float ao = clamp( vGround.x, 0.55, 1.12 );
         vec3 aoTint = mix( vec3( 0.72, 0.80, 0.62 ), vec3( 1.0 ), smoothstep( 0.55, 1.0, ao ) );
 
-        diffuseColor.rgb *= accAlbedo * macroVariation( vWorldPos.xz ) * ao * aoTint;
+        // The moss map is extraordinarily chromatic — 0.174 / 0.157 / 0.020
+        // linear, a blue channel one ninth of the red. Multiplied by a blue
+        // skylight fill that leaves the *shaded* floor at rgb(25,27,8) where the
+        // reference's shaded moss is rgb(24,31,19): the right value, almost no
+        // blue. A shadow lit by sky has to carry some sky in it, and a
+        // real moss mat is a mixture of species and dead litter, not one pigment.
+        // Pulling 12 % toward its own luminance costs nothing in the sunlit
+        // pools, where the warm direct term dominates, and puts the skylight
+        // back into the shadows, which is where the eye reads "outdoors".
+        vec3 groundAlbedo = mix(
+          vec3( dot( accAlbedo, vec3( 0.2126, 0.7152, 0.0722 ) ) ), accAlbedo, 0.88 );
+
+        diffuseColor.rgb *= groundAlbedo * macroVariation( vWorldPos.xz ) * ao * aoTint;
         vec3 blendedNormal = normalize( accNormal );
         float blendedRough = accRough;
         `,
@@ -533,19 +603,25 @@ export function createTerrainMaterial(
           //     bands running across the slope - correctly placed, wrong shape.
           //     The 1.1 m octave is what turns a band into dapple.
           vec2 pp = vWorldPos.xz;
-          float gap = 0.45 * vnoise( pp / 9.0 + 3.3 )
-                    + 0.33 * vnoise( pp / 3.2 - 11.7 )
-                    + 0.22 * vnoise( pp / 1.1 + 27.4 );
-          float pool = smoothstep( 0.46, 0.68, gap );
-          float fine = 0.62 + 0.76 * vnoise( pp / 0.62 + 5.1 );
           // Peak gain is the number that decides whether a pool is sunlight or a
           // hole in the exposure. At 1.9 the pools clipped to a desaturated
           // near-white around 0.85 display and read as sand; the reference's
           // sunlit moss sits at 0.375 mean and keeps its colour all the way up.
           // Losing the hue is worse than losing the brightness, because the warm
           // pool against the cold shade *is* the effect.
-          float canopyLight = 0.03 + 1.65 * pool * fine;
-          reflectedLight.directDiffuse *= vec3( 1.17, 1.0, 0.66 ) * canopyLight;
+          //     The gap field alone was not enough. It has no idea where the
+          //     canopy actually is, so it put a bright, flat, khaki floor under
+          //     a stand the LiDAR says carries 24 m of closed spruce. vGround.y
+          //     is that canopy height model, sampled per vertex: it is the same
+          //     raster the tree placement scales its variants against, so the
+          //     light on the floor and the trees standing on it now agree.
+          //
+          //     Not a hard cut-off. A closed 24 m stand still passes about 45 %,
+          //     because a spruce crown is not opaque and because a floor with no
+          //     pools at all is as wrong as a floor that is all pool.
+          float canopyOpen = 1.0 - 0.45 * smoothstep( 3.0, 20.0, vGround.y * 30.0 );
+          float canopyLight = ol_canopyLight( pp, canopyOpen );
+          reflectedLight.directDiffuse *= ${SUN_POOL_TINT} * canopyLight;
 
           // The specular has to be gated by the *same* field, and damped hard.
           // Measured: a sunlit pool came out at rgb(105,101,91) — the right
@@ -612,6 +688,17 @@ export function createTerrainMaterial(
 export interface DetailTextures {
   granite: THREE.Texture[];
   bark: THREE.Texture[];
+  /**
+   * Normal + roughness for a trunk that already carries its own albedo.
+   *
+   * Separate from `bark` because the repeat differs and a `THREE.Texture`
+   * carries its own. `spruce.glb` embeds a downsampled `bark-spruce` albedo and
+   * authors the trunk UVs against it 1:1 — the asset script says so in as many
+   * words ("bound by NAME at runtime, which swaps in the full
+   * normal/roughness/ao set"). So these must be at repeat 1.0 or the fissures in
+   * the normal map will not sit on the fissures in the albedo.
+   */
+  barkTrunk: THREE.Texture[];
 }
 
 let detail: DetailTextures | null = null;
@@ -647,8 +734,142 @@ export async function loadDetailTextures(tier: QualityTier): Promise<DetailTextu
       grab('bark-spruce', 'normal', false, 1.6),
       grab('bark-spruce', 'roughness', false, 1.6),
     ]),
+    barkTrunk: await Promise.all([
+      grab('bark-spruce', 'normal', false, 1),
+      grab('bark-spruce', 'roughness', false, 1),
+    ]),
   };
   return detail;
+}
+
+/**
+ * Patch a material so it is lit by the canopy-gap field.
+ *
+ * Anything that sits *on* the forest floor has to share the ground's light or it
+ * disagrees with it. Boulders were the clearest case: `granite_light` ends up at
+ * 0.045 effective linear albedo, which is **darker than the moss around it** at
+ * 0.074 — and it still rendered as the brightest object in the frame, because it
+ * was taking the full 9.5 key while the ground beside it was taking a tenth of
+ * it. Darkening the albedo to compensate would have been treating the symptom
+ * and would have made the boulder wrong in a clearing.
+ *
+ * Deliberately **not** applied to bark or foliage. A 25 m spruce is genuinely
+ * lit from above along most of its length; imposing a ground-level gap field on
+ * it would put canopy shadows forty feet up in the air.
+ *
+ * `canopyOpen` is a constant for the same reason as in the undergrowth: these
+ * are near-field objects and threading a per-instance canopy sample through the
+ * scatter path is not worth the difference.
+ */
+function applyCanopyLight(mat: THREE.MeshStandardMaterial, key: string): void {
+  const previous = mat.onBeforeCompile;
+  mat.onBeforeCompile = (shader, renderer) => {
+    previous?.call(mat, shader, renderer);
+    shader.vertexShader = shader.vertexShader
+      .replace(
+        '#include <common>',
+        '#include <common>\n        varying vec3 vGroundWorld;',
+      )
+      .replace(
+        '#include <worldpos_vertex>',
+        /* glsl */ `
+        #include <worldpos_vertex>
+        vGroundWorld = ( modelMatrix
+          #ifdef USE_INSTANCING
+            * instanceMatrix
+          #endif
+          * vec4( transformed, 1.0 ) ).xyz;
+        `,
+      );
+    shader.fragmentShader = shader.fragmentShader
+      .replace(
+        '#include <common>',
+        `#include <common>\n        varying vec3 vGroundWorld;\n        ${CANOPY_LIGHT_GLSL}`,
+      )
+      .replace(
+        '#include <lights_fragment_end>',
+        /* glsl */ `
+        #include <lights_fragment_end>
+        {
+          float canopyLight = ol_canopyLight( vGroundWorld.xz, 0.7 );
+          reflectedLight.directDiffuse *= ${SUN_POOL_TINT} * canopyLight;
+          reflectedLight.directSpecular *= canopyLight * 0.5;
+        }
+        `,
+      );
+  };
+  const previousKey = mat.customProgramCacheKey;
+  mat.customProgramCacheKey = () => `${previousKey ? previousKey.call(mat) : ''}|canopy-${key}`;
+  mat.needsUpdate = true;
+}
+
+/**
+ * Material for the instanced ground-cover tufts.
+ *
+ * It lives here rather than in vegetation.ts for one reason: it has to be lit by
+ * the *same* canopy-gap field as the terrain it grows out of. See
+ * `CANOPY_LIGHT_GLSL`. Anything that skips that gate takes the full 9.5 key
+ * while the ground beside it takes a fifth of it, and turns into a pale speck —
+ * which is the single defect this whole pass exists to remove.
+ *
+ * `canopyOpen` is a constant 0.6 rather than a sampled value. The tufts only
+ * exist inside a 22 m ring, the canopy height model barely moves over that
+ * distance, and threading a per-instance attribute through for the difference
+ * would cost more than it is worth. 0.6 is a closed-to-moderate stand: erring
+ * toward *less* light is the safe direction for this layer.
+ */
+export function createUndergrowthMaterial(): THREE.MeshStandardMaterial {
+  const mat = new THREE.MeshStandardMaterial({
+    vertexColors: true,
+    roughness: 0.96,
+    metalness: 0,
+    side: THREE.DoubleSide,
+  });
+
+  mat.onBeforeCompile = (shader) => {
+    shader.vertexShader = shader.vertexShader
+      .replace(
+        '#include <common>',
+        /* glsl */ `
+        #include <common>
+        varying vec3 vTuftWorld;
+        `,
+      )
+      .replace(
+        '#include <worldpos_vertex>',
+        /* glsl */ `
+        #include <worldpos_vertex>
+        vTuftWorld = ( modelMatrix * instanceMatrix * vec4( transformed, 1.0 ) ).xyz;
+        `,
+      );
+
+    shader.fragmentShader = shader.fragmentShader
+      .replace(
+        '#include <common>',
+        /* glsl */ `
+        #include <common>
+        varying vec3 vTuftWorld;
+        ${CANOPY_LIGHT_GLSL}
+        `,
+      )
+      .replace(
+        '#include <lights_fragment_end>',
+        /* glsl */ `
+        #include <lights_fragment_end>
+        {
+          float canopyLight = ol_canopyLight( vTuftWorld.xz, 0.6 );
+          reflectedLight.directDiffuse *= ${SUN_POOL_TINT} * canopyLight;
+          // Leaves are not glossy at this scale and a specular lobe on a
+          // sub-pixel blade is pure aliasing.
+          reflectedLight.directSpecular *= canopyLight * 0.15;
+          reflectedLight.indirectSpecular *= 0.15;
+        }
+        `,
+      );
+  };
+
+  mat.customProgramCacheKey = () => 'undergrowth';
+  return mat;
 }
 
 /**
@@ -681,12 +902,40 @@ export function conditionAssetMaterial(
     // at 0.29 linear albedo lifted that much is brighter than anything else in
     // the frame, and a boulder that out-values the canopy reads as a polystyrene
     // prop. Šumava granite under lichen is a dark, cool grey.
-    m.color.multiplyScalar(kind === 'rock' ? 1.45 : 1.0);
+    // 2.4 was far too hot; 0.8, tried next, was chasing the wrong variable. The
+    // boulders were not too light in *albedo* — measured, `granite_light` came
+    // out at 0.045 effective linear against a moss floor at 0.074, i.e. already
+    // darker than the ground — they were too bright because they were taking the
+    // full key while the ground took a tenth of it. That is fixed properly in
+    // `applyCanopyLight` below. 1.25 is then just the honest value for lichened
+    // Sumava granite.
+    m.color.multiplyScalar(kind === 'rock' ? 1.25 : 1.0);
   }
 
   switch (kind) {
     case 'bark':
       m.roughness = Math.max(m.roughness, 0.92);
+      // A trunk with an embedded albedo used to fall through every branch in
+      // this function and get nothing: the detail-pack block above only fires
+      // when `!m.map`, and `spruce_bark` ships a 512 px albedo baked into the
+      // .glb. So the bole had colour and no relief, and inside about two metres
+      // it read as a painted cylinder — at eye height in a colonnade stand that
+      // is the closest, largest thing in the frame.
+      //
+      // The .glb deliberately carries albedo only ("the rest would dwarf the
+      // geometry"), with the material name as the binding key. This is the
+      // runtime half of that contract.
+      //
+      // Spruce only. `beech_bark` is authored against `bark-beech`, and putting
+      // spruce fissures on a smooth beech bole would be worse than flat.
+      if (m.map && detail && /spruce/i.test(m.name)) {
+        m.normalMap = detail.barkTrunk[0] ?? null;
+        m.roughnessMap = detail.barkTrunk[1] ?? null;
+        // Full strength. Spruce bark is deeply fissured and this is the only
+        // surface relief a bole has; the terrain's 0.55 exists to avoid fighting
+        // the heightfield, which does not apply here.
+        m.normalScale.set(1, 1);
+      }
       // Beech bark is genuinely pale, but the asset's is pale *and* flat, and a
       // 90-triangle LOD1 trunk in that value reads as a white slab at 60 m.
       // Pulling it down keeps it recognisably beech without punching holes in
@@ -701,9 +950,14 @@ export function conditionAssetMaterial(
       break;
     case 'rock':
       m.roughness = Math.max(m.roughness, 0.88);
+      // Sits on the floor, so it is lit by the floor's light. See
+      // `applyCanopyLight`. Without this a boulder in a closed stand is three
+      // times brighter than the ground it is resting on.
+      applyCanopyLight(m, 'rock');
       break;
     case 'wood':
       m.roughness = 0.95;
+      applyCanopyLight(m, 'wood');
       break;
   }
   if (m.map) m.map.anisotropy = 8;

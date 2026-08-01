@@ -29,7 +29,11 @@ import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
 import { Runnability } from '@/core/types';
 import type { QualityTier } from '@/core/capabilities';
 import type { TerrainField } from './terrain';
-import { conditionAssetMaterial, makeImposterMaterial } from './materials';
+import {
+  conditionAssetMaterial,
+  createUndergrowthMaterial,
+  makeImposterMaterial,
+} from './materials';
 
 // ---------------------------------------------------------------------------
 // Asset model
@@ -484,7 +488,12 @@ export class Vegetation {
     const tier = opts.tier;
     this.nearRadius = opts.nearRadius ?? (tier === 'low' ? 70 : 120);
     this.farRadius = opts.farRadius ?? (tier === 'low' ? 150 : 230);
-    this.groundRadius = opts.groundRadius ?? (tier === 'low' ? 18 : 27);
+    // Tightened from 27 m. The layer's job is to read as a *mat*, and a mat is
+    // a question of instances per square metre, not of how far the ring
+    // reaches. Trading 27 m at 10/m2 for 22 m at ~17/m2 costs about the same
+    // triangles and is the difference between distinguishable tufts and ground
+    // cover. Beyond the ring the mosaic in the terrain material carries it.
+    this.groundRadius = opts.groundRadius ?? (tier === 'low' ? 15 : 22);
     this.densityScale = tier === 'low' ? 0.45 : tier === 'medium' ? 0.75 : 1;
 
     const capacity = tier === 'low' ? 2000 : 6000;
@@ -627,18 +636,15 @@ export class Vegetation {
     geo.setIndex(idx);
     geo.computeBoundingSphere();
 
-    const mat = new THREE.MeshStandardMaterial({
-      vertexColors: true,
-      roughness: 0.96,
-      metalness: 0,
-      side: THREE.DoubleSide,
-    });
+    // Built in materials.ts so it is lit by the same canopy-gap field as the
+    // ground it grows out of. See `createUndergrowthMaterial`.
+    const mat = createUndergrowthMaterial();
 
     // Sized so the ring does not clip. It measured 22 000 instances inside the
     // 27 m radius at the densities above, and clipping is not graceful: the
     // overflow is dropped in Map iteration order, which took a bite out of the
     // mid-ground rather than thinning evenly.
-    const capacity = tier === 'low' ? 8000 : 32000;
+    const capacity = tier === 'low' ? 9000 : 34000;
     this.undergrowthMesh = new THREE.InstancedMesh(geo, mat, capacity);
     this.undergrowthMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     this.undergrowthMesh.frustumCulled = false;
@@ -811,7 +817,7 @@ export class Vegetation {
     /** Candidate colonies per m². Most are rejected by the patch noise. */
     const CLUSTER_RATE = 0.5;
     /** Members per m² *inside* a colony. This is what makes it a mat. */
-    const PACKING = 34;
+    const PACKING = 95;
 
     const clusters = Math.round(CLUSTER_RATE * area * this.densityScale);
     for (let c = 0; c < clusters; c++) {
@@ -1037,7 +1043,27 @@ export class Vegetation {
       const ground2 = this.groundRadius * this.groundRadius;
       let n = 0;
       const cap = mesh.instanceMatrix.count;
-      for (const list of this.undergrowthCache.values()) {
+
+      // Nearest chunk first. The mat is dense enough that the ring can exceed
+      // the instance capacity, and the overflow used to be dropped in Map
+      // insertion order — which took a bite out of whichever chunks happened to
+      // be cached last and left a bald patch in the mid-ground. Sorting means
+      // an overflow only ever thins the far edge, where the distance fade is
+      // already shrinking everything to nothing. Roughly a dozen chunks, sorted
+      // at most four times a second.
+      const order = [...this.undergrowthCache.entries()].sort((a, b) => {
+        const [ax, az] = a[0].split('|');
+        const [bx, bz] = b[0].split('|');
+        const da =
+          ((Number(ax) + 0.5) * GROUND_CHUNK_M - cam.x) ** 2 +
+          ((Number(az) + 0.5) * GROUND_CHUNK_M - cam.z) ** 2;
+        const db =
+          ((Number(bx) + 0.5) * GROUND_CHUNK_M - cam.x) ** 2 +
+          ((Number(bz) + 0.5) * GROUND_CHUNK_M - cam.z) ** 2;
+        return da - db;
+      });
+
+      for (const [, list] of order) {
         for (const p of list) {
           if (n >= cap) break;
           const dx = p.x - cam.x;

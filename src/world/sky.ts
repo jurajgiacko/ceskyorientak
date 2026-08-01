@@ -220,10 +220,19 @@ export class SkyRig {
     // ratio from about 3:1 to about 9:1, which is where the reference sits.
     // This is the single largest change in the lighting rig and it is a
     // measurement correction, not a mood choice.
+    //
+    // The ground half of the hemisphere is doing the bounce, and it was too weak
+    // and too dark to hold the shadows up on its own — the floor detail was
+    // being crushed toward black in the lower two thirds of the frame. Warmed
+    // and lifted (0x4a4130 → 0x6b5636) rather than raising the sky half, because
+    // raising the sky flattens the shading: the sky term is nearly constant over
+    // an up-facing floor, so it lifts the black point without adding any form.
+    // Bounce off warm litter, arriving from below, is what actually models the
+    // light in a shaded forest floor.
     this.hemi = new THREE.HemisphereLight(
       opts.weather === 'sunny' ? 0xa7bcd2 : 0xedeae4,
-      0x4a4130,
-      opts.weather === 'sunny' ? 1.75 : 2.0,
+      opts.weather === 'sunny' ? 0x6b5636 : 0x5a5040,
+      opts.weather === 'sunny' ? 2.05 : 2.0,
     );
     this.group.add(this.hemi);
 

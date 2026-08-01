@@ -471,8 +471,11 @@ export class TerrainMesh {
     const nrm = new Float32Array(vertCount * 3);
     const uv = new Float32Array(vertCount * 2);
     const splat = new Float32Array(vertCount * 4);
-    // Curvature occlusion, one float per vertex. See the loop below.
-    const curv = new Float32Array(vertCount);
+    // Per-vertex ground info: x = curvature occlusion, y = canopy height as a
+    // fraction of 30 m. Both are consumed by the terrain material; packed into
+    // one vec2 attribute rather than two floats to keep the attribute count
+    // down, since the low tier is already close to its varying budget.
+    const ground = new Float32Array(vertCount * 2);
 
     let minY = Infinity;
     let maxY = -Infinity;
@@ -533,7 +536,15 @@ export class TerrainMesh {
         // punch a black hole, and biased so convex ground is only slightly lit.
         const hollow = Math.min(1, Math.max(0, -lapFine * 6 + -lapWide * 0.55));
         const ridge = Math.min(1, Math.max(0, lapFine * 4 + lapWide * 0.35));
-        curv[k] = 1 - hollow * 0.55 + ridge * 0.1;
+        ground[k * 2] = 1 - hollow * 0.42 + ridge * 0.1;
+
+        // Canopy height above this vertex, as a fraction of 30 m. The material
+        // uses it to decide how much sun can reach the floor here — which ties
+        // the sunlit pools to the LiDAR rather than to a noise field alone. It
+        // is the same raster the tree placement scales against, so the light on
+        // the ground and the trees standing on it agree about where the canopy
+        // is closed.
+        ground[k * 2 + 1] = Math.min(1, f.canopyAt(wx, wz) / 30);
 
         uv[k * 2] = wx;
         uv[k * 2 + 1] = wz;
@@ -578,7 +589,7 @@ export class TerrainMesh {
     geo.setAttribute('normal', new THREE.BufferAttribute(nrm, 3));
     geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
     geo.setAttribute('splat', new THREE.BufferAttribute(splat, 4));
-    geo.setAttribute('curv', new THREE.BufferAttribute(curv, 1));
+    geo.setAttribute('ground', new THREE.BufferAttribute(ground, 2));
     geo.setIndex(new THREE.BufferAttribute(idx.subarray(0, p), 1));
 
     // Explicit bounds — the skirt would otherwise inflate them downward and
