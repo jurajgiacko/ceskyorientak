@@ -248,6 +248,13 @@ that asset in `manifest.json` and explain it in its `notes`:
 Overridden rows are marked `*` in the table, so an exception is always visible
 rather than silently folded into the thresholds.
 
+**`acf` rises as resolution falls, for any structured material.** Decimation
+averages away the uncorrelated high-frequency component that sits in the
+autocorrelation's denominator, leaving the regular structure a larger share of
+the total. `roof-tile-bohemian` measures 0.44 / 0.54 / 0.64 at 1024 / 512 / 256
+— the same roof, not a worse tile. Set an override above the *lowest* tier you
+ship, and validate all three (`--size=512`, `--size=256`).
+
 ---
 
 ## Adding a texture

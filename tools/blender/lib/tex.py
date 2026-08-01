@@ -45,6 +45,30 @@ def write_png(path, rgba_u8, flip=True):
     return path
 
 
+def ensure_png(path, cache_dir, name=None):
+    """Return a PNG path for `path`, transcoding via Blender if needed.
+
+    Embedding a .webp in a .glb makes `EXT_texture_webp` a *required*
+    extension, so any loader without it refuses the entire file rather than
+    just that texture. Everything we embed therefore goes in as PNG.
+    """
+    if path.lower().endswith(".png"):
+        return path
+    base = name or os.path.splitext(os.path.basename(path))[0]
+    out = os.path.join(cache_dir, base + ".png")
+    os.makedirs(cache_dir, exist_ok=True)
+    img = bpy.data.images.load(path, check_existing=True)
+    # bpy.data.images.load is lazy -- without forcing a decode first, save()
+    # fails with "does not have any image data".
+    if not img.has_data:
+        _ = img.pixels[0]
+    img.file_format = "PNG"
+    img.filepath_raw = out
+    img.save()
+    bpy.data.images.remove(img)
+    return out
+
+
 def load_image(path, name=None, is_data=False):
     img = bpy.data.images.load(path, check_existing=True)
     if name:

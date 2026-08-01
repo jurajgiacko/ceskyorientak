@@ -2,8 +2,8 @@
   "generator": "blender-asset-pipeline (Blender 4.5.12 LTS)",
   "generatedAt": "2026-08-01",
   "seed": 20260805,
-  "totalLod0Tris": 39916,
-  "totalBytes": 1385632,
+  "totalLod0Tris": 39908,
+  "totalBytes": 1426900,
   "assets": [
     {
       "name": "arena-tent",
@@ -32,7 +32,7 @@
     {
       "name": "beech",
       "file": "beech.glb",
-      "bytes": 393392,
+      "bytes": 483332,
       "tris": 10840,
       "lods": [
         {
@@ -175,7 +175,7 @@
     {
       "name": "control-flag",
       "file": "control-flag.glb",
-      "bytes": 33660,
+      "bytes": 39344,
       "tris": 464,
       "lods": [
         {
@@ -197,7 +197,7 @@
     {
       "name": "control-stand",
       "file": "control-stand.glb",
-      "bytes": 41248,
+      "bytes": 44900,
       "tris": 756,
       "lods": [
         {
@@ -224,20 +224,20 @@
     {
       "name": "deadwood",
       "file": "deadwood.glb",
-      "bytes": 80584,
-      "tris": 3046,
+      "bytes": 85096,
+      "tris": 3038,
       "lods": [
         {
           "node": "deadwood_v0_LOD0",
-          "tris": 816
+          "tris": 768
         },
         {
           "node": "deadwood_v0_LOD1",
-          "tris": 326
+          "tris": 306
         },
         {
           "node": "deadwood_v0_LOD2",
-          "tris": 94
+          "tris": 89
         },
         {
           "node": "deadwood_v1_LOD0",
@@ -253,15 +253,15 @@
         },
         {
           "node": "deadwood_v2_LOD0",
-          "tris": 1382
+          "tris": 1422
         },
         {
           "node": "deadwood_v2_LOD1",
-          "tris": 552
+          "tris": 568
         },
         {
           "node": "deadwood_v2_LOD2",
-          "tris": 147
+          "tris": 150
         }
       ],
       "variants": [
@@ -313,7 +313,7 @@
     {
       "name": "si-unit",
       "file": "si-unit.glb",
-      "bytes": 37932,
+      "bytes": 40556,
       "tris": 450,
       "lods": [
         {
@@ -370,7 +370,7 @@
     {
       "name": "spruce",
       "file": "spruce.glb",
-      "bytes": 473620,
+      "bytes": 408476,
       "tris": 11840,
       "lods": [
         {
@@ -379,7 +379,7 @@
         },
         {
           "node": "spruce_v0_LOD1",
-          "tris": 830
+          "tris": 832
         },
         {
           "node": "spruce_v0_LOD2",
@@ -391,7 +391,7 @@
         },
         {
           "node": "spruce_v1_LOD1",
-          "tris": 1578
+          "tris": 1580
         },
         {
           "node": "spruce_v1_LOD2",
@@ -403,7 +403,7 @@
         },
         {
           "node": "spruce_v2_LOD1",
-          "tris": 998
+          "tris": 1000
         },
         {
           "node": "spruce_v2_LOD2",
@@ -420,7 +420,7 @@
           "heightM": 6.1,
           "tris": [
             2584,
-            830,
+            832,
             4
           ]
         },
@@ -430,7 +430,7 @@
           "heightM": 27.6,
           "tris": [
             5560,
-            1578,
+            1580,
             4
           ]
         },
@@ -440,7 +440,7 @@
           "heightM": 31.6,
           "tris": [
             3696,
-            998,
+            1000,
             4
           ]
         }

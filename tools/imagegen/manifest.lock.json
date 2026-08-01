@@ -229,78 +229,78 @@
     },
     "bark-spruce": {
       "id": "bark-spruce",
-      "promptHash": "19f7e0c96054ef65",
+      "promptHash": "e043fac01221b6d8",
       "seed": 10101,
       "model": "gemini-2.5-flash-image",
       "aspect": "1:1",
       "source": {
         "path": "tools/imagegen/.cache/bark-spruce.png",
-        "bytes": 2309117,
-        "sha256": "8c312eecc33fbb878d7692f4a7abc205283bb6b15dbfb681b749b1c4ff5c32d0"
+        "bytes": 2289184,
+        "sha256": "6879491c798a1a2502a73d5858cefa50b2e591fbd87d93996ffd48e497a60c42"
       },
       "outputs": [
         {
           "path": "public/textures/bark-spruce/albedo.webp",
-          "bytes": 543530,
-          "sha256": "9ed50c437a7573c34f5da7e53287820ea1968ab7a2494f9ae7ecc5a8f006eacb"
+          "bytes": 543488,
+          "sha256": "5ed5813d4a9b112a4461d9e1d4a219945f571837356f20f72a4bea631308d248"
         },
         {
           "path": "public/textures/bark-spruce/albedo@512.webp",
-          "bytes": 133826,
-          "sha256": "e6113232a38c8d81aef475430cd50e8cd2bb0c0a238f7cd6a129048f23fb22b5"
+          "bytes": 134310,
+          "sha256": "b74f6856d2a4da87b28bc478034b0daad34cbbb0fab106234e7764421f44ee7b"
         },
         {
           "path": "public/textures/bark-spruce/albedo@256.webp",
-          "bytes": 33720,
-          "sha256": "fd3bca11e8f456507e6c04dc83704bcb83a34cb51754612cfdf6e7a15ffe63a9"
+          "bytes": 33812,
+          "sha256": "e0528db509d317d3a473f2eb3ba3ac068ae2ac5dbcaf55d364edb52af832922f"
         },
         {
           "path": "public/textures/bark-spruce/normal.webp",
-          "bytes": 826750,
-          "sha256": "beb335a63144704f75613625e0433bd722973598689e33575c60a44c61355e10"
+          "bytes": 845956,
+          "sha256": "26522bfc4d8566e8307b044710605643b51c90990e6a472f8d0c4e214774ef09"
         },
         {
           "path": "public/textures/bark-spruce/normal@512.webp",
-          "bytes": 335696,
-          "sha256": "46536ec2e21cd998f61ff67a9615620f971c3e15ed59a735b1b74ed772d3d6e8"
+          "bytes": 308276,
+          "sha256": "4cdd1293d927dee1bc7c31bdfe9fb22f834f41c3098e029f6ad22ac998665ae5"
         },
         {
           "path": "public/textures/bark-spruce/normal@256.webp",
-          "bytes": 80572,
-          "sha256": "0035c099e2e69982147d5382db0b0e5fdb742aaaa88cdbcc5bba770f5fd9ef7a"
+          "bytes": 82454,
+          "sha256": "61eee537342d7d0d17f9fa45bbc7cf5d84bef2e9008f9826f0712f31e023844d"
         },
         {
           "path": "public/textures/bark-spruce/roughness.webp",
-          "bytes": 50314,
-          "sha256": "6b049caba74a9b1758218449d4c2d85baedc1cb2dfc3b41989a94d6bc6501f7e"
+          "bytes": 48956,
+          "sha256": "ea4cb364b2a4a869b87bb0ce20dbb73633c37ad1916704bd3d24fcdd3382e8a0"
         },
         {
           "path": "public/textures/bark-spruce/roughness@512.webp",
-          "bytes": 24958,
-          "sha256": "9873b5016c2e285cff6c1c4e6b376b4295de99cc8e6776da938d9f9cd577ec69"
+          "bytes": 24420,
+          "sha256": "2b8614e75eb841d94a00beaca1c4be5b63572db5b1c7338b254159ea7268638a"
         },
         {
           "path": "public/textures/bark-spruce/roughness@256.webp",
-          "bytes": 12092,
-          "sha256": "aa65f7d401846f2eecde8ba41a58bd8f14a3b809840809f6d7f3932ab17aacbc"
+          "bytes": 12084,
+          "sha256": "c67332e07fbd811c9e85519dd65df155fc3b29e86fe94e13259c462d7cb1097e"
         },
         {
           "path": "public/textures/bark-spruce/ao.webp",
-          "bytes": 262230,
-          "sha256": "ed5a889aa70c9d3f2793205c80764fa772e747aeda678272348cb687accc2280"
+          "bytes": 285218,
+          "sha256": "5468d478366aa7cc29ad4db2a5cfec21e39e73b1c2b7b8dc0a06d26d9e6f46fa"
         },
         {
           "path": "public/textures/bark-spruce/ao@512.webp",
-          "bytes": 114842,
-          "sha256": "634c8cba8788256673ffc36bb88b286b89c1bde0f03b0cc3ac01162cb76bec45"
+          "bytes": 119590,
+          "sha256": "4d4c9f646866c2cb37f4f6bf183380dde337fae763653d61a085d8fdf1d362cd"
         },
         {
           "path": "public/textures/bark-spruce/ao@256.webp",
-          "bytes": 35634,
-          "sha256": "81b1027ea451a8672ca90664fe9ee60568e9e9ac27078577571e155f0110e175"
+          "bytes": 36474,
+          "sha256": "2167fb797fa57bf047ec2ef2d6a3aff5591ee00c6dfc95fa1885ce8561046051"
         }
       ],
-      "generatedAt": "2026-08-01T10:44:09.252Z"
+      "generatedAt": "2026-08-01T11:06:40.559Z"
     },
     "cobble-krumlov": {
       "id": "cobble-krumlov",
@@ -1329,154 +1329,154 @@
     },
     "roof-tile-bohemian": {
       "id": "roof-tile-bohemian",
-      "promptHash": "4bac236af03c92f2",
+      "promptHash": "121164c996afbb8f",
       "seed": 10503,
       "model": "gemini-2.5-flash-image",
       "aspect": "1:1",
       "source": {
         "path": "tools/imagegen/.cache/roof-tile-bohemian.png",
-        "bytes": 2177426,
-        "sha256": "f54264e4b929c2cdda755f2d3c4bce98c1086cbb9be549873a9f1c1df689b506"
+        "bytes": 2241187,
+        "sha256": "166224a1e781e899c4f312564e24fe65b07fb05fa5a083b70ddd0ac44ae31819"
       },
       "outputs": [
         {
           "path": "public/textures/roof-tile-bohemian/albedo.webp",
-          "bytes": 477528,
-          "sha256": "8d514a692ba395cfc282360357a5a7d827384a01afdd361574a40c5e830f381d"
+          "bytes": 525702,
+          "sha256": "210a4a319573f082dfac6cd9a9fb79301d5a7cbe1aac50c8212fe50f958a3ca0"
         },
         {
           "path": "public/textures/roof-tile-bohemian/albedo@512.webp",
-          "bytes": 115338,
-          "sha256": "63f7cd592bf8eb0964c9f19e7b30ca27718dae3a0dcc088b51100cb1e8c50bbe"
+          "bytes": 127038,
+          "sha256": "2fcff536892afccbe81b1e663376be2313265d6f4f579b037739e2da1a1f20e4"
         },
         {
           "path": "public/textures/roof-tile-bohemian/albedo@256.webp",
-          "bytes": 26380,
-          "sha256": "ea20336ae8c297dba1918a6835d9a2b595dd5f1af2fb8b8de16470df479370eb"
+          "bytes": 29190,
+          "sha256": "e744feb040c5e43135e46c24833d474dd96ad526272f00fecbd38f01c68d8d16"
         },
         {
           "path": "public/textures/roof-tile-bohemian/normal.webp",
-          "bytes": 705898,
-          "sha256": "790508b6996215a77ae839e3c9a6b1d576aaf1b1a6d9a0564793bbf1fe4a0df8"
+          "bytes": 727526,
+          "sha256": "4b97c5bdecc861ef0cc55fdc36719621b43370ff03c5c47abde890db024ddfe6"
         },
         {
           "path": "public/textures/roof-tile-bohemian/normal@512.webp",
-          "bytes": 274108,
-          "sha256": "8f83ddfa7752719d74f2fc90bc369669c79b484e45d0f6529b61f3817d0c5675"
+          "bytes": 276742,
+          "sha256": "99e6bb4005ba5d58b5e8a3d82d8f792f9cc4292e5d9d8216771b0b0b665f89ff"
         },
         {
           "path": "public/textures/roof-tile-bohemian/normal@256.webp",
-          "bytes": 75658,
-          "sha256": "717063dd72f2575e4713aa0e476b2f45af9dd9c5d3284c8713e39374b03089a6"
+          "bytes": 75696,
+          "sha256": "286134cb900b52a557b659be3d4807b452b231bfb95fd5f7ba24d85d3d2e3a43"
         },
         {
           "path": "public/textures/roof-tile-bohemian/roughness.webp",
-          "bytes": 54216,
-          "sha256": "a823b36e6716eed3f89ed5581922c8f6ef4ad6e720de86af621cadda07ca0573"
+          "bytes": 52028,
+          "sha256": "cc9ec7ba255d4c74bc03cd36d8101f712151a76b70c7b5b7e64fe3cd138608d3"
         },
         {
           "path": "public/textures/roof-tile-bohemian/roughness@512.webp",
-          "bytes": 25970,
-          "sha256": "7d13276bda505d93d5df531df39fcd987ba498256441f74922318731d255fed0"
+          "bytes": 25974,
+          "sha256": "bbc9460305336379f93bb1f7bf410b64b12493c5fb2d43187d03a59450e4270d"
         },
         {
           "path": "public/textures/roof-tile-bohemian/roughness@256.webp",
-          "bytes": 13000,
-          "sha256": "66431836899f88259d532a8fe6d82fd34ea9263f0f7cd39a257b730498b498da"
+          "bytes": 12352,
+          "sha256": "baccfd196e9a071a346b5441f62e4fcaad8087d7a33e3f2a901c1900db70a5d3"
         },
         {
           "path": "public/textures/roof-tile-bohemian/ao.webp",
-          "bytes": 262070,
-          "sha256": "d961aa828a1f33d0d80d16ff1b740ba7e795ee2fa9d247aea7caec44bd19bc99"
+          "bytes": 276384,
+          "sha256": "160bbdcc5694430ae62049a211f5486816b25dbb8a22edf1cec4b06b00bc81d0"
         },
         {
           "path": "public/textures/roof-tile-bohemian/ao@512.webp",
-          "bytes": 113416,
-          "sha256": "0b1195a5463278d9566c07a0ae85c3475509b2403964f22fc9357a605594b2ab"
+          "bytes": 117376,
+          "sha256": "542ae10ddf227122b5140609ab4c8cdbaab6df75af180f3212df0028bb252f18"
         },
         {
           "path": "public/textures/roof-tile-bohemian/ao@256.webp",
-          "bytes": 34582,
-          "sha256": "ed59a34ddb36e7226efda878235db88517f9aba2bc03b7914abb001153e71015"
+          "bytes": 35486,
+          "sha256": "2ac78c315dd3a1fb33e914e5a879c7bb9a44de3471c9ee62c787b32d9f75c725"
         }
       ],
-      "generatedAt": "2026-08-01T10:52:47.231Z"
+      "generatedAt": "2026-08-01T11:05:48.093Z"
     },
     "stone-wall-castle": {
       "id": "stone-wall-castle",
-      "promptHash": "5af22a323ae55892",
+      "promptHash": "fa288311adb01489",
       "seed": 10504,
       "model": "gemini-2.5-flash-image",
       "aspect": "1:1",
       "source": {
         "path": "tools/imagegen/.cache/stone-wall-castle.png",
-        "bytes": 2378011,
-        "sha256": "544c04b6485fa64ff1c11760728cf5c87bfa3ee3faa9b746356588972acbd09a"
+        "bytes": 2425413,
+        "sha256": "ef55d061a5eb26515978a81affd2dfca8e93f699b8df1ffbf2fbeaecd9b6d38e"
       },
       "outputs": [
         {
           "path": "public/textures/stone-wall-castle/albedo.webp",
-          "bytes": 611448,
-          "sha256": "ff5c0bd36339ae93b5cefc46c67650a3807f1d2f25ee6064e347bf2964755530"
+          "bytes": 623470,
+          "sha256": "5c68c957eeea08edf0374794b62163d413ca826fafb7efd0f9b9d2329056bb5f"
         },
         {
           "path": "public/textures/stone-wall-castle/albedo@512.webp",
-          "bytes": 144202,
-          "sha256": "fbe243c4eec6f15b67d792b9a90bd2f3ed44dfffbc140a9b8d0bbb481904c9b7"
+          "bytes": 148972,
+          "sha256": "0f75c3951e8ea4e363adff05d0bdff6e645dee913c821b3a4e3a5a59bed166fa"
         },
         {
           "path": "public/textures/stone-wall-castle/albedo@256.webp",
-          "bytes": 32138,
-          "sha256": "ffe50d50936ec5f1ddaeef8f9b99d4aa5c4fce4168c545306e95bcfd58ee4b26"
+          "bytes": 35272,
+          "sha256": "a79ac4c5d14267fd7f5c45902a4628eebeba4694fea4fca479ddca513977f790"
         },
         {
           "path": "public/textures/stone-wall-castle/normal.webp",
-          "bytes": 936228,
-          "sha256": "7bb63a5e184c591778d6bce73502688658146a493e11d8c673a930b8d080e574"
+          "bytes": 899100,
+          "sha256": "13faf8d099514ab5ece4d679f7cef61f6f4b43911642de66343c98dfabe19024"
         },
         {
           "path": "public/textures/stone-wall-castle/normal@512.webp",
-          "bytes": 338666,
-          "sha256": "a59fb53939ddeb2d42eb3dd80d3b50ddddc31443152b0c5bb2c5ce7941ba08bb"
+          "bytes": 325678,
+          "sha256": "1538c6f962da4d4e92148fcd963ac23d5aede598879b409516479ac2ee0330fd"
         },
         {
           "path": "public/textures/stone-wall-castle/normal@256.webp",
-          "bytes": 84244,
-          "sha256": "c66527b4ad83e0b312292813e0dacd72d293006b83e4e4890670588c064b118a"
+          "bytes": 85286,
+          "sha256": "cfcc6d85c0a1064b8336fbfc1fa676424b039e1fd1bc5ed8b97132c8c0138466"
         },
         {
           "path": "public/textures/stone-wall-castle/roughness.webp",
-          "bytes": 49276,
-          "sha256": "9a1a3910ea16f5d040258b065227b52942232894bbfd8f7595924092ff619881"
+          "bytes": 47964,
+          "sha256": "739b1e99166860e89744089d945f4fca562947976b98c5a26b3c369ae0e6b7b6"
         },
         {
           "path": "public/textures/stone-wall-castle/roughness@512.webp",
-          "bytes": 22896,
-          "sha256": "01840fb6be160b1c16c259f840d4eca67917ead38ebff24fbd2007a053ae2fd3"
+          "bytes": 23048,
+          "sha256": "7822ae0b5b26472130a3d2b5d924a8d6eda5293d98a1eb4d466a771572f979b0"
         },
         {
           "path": "public/textures/stone-wall-castle/roughness@256.webp",
-          "bytes": 10998,
-          "sha256": "cf04dc32e5884f731d78414858147eecbc511b70969f5c5b6fd66d80107d6d20"
+          "bytes": 10876,
+          "sha256": "3344b57e2dfb72ab5adbe8c87aac13856324beb7f10895fe6d11e27db2c3cf67"
         },
         {
           "path": "public/textures/stone-wall-castle/ao.webp",
-          "bytes": 372178,
-          "sha256": "f978660f7db16cae6ab370e25749ab39049b5d6d90fc8bbab8924f0a448caf23"
+          "bytes": 328808,
+          "sha256": "5aced7be97d5bfdf245167bfa3750fd238c67d597763c5832da34fd08a5ebde3"
         },
         {
           "path": "public/textures/stone-wall-castle/ao@512.webp",
-          "bytes": 142958,
-          "sha256": "527a3a570bd6cf9cb882e1d1cfcc1074b27b8a347fbfe5e1ec3626131094be31"
+          "bytes": 134254,
+          "sha256": "b71b583ebc00e7bc9bad4cabd2cb0aa2cbe7b496b863d20c535d2c4aae8ed5e1"
         },
         {
           "path": "public/textures/stone-wall-castle/ao@256.webp",
-          "bytes": 39720,
-          "sha256": "b5bc0cf2a4a7ca7e56cefcc295075dfd0116f8df145a82268a91c8b3abb3a6a9"
+          "bytes": 39024,
+          "sha256": "36a68a4d3ff2efc4f6227ff0f67b90ea6f8c6b95809083c4cb8e6f26b1efa5d1"
         }
       ],
-      "generatedAt": "2026-08-01T10:44:50.506Z"
+      "generatedAt": "2026-08-01T11:05:47.948Z"
     }
   },
-  "updatedAt": "2026-08-01T10:52:47.234Z"
+  "updatedAt": "2026-08-01T11:06:40.560Z"
 }

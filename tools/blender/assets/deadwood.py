@@ -26,6 +26,7 @@ import sys
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
+import bpy  # noqa: E402
 from mathutils import Matrix, Vector  # noqa: E402
 from mathutils import noise as bnoise  # noqa: E402
 
@@ -33,7 +34,7 @@ from lib import cli, exporter, lod, mat, mesh as M, uvtools  # noqa: E402
 
 NAME = "deadwood"
 TAU = math.pi * 2.0
-SMOOTH = 53.0           # sharp-edge angle: smooth bark, crisp splinters
+SMOOTH = 40.0           # sharp-edge angle: smooth bark, crisp splinters
 
 
 # ---------------------------------------------------------------------------
@@ -84,7 +85,7 @@ def patch_predicate(scale, threshold, offset=(0.0, 0.0, 0.0), octaves=3,
     def pred(poly, _obj):
         c = poly.center + off
         return fbm(Vector((c.x * ax.x, c.y * ax.y, c.z * ax.z)) * scale,
-                   octaves) > threshold
+                   octaves, gain) > threshold
 
     return pred
 
@@ -199,7 +200,7 @@ def broken_branch(name, base, direction, length, r0, r1, rng, sides=6,
 
 def build_fallen_log(rng, mats):
     length = 6.9
-    rings = 24
+    rings = 22
     sides = 12
 
     pts, radii = [], []
@@ -228,8 +229,8 @@ def build_fallen_log(rng, mats):
 
     # bark relief: one coarse pass for the trunk's own irregularity, one at
     # roughly the vertex spacing so the ridges actually resolve
-    M.noise_displace(log, 0.034, scale=1.5, offset=rng.offset3(5.0), octaves=3)
-    M.noise_displace(log, 0.018, scale=3.6, offset=rng.offset3(5.0), octaves=3)
+    M.noise_displace(log, 0.046, scale=1.8, offset=rng.offset3(5.0), octaves=3)
+    M.noise_displace(log, 0.026, scale=4.6, offset=rng.offset3(5.0), octaves=3)
     # flatten what is buried in the duff
     M.cut_plane(log, (0.0, 0.0, -0.11), (0.0, 0.0, -1.0))
 
@@ -250,7 +251,7 @@ def build_fallen_log(rng, mats):
         r_here = radii[min(int(t * (rings - 1)), rings - 1)]
         parts.append(broken_branch(
             "dw_log_stub%d" % k, p, direction,
-            length=stubs.uniform(0.30, 0.62),
+            length=stubs.uniform(0.48, 0.88),
             r0=r_here * stubs.uniform(0.24, 0.34),
             r1=r_here * 0.09, rng=stubs.sub("s%d" % k),
             sides=6, droop=stubs.uniform(0.1, 0.4)))
@@ -265,8 +266,9 @@ def build_fallen_log(rng, mats):
     # resolve anything finer than a face anyway.
     mat.assign_all(obj, mats["wood"])
     mat.assign_faces(obj, mats["bark"],
-                     patch_predicate(1.05, 0.02, offset=(3.1, 8.4, 1.7),
-                                     aniso=(0.28, 0.50, 0.50), octaves=1))
+                     patch_predicate(1.30, -0.04, offset=(3.1, 8.4, 1.7),
+                                     aniso=(0.25, 0.96, 0.96), octaves=2,
+                                     gain=0.30))
     uvtools.cube_project(obj, 0.6)
     M.shade_smooth(obj, SMOOTH)
     return obj
@@ -277,29 +279,29 @@ def build_fallen_log(rng, mats):
 # ---------------------------------------------------------------------------
 
 def build_stump(rng, mats):
-    height = 1.24
+    height = 1.05
     segments = 20
     profile = [
         (0.000, -0.150),
-        (0.400, -0.120),
-        (0.372, -0.020),
-        (0.322, 0.060),
-        (0.286, 0.140),
-        (0.264, 0.260),
-        (0.253, 0.470),
-        (0.246, 0.720),
-        (0.240, 0.980),
-        (0.234, height),
-        (0.162, height - 0.062),   # the broken crown is hollow / crater-like
-        (0.076, height - 0.155),
-        (0.000, height - 0.205),
+        (0.340, -0.120),
+        (0.320, -0.020),
+        (0.286, 0.055),
+        (0.264, 0.125),
+        (0.251, 0.230),
+        (0.244, 0.400),
+        (0.239, 0.620),
+        (0.234, 0.850),
+        (0.229, height),
+        (0.158, height - 0.058),   # the broken crown is hollow / crater-like
+        (0.074, height - 0.145),
+        (0.000, height - 0.190),
     ]
     stump = M.revolve("dw_stump", profile, segments=segments, cap=False)
 
     # narrow, tall lobes -> discrete buttress roots rather than a smooth skirt
     flare = rng.sub("flare")
-    lobes = [(flare.uniform(0.0, TAU), flare.uniform(0.10, 0.30),
-              flare.uniform(0.22, 0.52)) for _ in range(6)]
+    lobes = [(flare.uniform(0.0, TAU), flare.uniform(0.055, 0.185),
+              flare.uniform(0.15, 0.34)) for _ in range(6)]
     crown = rng.sub("crown")
     spikes = [(crown.uniform(0.0, TAU), crown.uniform(0.14, 0.52),
                crown.uniform(0.09, 0.30)) for _ in range(7)]
@@ -311,7 +313,7 @@ def build_stump(rng, mats):
         ang = math.atan2(p.y, p.x)
 
         # root flare -- radial buttress lobes, dying out fast by z ~ 0.28
-        fall = max(0.0, 1.0 - max(0.0, p.z) / 0.28) ** 2.2
+        fall = max(0.0, 1.0 - max(0.0, p.z) / 0.22) ** 2.6
         if r > 1e-5 and fall > 0.0:
             grow = bumps(ang, lobes) * fall
             p.x += (p.x / r) * grow
@@ -319,7 +321,7 @@ def build_stump(rng, mats):
 
         # splintered crown -- weight by height AND radius so the crater floor
         # and the centre stay put while the rim tears upward
-        zw = max(0.0, (p.z - 0.80) / (height - 0.80))
+        zw = max(0.0, (p.z - 0.68) / (height - 0.68))
         rw = max(0.0, min(1.0, (r - 0.045) / 0.13))
         w = (zw ** 1.6) * rw
         if w > 0.0:
@@ -346,19 +348,20 @@ def build_stump(rng, mats):
         a = shards.uniform(0.0, TAU)
         r = shards.uniform(0.16, 0.23)
         base = Vector((math.cos(a) * r, math.sin(a) * r,
-                       height - shards.uniform(0.10, 0.02)))
+                       height - shards.uniform(0.24, 0.06)))
         up = Vector((math.cos(a) * shards.uniform(-0.30, 0.38),
                      math.sin(a) * shards.uniform(-0.30, 0.38),
                      1.0)).normalized()
-        h = shards.uniform(0.20, 0.52)
+        h = shards.uniform(0.14, 0.36)
         pts = [tuple(base),
                tuple(base + up * (h * 0.55)
                      + Vector((shards.uniform(-0.025, 0.025),
                                shards.uniform(-0.025, 0.025), 0.0))),
                tuple(base + up * h)]
-        radii = [shards.uniform(0.032, 0.055), 0.020, 0.004]
-        parts.append(M.tube("dw_stump_shard%d" % k, pts, radii, sides=4,
-                            caps=True))
+        radii = [shards.uniform(0.036, 0.058), 0.028, 0.013]
+        shard = M.tube("dw_stump_shard%d" % k, pts, radii, sides=4, caps=True)
+        M.noise_displace(shard, 0.010, scale=7.0, offset=shards.offset3(8.0))
+        parts.append(shard)
 
     # surface roots crawling out of the flare
     roots = rng.sub("roots")
@@ -387,8 +390,9 @@ def build_stump(rng, mats):
 
     mat.assign_all(obj, mats["bark"])
     mat.assign_faces(obj, mats["wood"],
-                     patch_predicate(1.35, -0.02, offset=(1.4, 2.9, 6.2),
-                                     aniso=(0.9, 0.9, 0.30), octaves=1))
+                     patch_predicate(1.30, -0.02, offset=(1.4, 2.9, 6.2),
+                                     aniso=(1.10, 1.10, 0.28), octaves=2,
+                                     gain=0.30))
     uvtools.cube_project(obj, 0.5)
     M.shade_smooth(obj, SMOOTH)
     return obj
@@ -419,17 +423,29 @@ def build_root_plate(rng, mats):
 
     # break the circle: strong radial lobes + heavy matted-root displacement
     edge = rng.sub("edge")
-    lobes = [(edge.uniform(0.0, TAU), edge.uniform(-0.36, 0.30),
-              edge.uniform(0.22, 0.75)) for _ in range(8)]
+    lobes = [(edge.uniform(0.0, TAU), edge.uniform(-0.48, 0.40),
+              edge.uniform(0.16, 0.55)) for _ in range(11)]
 
     # Thickness is what separates a root pan from a pancake: the real thing is
     # 20-50 cm of matted soil and root, and wildly uneven across its face.
     tseed = Vector(rng.sub("thick").offset3(11.0))
 
+    def face_z(x, y, side, out=0.0):
+        """Approximate the pan's own surface height at (x, y).
+
+        Everything stuck to the face -- roots, clods -- has to follow the same
+        thickness field the disc was displaced by, or it ends up swallowed
+        wherever the pan happens to be thick.
+        """
+        u = min(1.0, math.hypot(x / 1.16, y / 0.86) / radius)
+        taper = (1.0 - u * u) ** 0.6
+        thick = 1.0 + 0.95 * fbm(Vector((x, y, 0.0)) * 1.05 + tseed, 2)
+        return side * (half * taper * thick * 0.94 + out)
+
     def outline(co, _n, _i):
         p = co.copy()
         r = math.hypot(p.x, p.y)
-        p.z *= 1.0 + 0.70 * fbm(Vector((p.x, p.y, 0.0)) * 1.35 + tseed, 2)
+        p.z *= 1.0 + 0.95 * fbm(Vector((p.x, p.y, 0.0)) * 1.05 + tseed, 2)
         if r < 1e-5:
             return p
         ang = math.atan2(p.y, p.x)
@@ -439,8 +455,11 @@ def build_root_plate(rng, mats):
         return p
 
     M.displace(disc, outline)
-    M.noise_displace(disc, 0.105, scale=1.7, offset=rng.offset3(3.0), octaves=4)
-    M.noise_displace(disc, 0.042, scale=3.9, offset=rng.offset3(3.0), octaves=3)
+    # amplitudes are deliberately large relative to the face size: this is a
+    # torn mat of soil and root, and a subsurfed lathe left alone reads as a
+    # river pebble
+    M.noise_displace(disc, 0.190, scale=1.15, offset=rng.offset3(3.0), octaves=3)
+    M.noise_displace(disc, 0.085, scale=2.45, offset=rng.offset3(3.0), octaves=3)
 
     parts = [disc]
 
@@ -494,12 +513,12 @@ def build_root_plate(rng, mats):
     # roots bursting out of the *face* of the pan -- this is what stops the
     # silhouette reading as a spiky disc from the front
     face = rng.sub("face")
-    for k in range(5):
+    for k in range(3):
         a = face.uniform(-0.15 * math.pi, 1.15 * math.pi)
         rr = face.uniform(0.20, 0.90) * radius
         side = 1.0 if face.chance(0.5) else -1.0
-        base = Vector((math.cos(a) * rr * 1.16, math.sin(a) * rr * 0.86,
-                       side * half * 0.45))
+        bx, by = math.cos(a) * rr * 1.16, math.sin(a) * rr * 0.86
+        base = Vector((bx, by, face_z(bx, by, side, -0.03)))
         d = Vector((math.cos(a) * 0.55, math.sin(a) * 0.55, side * 1.0))
         d.normalize()
         n = 4
@@ -515,17 +534,45 @@ def build_root_plate(rng, mats):
         splinter_tube_end(f_obj, 5, n, face.sub("f%d" % k), False, 0.06, 0.25)
         parts.append(f_obj)
 
+    # Roots lying ACROSS the face of the pan.  Without them the disc reads as
+    # a smooth membrane with spikes round the rim -- a sea urchin.  These are
+    # what turn it into a mat.
+    web = rng.sub("web")
+    for k in range(5):
+        a0 = web.uniform(0.0, TAU)
+        a1 = a0 + web.uniform(1.1, 2.7) * web.choice((-1.0, 1.0))
+        side = 1.0 if web.chance(0.5) else -1.0
+        r0 = web.uniform(0.22, 0.96) * radius
+        r1 = web.uniform(0.22, 0.96) * radius
+        x0, y0 = math.cos(a0) * r0 * 1.16, math.sin(a0) * r0 * 0.86
+        x1, y1 = math.cos(a1) * r1 * 1.16, math.sin(a1) * r1 * 0.86
+        p0 = Vector((x0, y0, face_z(x0, y0, side, 0.02)))
+        p1 = Vector((x1, y1, face_z(x1, y1, side, 0.02)))
+        thick = web.uniform(0.022, 0.044)
+        pts, radii = [], []
+        for i in range(3):
+            t = i * 0.5
+            bow = math.sin(math.pi * t)
+            q = p0.lerp(p1, t) + Vector((web.uniform(-0.10, 0.10) * bow,
+                                         0.0, 0.0))
+            q.y += web.uniform(-0.10, 0.10) * bow
+            q.z = face_z(q.x, q.y, side, 0.02 + 0.055 * bow)
+            pts.append(tuple(q))
+            radii.append(thick * (1.0 - 0.30 * bow))
+        parts.append(M.tube("dw_plate_web%d" % k, pts, radii, sides=4,
+                            caps=True))
+
     # clods of soil and the odd stone still gripped by the root mat
     clods = rng.sub("clods")
     for k in range(4):
         a = clods.uniform(-0.10 * math.pi, 1.10 * math.pi)
         rr = clods.uniform(0.20, 0.88) * radius
         side = 1.0 if clods.chance(0.5) else -1.0
+        cx, cy = math.cos(a) * rr * 1.16, math.sin(a) * rr * 0.86
         clod = M.icosphere(
             "dw_plate_clod%d" % k, radius=clods.uniform(0.085, 0.165),
             subdivisions=1,
-            location=(math.cos(a) * rr * 1.16, math.sin(a) * rr * 0.86,
-                      side * half * 0.62))
+            location=(cx, cy, face_z(cx, cy, side, -0.02)))
         M.noise_displace(clod, 0.040, scale=5.5, offset=clods.offset3(4.0))
         parts.append(clod)
 
@@ -608,6 +655,10 @@ def main():
                                  ratios=(1.0, 0.40, 0.12), smooth_angle=SMOOTH)
         lod.report(lods)
         all_lods.extend(lods)
+
+    # M.join unlinks its source objects; without an explicit update the
+    # exporter's walk over view_layer.objects can iterate freed pointers.
+    bpy.context.view_layer.update()
 
     path = cli.out_path(args, NAME + ".glb")
     exporter.export_glb(all_lods, path, draco=args.draco)

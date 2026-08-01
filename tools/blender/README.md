@@ -165,12 +165,30 @@ parses the actual shipped `.glb` files with `@gltf-transform/core` (Draco
 decoded via `draco3dgltf`) — they are not self-reported by the build.
 
 <!-- VALIDATION_TABLE_START -->
-_Run `node tools/blender/validate.mjs --markdown` to regenerate._
+_Generated 2026-08-01 by `node tools/blender/validate.mjs --write-readme`._
+
+| Asset | LOD0 tris | All LODs | Meshes | Materials | Textures | Size | Draco | Status |
+|---|---:|---:|---:|---:|---:|---:|:-:|---|
+| `arena-tent` | 912 | 1276 (LOD0:912 LOD1:364) | 2 | 2 | 0 | 52.9 KB | no | OK |
+| `beech` | 10840 | 13922 (LOD0:10840 LOD1:3070 LOD2:12) | 9 | 3 | 3 | 472.0 KB | yes | OK |
+| `boulder-set` | 8520 | 12780 (LOD0:8520 LOD1:3408 LOD2:852) | 18 | 4 | 0 | 141.8 KB | yes | OK |
+| `control-flag` | 464 | 703 (LOD0:464 LOD1:184 LOD2:55) | 3 | 4 | 0 | 38.4 KB | no | OK |
+| `control-stand` | 756 | 1146 (LOD0:756 LOD1:302 LOD2:88) | 3 | 2 | 0 | 43.8 KB | no | OK |
+| `deadwood` | 3046 | 4596 (LOD0:3046 LOD1:1216 LOD2:334) | 9 | 4 | 0 | 82.3 KB | yes | OK |
+| `finish-gantry` | 1728 | 2404 (LOD0:1728 LOD1:676) | 2 | 3 | 0 | 36.4 KB | yes | OK |
+| `race-belt` | 880 | 880 (LOD0:880) | 1 | 3 | 0 | 38.3 KB | no | OK |
+| `si-unit` | 450 | 684 (LOD0:450 LOD1:180 LOD2:54) | 3 | 3 | 0 | 39.6 KB | no | OK |
+| `spectator-fence` | 480 | 721 (LOD0:480 LOD1:191 LOD2:50) | 3 | 2 | 0 | 48.2 KB | no | OK |
+| `spruce` | 11840 | 15264 (LOD0:11840 LOD1:3412 LOD2:12) | 9 | 6 | 5 | 398.9 KB | yes | OK |
+
+**Total: 11 assets, 39916 LOD0 triangles, 1392.7 KB on disk.**
 <!-- VALIDATION_TABLE_END -->
 
-Preview sheets for every asset are in [`previews/`](previews/) — four yaw
-angles each, rendered from the exported `.glb` (not from the in-memory build
-scene), 3-point lit, EEVEE Next.
+Preview sheets for every asset are in [`previews/`](previews/), rendered from
+the exported `.glb` — not from the in-memory build scene, so they verify the
+shipped file. Single-variant assets get four yaw angles in a 2x2 grid;
+multi-variant assets get one column per variant at two yaw angles, each variant
+re-centred on its own bounds by the preview tool.
 
 ## Triangle budgets
 
@@ -185,13 +203,63 @@ Enforced by `validate.mjs`; exceeding one fails the build.
 | `spruce` | 12000 | 3 variants, ~4000 each |
 | `beech` | 11000 | 3 variants |
 | `deadwood` | 3600 | 3 variants |
-| `race-belt` | 900 | first-person prop, LOD0 only |
+| `race-belt` | 1000 | first-person prop, LOD0 only |
 | `finish-gantry` | 2200 | one-off |
 | `arena-tent` | 1400 | one-off |
 | `spectator-fence` | 600 | tiles along +X |
 
-Overall target: **under ~40k triangles across all LOD0s**, since these are
-instanced heavily across the terrain.
+The per-asset numbers deliberately sum to more than the global cap so one asset
+can borrow another's slack. The **global ceiling of 40,000 LOD0 triangles** is
+what is actually enforced (`TOTAL_LOD0_BUDGET` in `validate.mjs`), because these
+are instanced heavily across the terrain and the sum is what the frame pays for.
+
+## Runtime notes
+
+- **Bark PBR is bound at runtime, not embedded.** Trunk materials are named
+  `spruce_bark` / `beech_bark` and carry a small (256 px) albedo so the `.glb`
+  looks right standalone. The full sets in `public/textures/bark-*/`
+  (albedo/normal/roughness/ao) should be bound by material name on load —
+  embedding them per asset would have added megabytes to every tree, whereas
+  bound at runtime one texture set serves every trunk in the forest. Trunk UVs
+  are cylinder-projected and tile along the trunk axis, so they are ready for it.
+- **`spectator-fence` tiles at `repeatPitchX = 2.5 m`** along +X (in the
+  manifest). Consecutive instances overlap only where the hook and eye interlock.
+- **`finish-gantry`'s banner is single-sided**, so brand art reads un-mirrored
+  from −Y and mirrored from +Y.
+
+## Things that bit us (kept here so they don't again)
+
+- **`join()` silently dropped UVs and sharp edges.** `bmesh.faces.new()`
+  allocates fresh loops, which do not inherit loop data layers, and fresh edges
+  default to smooth. Every mesh except the first collapsed to UV (0,0) — for an
+  alpha-cutout atlas material that means the object samples one transparent
+  texel and *vanishes*, which looked exactly like a renderer bug and cost real
+  time to diagnose. Both are now copied explicitly in `join()`.
+- **`apply_transform()` read a stale `matrix_world`.** `matrix_world` is derived
+  lazily, so an object whose `.location` had just been set still reported
+  identity. Since `join()` calls `apply_transform()` on every part, positioned
+  parts silently snapped to the origin. Fixed with a `view_layer.update()`.
+- **The preview rig was two stops hot.** Blender 4.x tone-maps through AgX, so
+  blown highlights come back *desaturated* — every asset rendered as pale pastel
+  regardless of its real base colour, and authors started darkening materials to
+  compensate for the instrument. Total irradiance is now ~3.8. If assets ever
+  look uniformly washed out again, check the rig before touching the materials.
+- **Base colours are linear.** `mat.py`'s palette constants are linear values,
+  not sRGB: `GRANITE_MID` at 0.235 linear is ≈0.52 sRGB. Judge them in a render,
+  not by reading the number.
+- **Blender can crash under heavy parallelism.** Four concurrent instances
+  segfaulted once during glTF export; the same asset built fine alone. `--jobs 2`
+  is the safe setting on an 8-core machine.
+
+## Known limitations
+
+- Material patches (lichen on boulders, bark-vs-bare-wood on deadwood) are
+  assigned **per polygon**, so at very close range their edges follow the
+  triangulation. At the tri counts these assets ship at that is only visible
+  much closer than gameplay distance; fixing it properly needs a texture or
+  vertex-colour mask rather than material slots.
+- `deadwood`'s exposed bare wood currently reads slightly too bleached against
+  its bark.
 
 ## Interactive Blender (optional)
 

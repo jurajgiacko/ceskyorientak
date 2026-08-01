@@ -468,7 +468,14 @@ const WEBP_OPTS = {
 
 /* --------------------------------------------------------------- the pass */
 
-export async function buildPbrSet(asset, opts = {}) {
+/**
+ * Compute the four maps at working resolution and hand back raw pixels.
+ *
+ * Split out from `buildPbrSet` so the KTX2 pass can encode from these exact
+ * bytes rather than decoding the WebP the WebP pass just wrote — otherwise
+ * every GPU-compressed texture would be a lossy re-encode of a lossy encode.
+ */
+export async function computeMaps(asset, opts = {}) {
   const WORK = opts.work || 1024;
   const mat = { ...DEFAULT_MATERIAL, ...(asset.material || {}) };
   const src = resolve(CACHE_DIR, `${asset.id}.png`);
@@ -517,6 +524,20 @@ export async function buildPbrSet(asset, opts = {}) {
     roughness: { buf: buildRoughness(lin, w, h, mat), ch: 1 },
     ao: { buf: buildAO(height, w, h, mat), ch: 1 }
   };
+  return { maps, w, h };
+}
+
+/** Wrap-safe decimation of a map to `size`, re-normalising normals. */
+export function mapAtSize(name, buf, w, h, ch, size) {
+  const factor = w / size;
+  if (factor === 1) return { buf, size: w };
+  const out = boxDecimate(buf, w, h, ch, factor);
+  if (name === 'normal') renormalize(out, size * size);
+  return { buf: out, size };
+}
+
+export async function buildPbrSet(asset, opts = {}) {
+  const { maps, w, h } = await computeMaps(asset, opts);
 
   const outDir = resolve(TEX_DIR, asset.id);
   mkdirSync(outDir, { recursive: true });
@@ -525,13 +546,7 @@ export async function buildPbrSet(asset, opts = {}) {
   for (const name of MAP_NAMES) {
     const { buf, ch } = maps[name];
     for (const size of SIZES) {
-      const factor = w / size;
-      let out = buf, ow = w;
-      if (factor !== 1) {
-        out = boxDecimate(buf, w, h, ch, factor);
-        ow = size;
-        if (name === 'normal') renormalize(out, size * size);
-      }
+      const { buf: out, size: ow } = mapAtSize(name, buf, w, h, ch, size);
       const file = size === SIZES[0] ? `${name}.webp` : `${name}@${size}.webp`;
       const path = resolve(outDir, file);
       await sharp(out, { raw: { width: ow, height: ow, channels: ch } })

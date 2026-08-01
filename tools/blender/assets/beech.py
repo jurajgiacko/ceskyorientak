@@ -700,12 +700,14 @@ def main():
     # problem.  Only the 256 px albedo is embedded -- the runtime binds the rest
     # of the PBR set by material name, which is why this must stay `beech_bark`.
     if os.path.exists(BARK_TEX):
-        bark_img = tex.load_image(BARK_TEX, name="bark_beech_albedo")
+        # Transcode to PNG first: embedding the .webp directly would make
+        # EXT_texture_webp a *required* extension and any loader without it
+        # would reject the whole .glb, not just this texture.
+        bark_png = tex.ensure_png(BARK_TEX, args.cache, name="bark_beech_albedo")
+        bark_img = tex.load_image(bark_png, name="bark_beech_albedo")
         bark = mat.image_material("beech_bark", bark_img, alpha_mode="OPAQUE",
-                                  roughness=0.74, use_alpha=False)
-        node = bark.node_tree.nodes.get("BASE_TEX")
-        if node is not None:
-            node.extension = "REPEAT"   # image_material defaults to CLIP
+                                  roughness=0.74, use_alpha=False,
+                                  extension="REPEAT")
     else:
         print("beech: %s missing, falling back to a flat bark colour" % BARK_TEX)
         bark = mat.principled("beech_bark", BARK, roughness=0.74, specular=0.28)

@@ -94,11 +94,21 @@ def principled(name, base_color=(0.8, 0.8, 0.8), roughness=0.7, metallic=0.0,
 
 def image_material(name, image, alpha_mode="CLIP", roughness=0.85,
                    metallic=0.0, use_alpha=True, backface_culling=False,
-                   emission_boost=0.0):
+                   emission_boost=0.0, extension="CLIP", alpha_cutoff=0.4):
     """Material driven by a bpy image (base colour + alpha).
 
     Used for foliage cards and billboard imposters, where the silhouette
     lives entirely in the texture's alpha channel.
+
+    `extension` is the texture wrap mode: "CLIP" (-> CLAMP_TO_EDGE) is right
+    for atlas cells, "REPEAT" for tiling maps like bark. Getting this wrong on
+    a tiling map smears the edge texel across the whole surface.
+
+    alpha_mode="CLIP" inserts an explicit threshold node rather than relying on
+    `blend_method`: since Blender 4.2 the glTF exporter decides alphaMode by
+    pattern-matching the node graph, so `blend_method` alone silently exports
+    as BLEND -- which for foliage means sorted transparency instead of a cheap
+    alpha test.
     """
     if name in bpy.data.materials:
         return bpy.data.materials[name]
@@ -117,12 +127,21 @@ def image_material(name, image, alpha_mode="CLIP", roughness=0.85,
     tex.location = (-250, 0)
     tex.image = image
     tex.interpolation = "Linear"
-    tex.extension = "CLIP"
+    tex.extension = extension
     tex.name = "BASE_TEX"
 
     nt.links.new(tex.outputs["Color"], _sock(bsdf, "base_color"))
     if use_alpha:
-        nt.links.new(tex.outputs["Alpha"], _sock(bsdf, "alpha"))
+        if alpha_mode == "CLIP":
+            thr = nt.nodes.new("ShaderNodeMath")
+            thr.operation = "GREATER_THAN"
+            thr.location = (-40, -220)
+            thr.name = "ALPHA_CLIP"
+            thr.inputs[1].default_value = alpha_cutoff
+            nt.links.new(tex.outputs["Alpha"], thr.inputs[0])
+            nt.links.new(thr.outputs[0], _sock(bsdf, "alpha"))
+        else:
+            nt.links.new(tex.outputs["Alpha"], _sock(bsdf, "alpha"))
     _set(bsdf, "roughness", roughness)
     _set(bsdf, "metallic", metallic)
     _set(bsdf, "specular", 0.2)

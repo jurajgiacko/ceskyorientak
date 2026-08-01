@@ -49,8 +49,8 @@ from lib import cli, exporter, lod, mat, mesh as M, scatter, tex, uvtools  # noq
 NAME = "spruce"
 ATLAS_SIZE = 512
 ATLAS_CELLS = 2
-IMPOSTER_PX = 256       # imposter render height in pixels
-IMPOSTER_MAX_W = 128    # ...capped in width; LOD2 is only ever seen far away
+IMPOSTER_PX = 224       # imposter render height in pixels
+IMPOSTER_MAX_W = 112    # ...capped in width; LOD2 is only ever seen far away
 BARK_TEX = ("public", "textures", "bark-spruce", "albedo@256.webp")
 
 
@@ -259,11 +259,11 @@ QUALITY = [
     dict(trunk_sides=6, trunk_pts=11, branch_sides=3, branch_pts=4,
          whorl_frac=1.00, per_station=3, station_a=2.0, station_b=1.25,
          station_max=9, card_fill=2.80, card_mul=1.0, min_mul=1.0,
-         apex_cards=8),
+         card_span=1.15, apex_cards=8),
     dict(trunk_sides=4, trunk_pts=6, branch_sides=3, branch_pts=4,
          whorl_frac=0.50, per_station=2, station_a=1.2, station_b=0.70,
-         station_max=5, card_fill=2.90, card_mul=2.05, min_mul=1.15,
-         apex_cards=3),
+         station_max=5, card_fill=2.90, card_mul=1.0, min_mul=1.55,
+         card_span=1.50, apex_cards=4),
 ]
 
 
@@ -415,6 +415,9 @@ def dress_branch(out, rng, f, length, spec, q, tag):
     step = span / n_st
     hc = clamp(q["card_fill"] * step * length * q["card_mul"],
                spec["card_min"] * q["min_mul"], spec["card_max"] * q["card_mul"])
+    # a card must never dwarf the branch it sits on, or the cone silhouette
+    # balloons into a cylinder at the narrow top of the crown
+    hc = min(hc, length * q["card_span"])
 
     per = q["per_station"]
     for i in range(n_st):
@@ -443,7 +446,7 @@ def dress_branch(out, rng, f, length, spec, q, tag):
 def dress_apex(out, rng, pts, spec, q, top_z):
     """A tuft on the leader so the tree ends in a point, not a bare spike."""
     n = q["apex_cards"]
-    hc = clamp(spec["card_min"] * 1.15 * q["card_mul"], 0.10, 1.2)
+    hc = clamp(spec["card_min"] * 1.15 * q["min_mul"], 0.10, 1.2)
     for i in range(n):
         t = i / float(max(1, n))
         z = top_z - hc * (0.35 + 1.25 * t)
@@ -798,7 +801,10 @@ def main():
         all_lods.extend(group)
 
     path = cli.out_path(args, NAME + ".glb")
-    exporter.export_glb(all_lods, path, draco=args.draco)
+    # tighter draco quantisation than the default: a 32 m tree at 12-bit
+    # positions still resolves to ~8 mm, well under one needle card
+    exporter.export_glb(all_lods, path, draco=args.draco, position_bits=12,
+                        normal_bits=8, texcoord_bits=10)
     exporter.emit_meta(NAME, path, all_lods, extra={
         "variants": len(VARIANTS),
         "originNote": "base of trunk on the ground, +Z up; every variant is "

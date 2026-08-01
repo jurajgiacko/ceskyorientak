@@ -29,7 +29,7 @@
       "seed": 10101,
       "tileable": true,
       "pbr": true,
-      "prompt": "Extreme close-up of Norway spruce (Picea abies) bark from a mature Šumava forest tree, filling the entire frame. Thin irregular reddish-brown to grey-brown scaly plates flaking apart, narrow dark fissures between the scales, small patches of pale grey-green crustose lichen and a little dried resin. Bark surface flattened out and photographed straight on, no trunk curvature, no silhouette, no edges of the trunk visible.",
+      "prompt": "Extreme macro photograph of Norway spruce (Picea abies) bark, filling the entire frame. The whole surface is covered in small thin flaking scales like overlapping cornflakes or fish scales, each only one to three centimetres across, roughly circular or oval, lifting and curling away at their edges and casting no shadow, packed densely in a random mosaic across the entire surface. Muted grey-brown, dull chocolate and cold grey-purple tones, with darker underbark showing in the narrow gaps where scales have dropped off, plus a few patches of pale grey-green crustose lichen and small beads of dried amber resin. The surface is essentially flat and evenly scaly overall — there are no deep vertical furrows, no long ridges, no channels, no large plates, and no thick orange or salmon Scots pine bark. Photographed straight on and flattened out, no trunk curvature, no silhouette, no edges of the trunk visible.",
       "material": {
         "heightStrength": 1.5,
         "roughRange": [
@@ -309,7 +309,7 @@
       "seed": 10503,
       "tileable": true,
       "pbr": true,
-      "prompt": "Old Bohemian red clay bonnet roof tiles seen straight down from directly above, filling the entire frame. Exactly eight horizontal courses of overlapping curved half-round terracotta tiles evenly spaced from the very top edge of the frame to the very bottom edge, and about twelve tiles across each course, so the rows and columns run edge to edge with no partial course cut off at the border. Colour varies tile to tile from faded orange-red to dark brown and grey-green with age, dusty chalky surface, lichen and moss spotting along the lower lip of each tile, a few tiles chipped and slightly out of line. No battens, no dark vertical lines, no ridge, no chimney, no gutter, no roof outline, no perspective.",
+      "prompt": "Old Bohemian roof of curved half-round clay bonnet tiles seen straight down from directly above, filling the entire frame. Each tile is a pronounced barrel-shaped half-cylinder with a strongly rounded convex crown and a deep rounded valley between neighbouring tiles, so the surface is a rippling corrugated field of alternating ridges and troughs with obvious three-dimensional curvature. Exactly eight horizontal courses evenly spaced from the very top edge of the frame to the very bottom edge, and about ten tiles across each course, running edge to edge with no partial course cut off at the border. Colour varies tile to tile from faded orange-red to dark brown and grey-green with age, dusty chalky terracotta, moss and lichen gathered in the troughs and along the lower lip of each tile, a few tiles chipped or slightly out of line. No flat tiles, no battens, no dark vertical lines, no ridge, no chimney, no gutter, no roof outline, no perspective.",
       "material": {
         "heightStrength": 1.4,
         "roughRange": [
@@ -320,9 +320,9 @@
         "heightBlur": 0.55,
         "mirrorBand": 0.03
       },
-      "notes": "Krumlov / Vyšší Brod rooftops seen from the sprint-leg camera. Genuinely periodic material: the ACF peaks at the tile-course spacing (~152px at 1024, ~38px at 256). That rhythm is the roof, not a tiling defect, so acfPeak is relaxed for this asset only.",
+      "notes": "Krumlov / Vyšší Brod rooftops. The only asset with a threshold override, and a deliberate trade. The first generation had a free-running course rhythm whose phase did not match across the wrap, so tiling it showed a visible break. The prompt now asks for exactly 8 courses by 12 tiles edge to edge, which makes the period divide the tile and removes the break — at the cost of a genuinely more regular material, so the ACF legitimately rises: 0.44 at 1024, 0.54 at 512, 0.64 at 256, always peaking at the course spacing. The rise with decimation is expected (see README) and the override is set above the worst tier. That periodicity is the roof, not a tiling defect. Verified visually at 2x2.",
       "validate": {
-        "acfPeak": 0.45
+        "acfPeak": 0.7
       }
     },
     {
@@ -333,7 +333,7 @@
       "seed": 10504,
       "tileable": true,
       "pbr": true,
-      "prompt": "Medieval Bohemian castle wall masonry seen straight on, filling the entire frame. Roughly squared granite and gneiss blocks of mixed sizes laid in irregular courses, faces pitted and weathered, deep recessed lime mortar joints with a coarse aggregate, streaks of grey and rust staining, small patches of moss and lichen in the joints. Uniform coverage across the frame, no arch, no window, no corner, no ground, no sky.",
+      "prompt": "Medieval Bohemian castle wall of irregular coursed rubble masonry, seen straight on, filling the entire frame. Roughly broken granite and gneiss stones of wildly varying size — some large blocks thirty centimetres across sitting beside clusters of small fist-sized pieces and thin flat slivers used as levelling packers — fitted together in loose, wandering, uneven courses that drift and break rather than running straight. Thick, generous, coarse lime mortar joints of very uneven width, sandy and crumbling, in places smeared over the stone faces. Stone faces pitted, split and weathered, in mixed grey, buff, rust and dark charcoal tones, with moss and lichen in the joints and grey water staining. Deliberately irregular and hand-built — not brickwork, not regular blocks, not uniform sizes, not machine-cut, not modern segmental blocks, not cobblestone paving. No arch, no window, no corner, no ground, no sky.",
       "material": {
         "heightStrength": 1.5,
         "roughRange": [
