@@ -1,23 +1,25 @@
 {
   "_": "Build-time image generation manifest for ORIENTAK: VYŠŠÍ BROD. Source of truth for tools/imagegen/generate.mjs. The shipped game NEVER calls an image API — everything here runs offline at build time and is committed as static WebP under public/.",
   "model": "gemini-2.5-flash-image",
-
   "styleAnchor": {
     "texture": "Photographic material surface scan. Perfectly orthographic straight-down camera, sensor plane exactly parallel to the surface, zero perspective, zero convergence. Completely flat even diffuse illumination from a large overhead softbox dome — light is identical in every corner of the frame, exposure is uniform edge to edge. Albedo-only surface colour: no cast shadows, no self-shadowing, no specular highlights, no glare, no vignette, no gradient across the frame. Entire frame in sharp focus, no depth of field, no blur. Uniform physical scale across the whole frame, roughly a 1.5 metre by 1.5 metre patch of ground or surface. Natural desaturated Central European colour, overcast-daylight white balance around 6000K. Dense uniform natural detail filling the frame with no single dominant feature and no compositional focal point. High resolution, fine micro-detail, photographic grain, shot for use as a repeating game texture.",
     "art": "Photoreal cinematic digital matte painting, Central European Bohemian landscape photography aesthetic, natural colour grading, physically plausible atmospheric perspective and haze, restrained contrast, no HDR halos, no oversaturation. Composition balanced for use as a game background behind UI."
   },
-
   "negativePrompt": {
     "texture": "no text, no lettering, no numbers, no watermark, no logo, no signage, no label, no colour chart, no scale bar, no ruler, no swatch grid, no collage, no border, no frame, no rounded corners, no people, no faces, no hands, no animals, no tools, no man-made objects, no litter, no footprints, no tyre tracks, no perspective, no horizon, no sky, no background, no cast shadow, no drop shadow, no directional light, no sunbeam, no dappled light, no spotlight, no specular highlight, no wet glossy reflection, no vignette, no lens flare, no bokeh, no depth of field, no tilt shift, no motion blur, no illustration, no painting, no drawing, no 3D render, no CGI, no cartoon, no seamless-pattern preview mosaic",
-
     "art": "no text, no lettering, no numbers, no watermark, no logo, no signage, no brand mark, no product packaging, no jersey sponsor, no bib number, no recognisable real person, no identifiable face, no portrait, no cartoon, no anime, no oversaturated fantasy colour, no lens flare, no HDR halo, no distorted anatomy, no extra limbs"
   },
-
   "defaults": {
-    "texture": { "aspect": "1:1", "tileable": true, "pbr": true },
-    "art": { "tileable": false, "pbr": false }
+    "texture": {
+      "aspect": "1:1",
+      "tileable": true,
+      "pbr": true
+    },
+    "art": {
+      "tileable": false,
+      "pbr": false
+    }
   },
-
   "assets": [
     {
       "id": "bark-spruce",
@@ -28,7 +30,15 @@
       "tileable": true,
       "pbr": true,
       "prompt": "Extreme close-up of Norway spruce (Picea abies) bark from a mature Šumava forest tree, filling the entire frame. Thin irregular reddish-brown to grey-brown scaly plates flaking apart, narrow dark fissures between the scales, small patches of pale grey-green crustose lichen and a little dried resin. Bark surface flattened out and photographed straight on, no trunk curvature, no silhouette, no edges of the trunk visible.",
-      "material": { "heightStrength": 1.5, "roughRange": [0.62, 0.94], "aoStrength": 0.85, "heightBlur": 0.7 },
+      "material": {
+        "heightStrength": 1.5,
+        "roughRange": [
+          0.62,
+          0.94
+        ],
+        "aoStrength": 0.85,
+        "heightBlur": 0.7
+      },
       "notes": "Trunk imposters and close-LOD tree bark. Vertical grain is intentional and survives the 50% offset."
     },
     {
@@ -39,8 +49,16 @@
       "seed": 10102,
       "tileable": true,
       "pbr": true,
-      "prompt": "Extreme close-up of European beech (Fagus sylvatica) bark filling the entire frame. Smooth taut silvery-grey skin with faint horizontal lenticel bands, subtle shallow undulations, small dark olive and pale sage lichen blotches and a few tiny healed scars. Bark surface flattened out and photographed straight on, no trunk curvature, no silhouette, no edges of the trunk visible.",
-      "material": { "heightStrength": 0.7, "roughRange": [0.42, 0.72], "aoStrength": 0.5, "heightBlur": 1.0 },
+      "prompt": "Extreme macro photograph of the living bark of a European beech tree (Fagus sylvatica), filling the entire frame. Smooth taut silvery-grey woody skin stretched over the trunk, faint fine horizontal lenticel dashes, shallow soft swellings and ripples in the wood, a few small dark healed knot scars, and scattered flat blotches of olive and sage-grey crustose lichen. This is organic living tree bark, wood, not stone, not concrete, not plaster, not a wall, no mortar joints, no blocks, no courses. Bark surface flattened out and photographed straight on, no trunk curvature, no silhouette, no edges of the trunk visible.",
+      "material": {
+        "heightStrength": 0.7,
+        "roughRange": [
+          0.42,
+          0.72
+        ],
+        "aoStrength": 0.5,
+        "heightBlur": 1
+      },
       "notes": "Smooth material — deliberately low normal strength and lower roughness than spruce."
     },
     {
@@ -51,8 +69,16 @@
       "seed": 10201,
       "tileable": true,
       "pbr": true,
-      "prompt": "Weathered coarse porphyritic Weinsberg-type granite from the Šumava massif, filling the entire frame, seen straight down. Large blocky pale pink and cream potassium-feldspar phenocrysts up to three centimetres long set at random angles in a coarse grey groundmass of glassy grey quartz, white plagioclase and black flaky biotite. Crystals are clearly individually visible, not a fine even speckle. Rounded weathering hollows, granular decay where crystals have plucked out, fine hairline cracks, and patches of pale grey-green and rusty-orange crustose lichen creeping across the stone. Flat rock face, no boulder outline, no edges, no ground around it, not concrete, not terrazzo, not sandstone.",
-      "material": { "heightStrength": 1.2, "roughRange": [0.55, 0.88], "aoStrength": 0.8, "heightBlur": 0.6 },
+      "prompt": "Rough natural weathered granite outcrop surface in a Šumava forest, photographed straight down, filling the entire frame. Coarse crystalline rock: blocky pale pink and cream feldspar crystals two to three centimetres across interlocking directly with glassy grey quartz and black flaky biotite, no cement or paste between them. The surface is raw, dry, rough and eroded — decades of frost and rain have opened shallow hollows and pits, plucked crystals out leaving gritty sockets, and cut fine irregular hairline cracks; dark grey and rust-brown weathering stain darkens the low spots, and irregular patches of pale grey-green and sulphur-yellow crustose lichen creep across roughly a quarter of the stone. This is a rough natural rock face in the wild — absolutely not polished, not honed, not cut, not a slab, not a countertop, not a kitchen worktop, not concrete, not terrazzo. No boulder outline, no edges, no ground around it.",
+      "material": {
+        "heightStrength": 1.2,
+        "roughRange": [
+          0.55,
+          0.88
+        ],
+        "aoStrength": 0.8,
+        "heightBlur": 0.6
+      },
       "notes": "Šumava is a granite/gneiss massif — this is the dominant rock across the whole map."
     },
     {
@@ -64,7 +90,15 @@
       "tileable": true,
       "pbr": true,
       "prompt": "Heavily lichen-covered granite surface filling the entire frame, seen straight down. Roughly seventy percent of the stone is overgrown by overlapping crustose and foliose lichen colonies in chalky mint green, sulphur yellow, bone white and rust orange, with irregular scalloped colony margins; bare grey speckled granite shows through only in gaps. Flat rock face, no boulder outline, no edges, no ground around it.",
-      "material": { "heightStrength": 0.9, "roughRange": [0.7, 0.95], "aoStrength": 0.7, "heightBlur": 0.8 },
+      "material": {
+        "heightStrength": 0.9,
+        "roughRange": [
+          0.7,
+          0.95
+        ],
+        "aoStrength": 0.7,
+        "heightBlur": 0.8
+      },
       "notes": "Detail/variation layer blended over granite-boulder to break repetition on large rock faces."
     },
     {
@@ -75,8 +109,16 @@
       "seed": 10301,
       "tileable": true,
       "pbr": true,
-      "prompt": "Spruce forest floor seen straight down from above, filling the entire frame. A deep dense litter of fallen spruce needles lying in every direction, each needle about one and a half centimetres long, in desaturated olive-brown, greyish tan and faded khaki — muted and cool, never orange, never red, never pink. A scatter of thin grey dry twigs, a few spent spruce cones and loose cone scales, fragments of dark bark, and small tufts of dark green moss pushing through. Damp near-black humus visible in the gaps between the needles. Fine dense detail, uniform coverage across the frame.",
-      "material": { "heightStrength": 1.1, "roughRange": [0.72, 0.96], "aoStrength": 0.9, "heightBlur": 0.5 },
+      "prompt": "Spruce forest floor seen straight down from above, filling the entire frame. The ground is completely buried under a thick loose mat of fallen spruce needles, each about one and a half centimetres long, lying every which way and clearly individually visible as fine sharp strokes. Colour is warm greyish tan, olive brown and faded straw — muted and natural, not orange, not red, not pink, and not dark mud. Mixed through the needle mat: a few thin grey dry twigs, several spent brown spruce cones, loose cone scales and flakes of bark, and two or three small cushions of dark green moss. Only small glimpses of dark humus show between the needles. Crisp fine detail, uniform coverage across the frame.",
+      "material": {
+        "heightStrength": 1.1,
+        "roughRange": [
+          0.72,
+          0.96
+        ],
+        "aoStrength": 0.9,
+        "heightBlur": 0.5
+      },
       "notes": "Runnable-forest ground plane, the single most-seen texture in the game."
     },
     {
@@ -88,7 +130,15 @@
       "tileable": true,
       "pbr": true,
       "prompt": "Deciduous forest floor seen straight down from above, filling the entire frame. A dense layer of fallen beech and hornbeam leaves in tan, ochre, russet and faded brown, overlapping at all angles, some curled and skeletonised, mixed with dark leaf mould, a few small twigs and beech mast husks. Uniform coverage across the frame.",
-      "material": { "heightStrength": 1.0, "roughRange": [0.6, 0.9], "aoStrength": 0.9, "heightBlur": 0.6 },
+      "material": {
+        "heightStrength": 1,
+        "roughRange": [
+          0.6,
+          0.9
+        ],
+        "aoStrength": 0.9,
+        "heightBlur": 0.6
+      },
       "notes": "Beech stands on the warmer south-facing Vyšší Brod slopes."
     },
     {
@@ -100,7 +150,15 @@
       "tileable": true,
       "pbr": true,
       "prompt": "Thick carpet of forest moss seen straight down from above, filling the entire frame. Dense cushions of vivid and dark green feather moss and haircap moss with fine upright shoots, subtle variation between yellow-green and deep bottle-green cushions, a few dry spruce needles and a tiny fallen twig caught in the pile. Soft velvety micro-structure, uniform coverage across the frame.",
-      "material": { "heightStrength": 0.85, "roughRange": [0.78, 0.98], "aoStrength": 1.0, "heightBlur": 0.9 },
+      "material": {
+        "heightStrength": 0.85,
+        "roughRange": [
+          0.78,
+          0.98
+        ],
+        "aoStrength": 1,
+        "heightBlur": 0.9
+      },
       "notes": "Very rough, very high AO — moss eats light. Never let this read glossy."
     },
     {
@@ -111,8 +169,16 @@
       "seed": 10304,
       "tileable": true,
       "pbr": true,
-      "prompt": "Šumava peat bog vegetation seen straight down from above, filling the entire frame. Tussocks of purple moor grass and sedge in olive, straw and rust tones lying in tangled mats, pale bleached dead stems from last season, rusty red sphagnum bog moss between the tussocks, dark peaty water-soaked ground barely visible in the gaps. Uniform coverage across the frame.",
-      "material": { "heightStrength": 1.0, "roughRange": [0.6, 0.9], "aoStrength": 0.95, "heightBlur": 0.7 },
+      "prompt": "Šumava peat bog vegetation seen straight down from above, filling the entire frame, everything in razor-sharp focus. Long thin blades and stems of purple moor grass and sedge, twenty to forty centimetres long, lying flattened in tangled combed mats and clearly individually readable, in olive, straw yellow and rust brown, mixed with pale bleached dead stems from last season. Between the flattened grass mats, low cushions of rust-red and ochre sphagnum bog moss and slivers of dark peaty waterlogged ground. Every blade sharp and distinct, no blur anywhere, uniform coverage across the frame.",
+      "material": {
+        "heightStrength": 1,
+        "roughRange": [
+          0.6,
+          0.9
+        ],
+        "aoStrength": 0.95,
+        "heightBlur": 0.7
+      },
       "notes": "Slow/marsh terrain class. Colour must stay olive-rust, not lush green."
     },
     {
@@ -124,7 +190,15 @@
       "tileable": true,
       "pbr": true,
       "prompt": "Rough open moorland ground seen straight down from above, filling the entire frame. Low woody heather and bilberry scrub with small dark green leaves and wiry stems, dry brown heather twigs, patches of coarse tussock grass, pale reindeer lichen and scattered small granite grit. Tangled uneven low vegetation, uniform coverage across the frame.",
-      "material": { "heightStrength": 1.15, "roughRange": [0.7, 0.95], "aoStrength": 0.95, "heightBlur": 0.6 },
+      "material": {
+        "heightStrength": 1.15,
+        "roughRange": [
+          0.7,
+          0.95
+        ],
+        "aoStrength": 0.95,
+        "heightBlur": 0.6
+      },
       "notes": "IOF 'rough open' terrain class — slower running than meadow."
     },
     {
@@ -135,8 +209,16 @@
       "seed": 10306,
       "tileable": true,
       "pbr": true,
-      "prompt": "Mown Central European hay meadow seen straight down from above, filling the entire frame. Fine short grass blades at mixed angles in mid green with straw-yellow and olive variation, a scattering of small dried stems and clover leaves, thatch and soil faintly visible at the roots. Even natural density, uniform coverage across the frame.",
-      "material": { "heightStrength": 0.8, "roughRange": [0.55, 0.85], "aoStrength": 0.8, "heightBlur": 0.8 },
+      "prompt": "Unmown Central European hay meadow seen straight down from above, filling the entire frame, in razor-sharp focus. A mixed sward of several wild grass species at different heights and directions — fine leaf blades, coarser flat blades, and slender seeding stems bent over each other — in mid green, olive, sage and straw yellow, with dried tan stems and a few small clover and plantain leaves woven through, and thatch and dark soil showing in the gaps. Irregular, patchy and untidy. This is a wild hay meadow, absolutely not a mown lawn, not turf, not a sports field, not uniform.",
+      "material": {
+        "heightStrength": 0.8,
+        "roughRange": [
+          0.55,
+          0.85
+        ],
+        "aoStrength": 0.8,
+        "heightBlur": 0.8
+      },
       "notes": "Fast open terrain. Keep saturation restrained — Czech August meadow, not golf turf."
     },
     {
@@ -148,7 +230,15 @@
       "tileable": true,
       "pbr": true,
       "prompt": "Compacted forest gravel track surface seen straight down from above, filling the entire frame. Angular crushed granite chippings from fine grit up to two centimetres across, grey and buff with a few pale quartz and rusty iron-stained pieces, bedded into pale compacted dust, a few tiny dry needles caught between stones. Dense even packing, uniform coverage across the frame.",
-      "material": { "heightStrength": 1.3, "roughRange": [0.62, 0.9], "aoStrength": 0.9, "heightBlur": 0.45 },
+      "material": {
+        "heightStrength": 1.3,
+        "roughRange": [
+          0.62,
+          0.9
+        ],
+        "aoStrength": 0.9,
+        "heightBlur": 0.45
+      },
       "notes": "Forest road / ride surface."
     },
     {
@@ -160,7 +250,15 @@
       "tileable": true,
       "pbr": true,
       "prompt": "Bare packed earth forest footpath surface seen straight down from above, filling the entire frame. Fine mid-brown compacted soil with a slightly cracked crust, scattered small stones and grit pressed into it, a few exposed thin tree roots and stray dry needles, subtle patches of darker damp soil. Uniform coverage across the frame.",
-      "material": { "heightStrength": 0.9, "roughRange": [0.68, 0.93], "aoStrength": 0.85, "heightBlur": 0.7 },
+      "material": {
+        "heightStrength": 0.9,
+        "roughRange": [
+          0.68,
+          0.93
+        ],
+        "aoStrength": 0.85,
+        "heightBlur": 0.7
+      },
       "notes": "Small path / trodden line."
     },
     {
@@ -172,7 +270,15 @@
       "tileable": true,
       "pbr": true,
       "prompt": "Historic Bohemian old-town cobblestone paving seen straight down from above, filling the entire frame. Irregular hand-cut granite setts of uneven size and shape, worn smooth and slightly rounded on top by centuries of use, laid in loose organic courses, joints packed with grey sand and a little moss creeping in the cracks. Muted grey, warm buff and faint pink granite tones. Uniform coverage across the frame, no kerb, no drain, no road markings.",
-      "material": { "heightStrength": 1.6, "roughRange": [0.4, 0.78], "aoStrength": 1.0, "heightBlur": 0.5 },
+      "material": {
+        "heightStrength": 1.6,
+        "roughRange": [
+          0.4,
+          0.78
+        ],
+        "aoStrength": 1,
+        "heightBlur": 0.5
+      },
       "notes": "Český Krumlov sprint-leg streets. Strong AO in the joints is what sells this."
     },
     {
@@ -183,9 +289,17 @@
       "seed": 10502,
       "tileable": true,
       "pbr": true,
-      "prompt": "Weathered Renaissance lime plaster wall surface seen straight on, filling the entire frame. Hand-floated warm cream and pale ochre limewash over rough render, faint incised sgraffito diamond-rustication scoring showing through as shallow soft-edged geometric lines, patches where the top coat has flaked to reveal grey-brown render underneath, hairline craquelure, light grime and water staining. No windows, no mouldings, no ornament, no figures, no pattern that reads as printed.",
-      "material": { "heightStrength": 0.6, "roughRange": [0.5, 0.82], "aoStrength": 0.55, "heightBlur": 1.1 },
-      "notes": "Krumlov facades. Sgraffito is geometric scoring only — must NOT become figurative or a repeating printed motif."
+      "prompt": "Weathered old lime plaster wall surface seen straight on, filling the entire frame. Hand-floated warm cream and pale ochre limewash over coarse sandy render, applied by trowel so the surface has soft irregular undulations, float marks and sandy grain. Large irregular patches where the top coat has blistered and flaked away to reveal grey-brown render and older pink-buff limewash underneath, with soft crumbling edges to each patch. Fine random craquelure, hairline settlement cracks running at irregular angles, drifts of grey grime and old rain staining running down the surface. Every feature irregular and organic, no repeating rhythm. No grid, no squares, no rectangles, no tiles, no scored lines, no incised pattern, no diamonds, no windows, no mouldings, no ornament, no figures.",
+      "material": {
+        "heightStrength": 0.6,
+        "roughRange": [
+          0.5,
+          0.82
+        ],
+        "aoStrength": 0.55,
+        "heightBlur": 1.1
+      },
+      "notes": "Krumlov facades. Sgraffito scoring was tried and always resolved into a mechanical grid that reads as bathroom tile when repeated — the geometric rustication belongs on a decal layer, not in the tiling base texture."
     },
     {
       "id": "roof-tile-bohemian",
@@ -196,7 +310,15 @@
       "tileable": true,
       "pbr": true,
       "prompt": "Old Bohemian red clay bonnet roof tiles seen straight down from directly above, filling the entire frame. Overlapping curved half-round terracotta tiles in courses, colour varying from faded orange-red to dark brown and grey-green with age, dusty chalky surface, lichen and moss spotting along the lower edges of the tiles, a few tiles chipped and slightly out of line. Uniform coverage across the frame, no ridge, no chimney, no gutter, no roof outline.",
-      "material": { "heightStrength": 1.4, "roughRange": [0.5, 0.82], "aoStrength": 0.95, "heightBlur": 0.55 },
+      "material": {
+        "heightStrength": 1.4,
+        "roughRange": [
+          0.5,
+          0.82
+        ],
+        "aoStrength": 0.95,
+        "heightBlur": 0.55
+      },
       "notes": "Krumlov / Vyšší Brod rooftops seen from the sprint-leg camera."
     },
     {
@@ -208,10 +330,17 @@
       "tileable": true,
       "pbr": true,
       "prompt": "Medieval Bohemian castle wall masonry seen straight on, filling the entire frame. Roughly squared granite and gneiss blocks of mixed sizes laid in irregular courses, faces pitted and weathered, deep recessed lime mortar joints with a coarse aggregate, streaks of grey and rust staining, small patches of moss and lichen in the joints. Uniform coverage across the frame, no arch, no window, no corner, no ground, no sky.",
-      "material": { "heightStrength": 1.5, "roughRange": [0.6, 0.9], "aoStrength": 1.0, "heightBlur": 0.5 },
+      "material": {
+        "heightStrength": 1.5,
+        "roughRange": [
+          0.6,
+          0.9
+        ],
+        "aoStrength": 1,
+        "heightBlur": 0.5
+      },
       "notes": "Vyšší Brod monastery / Krumlov castle walls."
     },
-
     {
       "id": "menu-backdrop-sumava",
       "kind": "art",

@@ -14,9 +14,13 @@
  *
  * B) REPETITION BANDING.  Circular autocorrelation of the mean-subtracted
  *    luminance, computed with an FFT (ACF = IFFT(|FFT(x)|^2)) per row and per
- *    column, then averaged. The strongest normalised peak at a lag in
- *    [N/16, N/2] is reported with its lag. A large peak means the texture has
- *    a dominant low-frequency period, which reads as banding when tiled.
+ *    column, then averaged.
+ *      acf    = peak over lags [N/8, N/2] — periods of 2..8 repeats per tile.
+ *               This is the gated number. A structure at that scale is what
+ *               makes the eye lock onto the tile grid across a terrain patch.
+ *      acfAll = peak over lags [4, N/2], informational only. High values here
+ *               are usually the material's own rhythm (roof tile courses,
+ *               masonry beds) and are not a defect, so they do not fail.
  *
  * C) BAKED ILLUMINATION.  Least-squares fit of a linear ramp (a*x+b*y+c) and
  *    of a radial vignette term to the luminance field. Reported as the
@@ -152,9 +156,7 @@ function repetition(L, w, h) {
     accV0 += a[0];
     for (let k = 0; k < h; k++) accV[k] += a[k];
   }
-  const scan = (acc, a0, n) => {
-    const lo = Math.max(2, Math.floor(n / 16));
-    const hi = Math.floor(n / 2);
+  const scan = (acc, a0, lo, hi) => {
     let peak = -Infinity, lag = -1;
     for (let k = lo; k <= hi; k++) {
       const v = acc[k] / (a0 || 1e-9);
@@ -162,11 +164,16 @@ function repetition(L, w, h) {
     }
     return { peak, lag };
   };
-  const X = scan(acc, acc0, w);
-  const Y = scan(accV, accV0, h);
-  return X.peak >= Y.peak
-    ? { peak: X.peak, lag: X.lag, axis: 'x' }
-    : { peak: Y.peak, lag: Y.lag, axis: 'y' };
+  const best = (a, b) => (a.peak >= b.peak ? a : b);
+  const lowFreq = best(
+    { ...scan(acc, acc0, Math.max(2, w >> 3), w >> 1), axis: 'x' },
+    { ...scan(accV, accV0, Math.max(2, h >> 3), h >> 1), axis: 'y' }
+  );
+  const all = best(
+    { ...scan(acc, acc0, 4, w >> 1), axis: 'x' },
+    { ...scan(accV, accV0, 4, h >> 1), axis: 'y' }
+  );
+  return { ...lowFreq, allPeak: all.peak, allLag: all.lag };
 }
 
 /** C) baked illumination: linear ramp + radial vignette, as fraction of mean. */
@@ -254,7 +261,8 @@ if (JSON_OUT) {
   const head =
     'texture'.padEnd(24) + 'seamX'.padStart(7) + 'zX'.padStart(7) +
     'seamY'.padStart(7) + 'zY'.padStart(7) + 'acf'.padStart(7) +
-    'lag'.padStart(6) + 'ramp'.padStart(7) + 'vign'.padStart(7) + '  result';
+    'lag'.padStart(6) + 'acfAll'.padStart(8) + 'lag'.padStart(6) +
+    'ramp'.padStart(7) + 'vign'.padStart(7) + '  result';
   console.log(head);
   console.log('-'.repeat(head.length + 6));
   for (const r of rows) {
@@ -264,6 +272,7 @@ if (JSON_OUT) {
       f(r.sx.ratio).padStart(7) + f(r.sx.z, 1).padStart(7) +
       f(r.sy.ratio).padStart(7) + f(r.sy.z, 1).padStart(7) +
       f(r.rep.peak, 3).padStart(7) + String(r.rep.lag).padStart(6) +
+      f(r.rep.allPeak, 3).padStart(8) + String(r.rep.allLag).padStart(6) +
       f(r.ill.ramp, 3).padStart(7) + f(r.ill.vignette, 3).padStart(7) +
       '  ' + (r.pass ? 'PASS' : 'FAIL ' + r.fail.join(','))
     );

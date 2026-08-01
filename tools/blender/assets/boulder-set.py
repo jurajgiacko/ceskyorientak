@@ -106,9 +106,14 @@ def translate_verts(obj, dx, dy, dz):
 
 
 def bed(obj, sink):
-    """Drop the object so its lowest vertex sits `sink` metres below z=0."""
+    """Drop the object so its lowest vertex sits `sink` metres below z=0.
+
+    Returns the Z offset applied, so callers can keep bookkeeping in step.
+    """
     mn, _mx = M.bounds(obj)
-    return translate_verts(obj, 0.0, 0.0, -sink - mn.z)
+    dz = -sink - mn.z
+    translate_verts(obj, 0.0, 0.0, dz)
+    return dz
 
 
 def extent_along(obj, normal):
@@ -226,15 +231,19 @@ def build_boulder(index, spec, rng):
            @ Matrix.Rotation(math.radians(rng.uniform(-6.0, 6.0)), 4, "X")
            @ Matrix.Rotation(math.radians(rng.uniform(-6.0, 6.0)), 4, "Y"))
     transform_verts(obj, rot)
-    planes = [((rot @ p.to_4d().to_3d()), (rot.to_3x3() @ pn).normalized())
-              for p, pn in planes]
 
     # Flat base + bedding.  The bottom is never seen, so trimming it is free
     # triangles back, and it stops the boulder reading as a floating pebble.
     mn, mx = M.bounds(obj)
     height = mx.z - mn.z
     M.cut_plane(obj, (0.0, 0.0, mn.z + height * 0.12), (0, 0, -1), flatten=1.0)
-    bed(obj, sink=height * 0.07)
+    dz = bed(obj, sink=height * 0.07)
+
+    # Carry the recorded joint planes through the same rigid motion, so the
+    # cleavage material lands on the faces the cuts actually produced.
+    rot3 = rot.to_3x3()
+    shift = Vector((0.0, 0.0, dz))
+    planes = [((rot3 @ p) + shift, (rot3 @ pn).normalized()) for p, pn in planes]
 
     M.merge_doubles(obj, 1e-4)
     decimate_to(obj, TARGET_LOD0)

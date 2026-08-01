@@ -2,9 +2,92 @@
   "generator": "blender-asset-pipeline (Blender 4.5.12 LTS)",
   "generatedAt": "2026-08-01",
   "seed": 20260805,
-  "totalLod0Tris": 464,
-  "totalBytes": 33660,
+  "totalLod0Tris": 9644,
+  "totalBytes": 223340,
   "assets": [
+    {
+      "name": "boulder-set",
+      "file": "boulder-set.glb",
+      "bytes": 153148,
+      "tris": 8520,
+      "lods": [
+        {
+          "node": "boulder-set_v0_LOD0",
+          "tris": 1420
+        },
+        {
+          "node": "boulder-set_v0_LOD1",
+          "tris": 568
+        },
+        {
+          "node": "boulder-set_v0_LOD2",
+          "tris": 142
+        },
+        {
+          "node": "boulder-set_v1_LOD0",
+          "tris": 1420
+        },
+        {
+          "node": "boulder-set_v1_LOD1",
+          "tris": 568
+        },
+        {
+          "node": "boulder-set_v1_LOD2",
+          "tris": 142
+        },
+        {
+          "node": "boulder-set_v2_LOD0",
+          "tris": 1420
+        },
+        {
+          "node": "boulder-set_v2_LOD1",
+          "tris": 568
+        },
+        {
+          "node": "boulder-set_v2_LOD2",
+          "tris": 142
+        },
+        {
+          "node": "boulder-set_v3_LOD0",
+          "tris": 1420
+        },
+        {
+          "node": "boulder-set_v3_LOD1",
+          "tris": 568
+        },
+        {
+          "node": "boulder-set_v3_LOD2",
+          "tris": 142
+        },
+        {
+          "node": "boulder-set_v4_LOD0",
+          "tris": 1420
+        },
+        {
+          "node": "boulder-set_v4_LOD1",
+          "tris": 568
+        },
+        {
+          "node": "boulder-set_v4_LOD2",
+          "tris": 142
+        },
+        {
+          "node": "boulder-set_v5_LOD0",
+          "tris": 1420
+        },
+        {
+          "node": "boulder-set_v5_LOD1",
+          "tris": 568
+        },
+        {
+          "node": "boulder-set_v5_LOD2",
+          "tris": 142
+        }
+      ],
+      "variants": 6,
+      "notes": "wool-sack weathered granite; lichen on upward faces",
+      "originNote": "row centred on world origin, +X spacing; base bedded just below z=0"
+    },
     {
       "name": "control-flag",
       "file": "control-flag.glb",
@@ -26,6 +109,28 @@
       ],
       "hookTopZ": 0.354,
       "originNote": "centre of fabric bottom opening, +Z up"
+    },
+    {
+      "name": "control-stand",
+      "file": "control-stand.glb",
+      "bytes": 36532,
+      "tris": 660,
+      "lods": [
+        {
+          "node": "control-stand_LOD0",
+          "tris": 660
+        },
+        {
+          "node": "control-stand_LOD1",
+          "tris": 264
+        },
+        {
+          "node": "control-stand_LOD2",
+          "tris": 77
+        }
+      ],
+      "notes": "hang control-flag so its hookTopZ meets flagHangZ at x=flagHangX; sit si-unit's foot on siMountZ",
+      "originNote": "ground level, centre of the tripod footprint, +Z up"
     }
   ]
 }

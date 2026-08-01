@@ -201,7 +201,6 @@ async function main() {
     runAsset(bin, name, { seed, force, state, libHash, version }));
 
   const nextState = { ...state };
-  const entries = [];
   let failed = 0;
 
   for (const r of results) {
@@ -212,7 +211,6 @@ async function main() {
       continue;
     }
     nextState[r.name] = { hash: r.hash, metas: r.metas, outputs: r.outputs };
-    for (const m of r.metas) entries.push(m);
     const tris = r.metas.reduce((a, m) => a + (m.tris ?? 0), 0);
     console.log(r.skipped
       ? `skip  ${r.name.padEnd(18)} up to date`
@@ -221,6 +219,16 @@ async function main() {
 
   fs.writeFileSync(STATE_FILE, JSON.stringify(nextState, null, 2));
 
+  // The manifest describes everything currently in public/models, not just the
+  // subset this invocation touched -- otherwise `--only foo` would silently
+  // drop every other asset from the manifest.
+  const entries = [];
+  for (const [name, rec] of Object.entries(nextState)) {
+    for (const m of rec.metas ?? []) {
+      if (fs.existsSync(path.join(OUT_DIR, m.file))) entries.push(m);
+      else console.warn(`warn  ${name}: ${m.file} listed in state but missing on disk`);
+    }
+  }
   entries.sort((a, b) => a.name.localeCompare(b.name));
   const manifest = {
     generator: `blender-asset-pipeline (${version})`,

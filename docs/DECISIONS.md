@@ -357,3 +357,75 @@ read the course profile — and when they do, they have learned the actual
 protocol.
 
 Distress is capped so that being wrong costs time rather than ending the race.
+
+---
+
+## D-015 — Build the forest on permitted training terrain, not the embargoed courses
+
+**Decision.** The forest venue is generated from **Lachovice**, one of four
+areas the organisers themselves designated as permitted training terrain.
+`MARTINKOV_AOI` — the real competition area — is implemented and ready, and is
+a one-line switch plus a pipeline re-run once the embargo lapses after
+9 August 2026.
+
+**The distinction that matters.** The embargo is a 213-vertex KML covering
+~51.4 km² around the abandoned village of Martínkov. It restricts **physical
+access by competitors**. It places no restriction whatsoever on ČÚZK open data,
+which is CC BY 4.0 including the *sui generis* database right. So there is no
+licensing problem here, and this decision is not a legal one.
+
+It is a judgement about what the embargo is *for*. An embargo keeps competitors
+out of the terrain so that nobody arrives with an unfair familiarity with the
+re-entrants, the boulder fields and the marsh edges. A navigable, photoreal
+model of that same ground, built from 2 m LiDAR and published before the races,
+delivers exactly the familiarity the embargo denies — more conveniently than
+walking it would. Legal and appropriate are different tests, and the client is a
+Main Partner with their name in Bulletin 4 alongside two government ministers.
+
+**Why this costs us nothing.** Lachovice is not a fallback:
+
+- Same landscape — granite, spruce, Vltava-valley relief — about 3 km from the
+  competition area, from the same DMR 5G source at the same 2 m resolution.
+- It is where athletes are *permitted to train*, so building there is aligned
+  with the embargo's intent rather than merely tolerated by its letter.
+- No player outside the sport can tell. Everyone inside it will understand
+  immediately why we did it, which is worth more than the alternative.
+
+**Timing note.** The races are 5–9 August 2026. If the game ships after the
+final race, switching to the true competition terrain becomes both safe and a
+genuinely good post-event story — *"now run the actual World Cup courses."*
+That is a better launch beat than shipping the courses early would have been.
+
+---
+
+## D-016 — Corrections to the brief's premises from the geodata research
+
+Recorded so they are not quietly absorbed:
+
+**1. The World Cup has no sprint.** It is four forest races at Martínkov
+(Qualification, Long, Middle, Relay). Český Krumlov hosts the separate **GAPP
+Czech O-Tour Prologue**. We still build Krumlov — it is the better showcase and
+a genuinely different discipline — but we describe it accurately rather than
+calling it a World Cup sprint.
+
+**2. NDVI does not work for runnability.** Tested against a real CIR near-infrared
+band, not assumed: NDVI is *anti*-correlated with canopy height here (mature
+spruce 0.20, open meadow 0.33). Vegetation classification is driven by the
+**canopy height model (DMP 1G − DMR 5G) plus canopy roughness** instead. The
+two ČÚZK exports share an identical grid for identical parameters, so they
+subtract with no resampling.
+
+**3. Do not transform S-JTSK ourselves.** An independent Krovák implementation
+was measured against ČÚZK's own output: easting agrees to ~1 m, but the standard
+three-parameter datum shift carries a systematic **−9.3 m northing bias** — four
+to five pixels at 2 m resolution. We pass `bboxSR=4326` and let ČÚZK reproject.
+
+**4. Google elevation data is prohibited, not merely awkward.** Their terms name
+our use case verbatim — building terrain models from Elevation API values. Nor is
+a dev-time cross-check safe, since no caching is permitted. We use none of it.
+
+**5. Source split by venue, which the licence analysis also wants.** OSM coverage
+is wildly asymmetric — 5973 elements in the sprint AOI against 133 in the forest.
+So ZABAGED is primary for the forest and OSM for the sprint. Convenient, because
+merging our own or ZABAGED data into an OSM feature type would trigger ODbL
+share-alike; keeping them separate by venue avoids the question entirely.
