@@ -25,23 +25,23 @@ Nothing below that line blocks a release.
 - [x] Deploy pipeline live and green
 
 ### M1 · Research (mandatory before mechanics)
-- [ ] `docs/RESEARCH-SPORT.md` — ISOM 2017-2, ISSprOM 2019-2, control descriptions, formats, speed model
-- [ ] `docs/RESEARCH-GEODATA.md` + `docs/DATA_LICENCES.md` — ČÚZK, OSM, verified endpoints
-- [ ] `docs/NUTRITION_PROTOCOL.md` + `docs/CLAIMS_TO_REVIEW.md` — real protocol, EU 1924/2006
-- [ ] `docs/RESEARCH-EVENT.md` + `docs/BRAND.md` — programme, terrain, identity
-- [ ] `docs/RESEARCH-VIDEO.md` — grade and look reference
+- [x] `docs/RESEARCH-SPORT.md` — ISOM 2017-2, ISSprOM 2019-2, control descriptions, formats, speed model
+- [x] `docs/RESEARCH-GEODATA.md` + `docs/DATA_LICENCES.md` — ČÚZK, OSM, verified endpoints
+- [x] `docs/NUTRITION_PROTOCOL.md` + `docs/CLAIMS_TO_REVIEW.md` — real protocol, EU 1924/2006
+- [x] `docs/RESEARCH-EVENT.md` + `docs/BRAND.md` — programme, terrain, identity
+- [x] `docs/RESEARCH-VIDEO.md` — grade and look reference
 
 ### M2 · Terrain pipeline
-- [ ] `tools/terrain/` ingests ČÚZK DMR 5G → heightmap for both venues
-- [ ] Runnability classification from ortho + canopy height + OSM landuse
+- [x] `tools/terrain/` ingests ČÚZK DMR 5G → heightmap for both venues
+- [x] Runnability classification from ortho + canopy height + OSM landuse
 - [ ] Krumlov building/wall/step geometry from OSM
-- [ ] Compressed binary output in `public/data/`, no runtime geo API calls
+- [x] Compressed binary output in `public/data/`, no runtime geo API calls
 
 ### M3 · The map (navigation layer)
-- [ ] ISOM/ISSprOM vector renderer, correct colours and symbols
-- [ ] Control description pictograms as real SVG symbols, columns A–H
-- [ ] Course overprint: start triangle, circles with gaps, connecting lines, finish
-- [ ] Dead reckoning: believed vs true position, error accumulation, punch reset
+- [x] ISOM/ISSprOM vector renderer, correct colours and symbols
+- [x] Control description pictograms as real SVG symbols, columns A–H
+- [x] Course overprint: start triangle, circles with gaps, connecting lines, finish
+- [x] Dead reckoning: believed vs true position, error accumulation, punch reset
 - [ ] Compass, thumbing, route drawing
 
 ### M4 · The forest (execution layer)
@@ -66,7 +66,7 @@ Nothing below that line blocks a release.
 - [ ] Menu → prerace → race → finish → results, all animated, no cuts
 - [ ] HUD legible in sunlight on a phone; touch controls
 - [ ] Results: splits, route replay, ghost comparison, share image
-- [ ] Self-authored audio: footfall by ground, breathing, SI beep, arena
+- [x] Self-authored audio: footfall by ground, breathing, SI beep, arena
 
 ### M8 · Verification
 - [ ] Judge V (visual), O (orienteering), G (game feel), B (brand & compliance) all pass
