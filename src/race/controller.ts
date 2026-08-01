@@ -177,8 +177,12 @@ export class RaceController {
       if (e.code === 'KeyM' || (!e.code && e.key.toLowerCase() === 'm')) {
         e.preventDefault();
         this.map.toggle();
-      } else if (e.code === 'Escape' && this.map.isOpen) {
-        this.map.setOpen(false);
+      } else if (e.code === 'Escape') {
+        // Escape closes the map if it is open, otherwise leaves the race.
+        // Without the second branch there was no keyboard way out at all, and
+        // the only exit was a small corner glyph most players never found.
+        if (this.map.isOpen) this.map.setOpen(false);
+        else setup.onQuit();
       } else if (e.code === 'Space' && !this.started) {
         e.preventDefault();
         this.begin();

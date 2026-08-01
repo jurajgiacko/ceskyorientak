@@ -104,7 +104,22 @@ export function generateCourse(o: GenerateOptions): Course {
     Math.abs(p.x) < halfX * 0.92 && Math.abs(p.z) < halfZ * 0.92;
 
   const arena = o.arena ?? { x: 0, z: 0 };
-  const start = findControlSite(arena, 120, 260, rng, o.terrain, inBounds) ?? arena;
+  // The start must be somewhere you can actually run out of in any direction.
+  //
+  // Relax progressively rather than falling straight through to "anywhere
+  // legal": a dense old town may genuinely have no 75%-open spot near the
+  // arena, but it always has somewhere better than a two-metre alley, and the
+  // difference is whether the first ten seconds of the race feel broken.
+  // Widening the annulus matters as much as lowering the bar — the open ground
+  // in Krumlov is the square, and the square may be 400 m away.
+  const start = pickOpenSite(arena, rng, o.terrain, inBounds, [
+    { min: 120, max: 260, open: 0.75, speed: 0.8 },
+    { min: 120, max: 420, open: 0.75, speed: 0.8 },
+    { min: 80, max: 520, open: 0.6, speed: 0.72 },
+    { min: 60, max: 600, open: 0.45, speed: 0.6 },
+    { min: 60, max: 600, open: 0.45 },
+    { min: 60, max: 600, open: 0 },
+  ]) ?? arena;
 
   const targetLegs = spec.legCount[0] + Math.floor(rng.next() * (spec.legCount[1] - spec.legCount[0] + 1));
   const controls: Control[] = [];
@@ -161,7 +176,13 @@ export function generateCourse(o: GenerateOptions): Course {
     if (code > 999) code = 31;
   }
 
-  const finish = findControlSite(arena, 60, 180, rng, o.terrain, inBounds) ?? arena;
+  const finish = pickOpenSite(arena, rng, o.terrain, inBounds, [
+    { min: 60, max: 180, open: 0.7, speed: 0.8 },
+    { min: 60, max: 320, open: 0.55, speed: 0.72 },
+    { min: 40, max: 420, open: 0.4, speed: 0.6 },
+    { min: 40, max: 420, open: 0.4 },
+    { min: 40, max: 420, open: 0 },
+  ]) ?? arena;
 
   const lengthM = measureLength(start, controls, finish);
   const climbM = measureClimb(start, controls, finish, o.terrain);
@@ -262,7 +283,9 @@ function pickNextControl(o: PickOptions): World2 | null {
     if (!o.inBounds(p)) continue;
 
     // Nudge onto the best nearby feature — a control belongs ON something.
-    const sited = findControlSite(p, 0, 45, o.rng, o.terrain, o.inBounds);
+    // Controls may sit tight against a wall — that is legitimate sprint course
+    // setting — but not in a pocket with no way out.
+    const sited = findControlSite(p, 0, 45, o.rng, o.terrain, o.inBounds, 0.5);
     if (!sited) continue;
 
     const feature = o.terrain.featureScoreAt(sited.x, sited.z);
@@ -304,6 +327,46 @@ function pickNextControl(o: PickOptions): World2 | null {
   return best?.p ?? null;
 }
 
+/**
+ * How much of a ring around `p` is passable, 0..1.
+ *
+ * A point can be perfectly passable itself and still be a slot you cannot get
+ * out of. The Krumlov start landed in exactly that: the cell was Road, but more
+ * than half the ring at 8 m was building, so running into the wall slid at
+ * reduced speed and read as "WASD does not work in the city".
+ */
+function openness(p: World2, terrain: CourseTerrain, radiusM: number): number {
+  let open = 0;
+  const N = 12;
+  for (let i = 0; i < N; i++) {
+    const a = (i / N) * Math.PI * 2;
+    const x = p.x + Math.sin(a) * radiusM;
+    const z = p.z - Math.cos(a) * radiusM;
+    if (terrain.runnabilityAt(x, z) !== Runnability.Impassable) open++;
+  }
+  return open / N;
+}
+
+/**
+ * Try successively looser (radius, openness) bands until one yields a site.
+ * Returns the first hit, or null if even the loosest band fails.
+ */
+function pickOpenSite(
+  around: World2,
+  rng: Rng,
+  terrain: CourseTerrain,
+  inBounds: (p: World2) => boolean,
+  bands: { min: number; max: number; open: number; speed?: number }[],
+): World2 | null {
+  for (const b of bands) {
+    const p = findControlSite(
+      around, b.min, b.max, rng, terrain, inBounds, b.open, b.speed ?? 0,
+    );
+    if (p) return p;
+  }
+  return null;
+}
+
 /** Find a describable feature near a point. */
 function findControlSite(
   around: World2,
@@ -312,6 +375,8 @@ function findControlSite(
   rng: Rng,
   terrain: CourseTerrain,
   inBounds: (p: World2) => boolean,
+  minOpenness = 0,
+  minSpeed = 0,
 ): World2 | null {
   let best: { p: World2; s: number } | null = null;
   for (let i = 0; i < 60; i++) {
@@ -322,6 +387,15 @@ function findControlSite(
     // A control may not sit in impassable ground — in sprint that is a DSQ
     // offence for the runner, so it must never be the target.
     if (terrain.runnabilityAt(p.x, p.z) === Runnability.Impassable) continue;
+    // Require room to move, not just a legal cell to stand on.
+    if (minOpenness > 0 && openness(p, terrain, 8) < minOpenness) continue;
+    // And require ground worth standing on. A start can be perfectly open and
+    // still be in scrub: the Krumlov start landed on Green2 at 0.4x speed, so
+    // the first strides crawled and the game read as broken even though
+    // nothing was blocking. Openness and runnability are different problems.
+    if (minSpeed > 0 && (SPEED_BY_RUNNABILITY[terrain.runnabilityAt(p.x, p.z)] ?? 0) < minSpeed) {
+      continue;
+    }
     const s = terrain.featureScoreAt(p.x, p.z);
     if (!best || s > best.s) best = { p, s };
   }

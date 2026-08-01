@@ -56,10 +56,15 @@ const BEFORE_CHOICES = [
   'salt-caps',
 ] as const;
 
+/**
+ * Isotonic Gel is deliberately absent: the client confirmed it is discontinued
+ * in CZ/SK, and offering a product that cannot be bought is worse than
+ * offering one fewer. Replaced by the C2:1 Carbo Bar, which is current.
+ */
 const BELT_CHOICES = [
   'gel-citrus',
   'liquid-gel-orange',
-  'isotonic-gel-grapefruit',
+  'carbo-bar-peanut',
   'carbo-bar-brownie',
   'carbo-gel-orange',
 ] as const;
