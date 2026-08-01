@@ -5,17 +5,20 @@ Headless, reproducible 3D asset generation for **ORIENTAK: VYŠŠÍ BROD**.
 Every model in `public/models/` is produced by a Python script in `assets/`,
 run by Blender in `--background` mode. There is no `.blend` file anywhere in
 this repo and no GUI step in the build: **the source of truth is the code**.
-Delete `public/models/` and `npm run gen:models` reconstructs every asset with
-identical **geometry** — same triangle counts, same vertex data, same materials,
-for a given seed.
+Delete `public/models/` and `npm run gen:models` reconstructs every asset
+**byte for byte** for a given seed — same triangle counts, same vertex data,
+same materials, same bytes on disk. Draco included: the encoder spent a while
+under suspicion for this and is in fact deterministic (see "Things that bit
+us"). A rebuild that leaves `git status` dirty means something really changed.
 
-**Not byte-identical, though**, and the README used to claim it was. The
-Draco-compressed assets (`spruce`, `beech`, `boulder-set`, `deadwood`,
-`finish-gantry`) hash differently across `--force` rebuilds at identical size
-and triangle count, because the encoder is not deterministic. Practical
-consequence: those files show as modified in `git status` after any rebuild
-even when nothing changed, so do not treat a dirty diff on them as a signal.
-The uncompressed assets *are* byte-identical.
+Worth re-checking whenever the pipeline is touched — two forced rebuilds have
+to agree:
+
+```sh
+node tools/blender/build.mjs --force && md5 -q public/models/*.glb > /tmp/a
+node tools/blender/build.mjs --force && md5 -q public/models/*.glb > /tmp/b
+diff /tmp/a /tmp/b && echo reproducible
+```
 
 ## Verified Blender binary
 
@@ -199,9 +202,9 @@ _Generated 2026-08-01 by `node tools/blender/validate.mjs --write-readme`._
 | `race-belt` | 880 | 880 (LOD0:880) | 1 | 3 | 0 | 38.3 KB | no | OK |
 | `si-unit` | 450 | 684 (LOD0:450 LOD1:180 LOD2:54) | 3 | 3 | 0 | 39.6 KB | no | OK |
 | `spectator-fence` | 480 | 721 (LOD0:480 LOD1:191 LOD2:50) | 3 | 2 | 0 | 48.2 KB | no | OK |
-| `spruce` | 18904 | 26178 (LOD0:18904 LOD1:7258 LOD2:16) | 12 | 7 | 6 | 988.6 KB | yes | OK |
+| `spruce` | 18904 | 26178 (LOD0:18904 LOD1:7258 LOD2:16) | 12 | 7 | 6 | 987.4 KB | yes | OK |
 
-**Total: 12 assets, 52740 LOD0 triangles, 2263.2 KB on disk.**
+**Total: 12 assets, 52740 LOD0 triangles, 2261.9 KB on disk.**
 <!-- VALIDATION_TABLE_END -->
 
 Preview sheets for every asset are in [`previews/`](previews/), rendered from
@@ -351,6 +354,21 @@ Library size is a VRAM cost, not a frame cost — per-frame is governed by
   notice; on an untextured one the surface turns *white*. The spruce deadwood
   stubs shipped as a ring of white spikes under every crown for one build.
   The 4.x `ShaderNodeMix` with `data_type="RGBA"` exports correctly.
+- **A rendered PNG carries a timestamp, and it lands in the `.glb`.** Blender
+  stamps `Date` (wall clock) and `RenderTime` into tEXt chunks of every PNG it
+  writes itself. `spruce`'s four LOD2 imposters come out of
+  `bpy.ops.render.render(write_still=True)` and are embedded verbatim, so
+  `spruce.glb` was different bytes on *every* rebuild — at identical file size,
+  identical triangle count and, as it turned out, bit-identical pixels: every
+  IDAT chunk matched and only the two stamps differed. Draco was blamed for a
+  long time, and `spruce` being both the largest mesh and the only asset
+  embedding a raw render made that story fit. It was never Draco; the encoder
+  is deterministic. `tex.strip_png_metadata()` copies through only the chunks
+  that are the image (positive keep-list, so a chunk a future Blender starts
+  writing is dropped rather than silently re-breaking this) and is called at
+  the two places a Blender-written PNG enters the pipeline: after the imposter
+  render, and inside `ensure_png()`. `beech` was accidentally immune the whole
+  time because it re-packs its imposter cells through `tex.write_png()`.
 - **An angle-based cylinder projection leaves a smeared seam facet.** `atan2`
   wraps, so the one column of quads spanning the wrap gets U running 1.99 → 0.0
   and samples the entire texture backwards into one twelfth of the trunk. Not

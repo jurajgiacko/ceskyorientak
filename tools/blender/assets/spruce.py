@@ -1043,6 +1043,10 @@ def render_imposter(obj, path, size=IMPOSTER_PX):
         pass
 
     bpy.ops.render.render(write_still=True)
+    # This PNG is embedded in the .glb as-is, and Blender stamps the wall-clock
+    # date and the render duration into it.  Strip them or spruce.glb comes out
+    # different bytes on every rebuild with an identical crown.
+    tex.strip_png_metadata(os.path.abspath(path))
 
     # restore
     r.engine = saved["engine"]

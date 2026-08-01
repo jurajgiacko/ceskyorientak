@@ -45,6 +45,46 @@ def write_png(path, rgba_u8, flip=True):
     return path
 
 
+# Chunks that decode to pixels, plus the ones that say how to interpret those
+# pixels.  Everything else in a PNG is provenance.
+_PNG_KEEP = frozenset((b"IHDR", b"PLTE", b"tRNS", b"IDAT", b"IEND",
+                       b"gAMA", b"cHRM", b"sRGB", b"iCCP", b"sBIT"))
+
+
+def strip_png_metadata(path):
+    """Drop every chunk from `path` that is not part of the image.
+
+    Anything Blender writes a PNG for itself -- `bpy.ops.render.render`, or
+    `Image.save()` -- gets stamped with tEXt chunks including the wall-clock
+    `Date` and the `RenderTime`.  Both change on every run, so a PNG embedded
+    in a .glb makes that .glb different bytes on every build even when every
+    pixel is identical.  This is the whole reason `spruce.glb` used to churn.
+
+    Pixels are not touched: chunks are copied through verbatim (CRCs included)
+    or dropped, so there is no decode, no re-encode and no colour management in
+    the path.  The keep-list is positive on purpose -- a chunk some future
+    Blender starts writing is dropped by default rather than silently
+    re-breaking reproducibility.
+    """
+    with open(path, "rb") as fh:
+        data = fh.read()
+    if data[:8] != b"\x89PNG\r\n\x1a\n":
+        return path
+    out = bytearray(data[:8])
+    i = 8
+    while i + 12 <= len(data):
+        ln = struct.unpack(">I", data[i:i + 4])[0]
+        end = i + 12 + ln
+        if end > len(data):
+            break
+        if data[i + 4:i + 8] in _PNG_KEEP:
+            out += data[i:end]
+        i = end
+    with open(path, "wb") as fh:
+        fh.write(bytes(out))
+    return path
+
+
 def ensure_png(path, cache_dir, name=None):
     """Return a PNG path for `path`, transcoding via Blender if needed.
 
@@ -66,7 +106,7 @@ def ensure_png(path, cache_dir, name=None):
     img.filepath_raw = out
     img.save()
     bpy.data.images.remove(img)
-    return out
+    return strip_png_metadata(out)
 
 
 def load_image(path, name=None, is_data=False):
