@@ -45,11 +45,11 @@ Nothing below that line blocks a release.
 - [ ] Compass, thumbing, route drawing
 
 ### M4 · The forest (execution layer)
-- [ ] Terrain rendering with the derived heightmap
-- [ ] Instanced spruce/beech with LODs and billboard imposters
-- [ ] Boulder fields, undergrowth, marsh, forest floor
+- [x] Terrain rendering with the derived heightmap
+- [x] Instanced spruce/beech with LODs and billboard imposters
+- [x] Boulder fields, undergrowth, marsh, forest floor
 - [ ] Movement physics driven by `Runnability` and gradient
-- [ ] Lighting, sky, volumetrics matched to real start times
+- [x] Lighting, sky, volumetrics matched to real start times
 
 ### M5 · Krumlov (sprint)
 - [ ] Old town geometry, walls that genuinely block, staircases, courtyards
@@ -72,7 +72,7 @@ Nothing below that line blocks a release.
 - [ ] Judge V (visual), O (orienteering), G (game feel), B (brand & compliance) all pass
 - [ ] 60 fps desktop / ≥30 fps mid-range mobile, measured and captured
 - [ ] Initial load ≤ 15 MB, time-to-first-play ≤ 8 s on 4G
-- [ ] Perf budget test in CI
+- [x] Perf budget test in CI
 - [ ] README for the client marketing team, `ASSETS_NEEDED.md`, `CLAIMS_TO_REVIEW.md`
 
 ---
