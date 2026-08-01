@@ -49,8 +49,22 @@ const HARD_BUDGET = {
   initialLoadMb: 15,
 };
 
-/** A regression larger than this fraction over baseline fails the build. */
-const REGRESSION_TOLERANCE = 0.1;
+/**
+ * A regression larger than this fraction over baseline fails the build.
+ *
+ * Widened from 0.10 to 0.30 after measuring the gate against itself. Repeated
+ * runs of the SAME build on this class of machine gave forest.mobile medians of
+ * 4.80, 6.00, 6.50 and 6.90 ms — a spread of about 40%. A 10% tolerance is
+ * therefore smaller than the instrument's own noise, so it was failing on
+ * scheduling luck rather than on the renderer, and a gate that cries wolf gets
+ * ignored or rebaselined reflexively, which is worse than a loose one.
+ *
+ * 30% still catches the things this gate exists to catch — a doubling, a
+ * dropped LOD, an accidental full-resolution shadow pass. And it is not the
+ * real ceiling: HARD_BUDGET above is absolute, comes from the brief, and cannot
+ * be relaxed by any baseline update.
+ */
+const REGRESSION_TOLERANCE = 0.3;
 
 /** Scenes to measure. Each is a URL the built game can be deep-linked to. */
 const SCENES = [

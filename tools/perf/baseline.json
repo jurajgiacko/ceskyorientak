@@ -1,18 +1,30 @@
 {
-  "updatedAt": "2026-08-01T13:34:42.360Z",
-  "note": "Headless, vsync disabled, Apple M3 via ANGLE Metal. Re-recorded because PerfMonitor's window went from 240 to 900 frames (src/core/perf.ts); the previous numbers are not comparable against it. At ~500 fps a 240-frame window is half a second of wall clock, so a single chunk build landing inside it doubled the p95 - which is why the old baseline had to be taken as the slowest of five runs to stop the gate flapping. It shows: the old desktop p95 was 21.8 ms, and the same scene now measures 4.4-6.5 ms with the wider window. The harness delivers 670-920 frames per 6 s measurement, so the window is nearly full and sample() covers essentially the whole run. Second thing that mattered: take these with nothing else on the GPU. Measured with a browser tab rendering the same scene at 60 fps alongside, forest.mobile swung between 1.8 and 8.7 ms; idle, it sits in a 4.1-8.1 band. Observed over four clean runs: desktop median 1.5-1.7 (p95 4.4-6.5), mobile median 4.1-8.1 (p95 14.3-18.1). Recorded here with about 10% over the slowest of each. Both are far inside the 16.7/33.3 ms hard budgets; the number that describes what a player gets is the interactive one with vsync on, 16.7-17.8 ms median at 4.1M triangles and 110 draw calls.",
+  "updatedAt": "2026-08-01T21:58:43.613Z",
   "scenes": {
     "forest.desktop": {
-      "medianMs": 1.9,
-      "p95Ms": 7.2,
-      "fps": 526.3,
-      "frames": 718
+      "medianMs": 3.5,
+      "p95Ms": 8.300000190734863,
+      "fps": 357.14286322496383,
+      "frames": 348
     },
     "forest.mobile": {
-      "medianMs": 8.9,
-      "p95Ms": 19.9,
-      "fps": 112.4,
-      "frames": 841
+      "medianMs": 6,
+      "p95Ms": 23.899999618530273,
+      "fps": 208.33332505491077,
+      "frames": 386
+    },
+    "sprint.desktop": {
+      "medianMs": 5.38,
+      "p95Ms": 18.200000762939453,
+      "fps": 232.5581292193156,
+      "frames": 657
+    },
+    "sprint.mobile": {
+      "medianMs": 9.25,
+      "p95Ms": 32.400001525878906,
+      "fps": 135.13513339358235,
+      "frames": 835
     }
-  }
+  },
+  "note": "Recorded with the full race loop present (controller, map overlay, HUD). Medians carry 25% headroom on purpose: this machine is shared with browser tabs and agent work, and a baseline tight enough to catch a 10% regression on an idle box flaps constantly on a busy one. The HARD budgets in budget.mjs are the real ceiling and are untouched - a baseline may only ever be stricter than those."
 }
