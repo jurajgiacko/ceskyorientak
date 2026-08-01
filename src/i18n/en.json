@@ -66,5 +66,13 @@
   "race.attackPoint": "Attack point",
   "race.catchingFeature": "Catching feature",
   "race.timeLoss": "Time loss",
-  "race.startOfNav": "Start of navigation"
+  "race.startOfNav": "Start of navigation",
+  "menu.forestRun": "Forest — Lachovice",
+  "menu.forestRunSub": "Free run in the terrain",
+  "menu.sprint": "Sprint — Český Krumlov",
+  "menu.sprintSub": "The historic old town",
+  "menu.careerSub": "The full World Cup week",
+  "menu.dailySub": "A new course every day",
+  "menu.soon": "Coming soon",
+  "menu.start": "Start"
 }

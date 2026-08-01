@@ -762,9 +762,35 @@ export async function loadDetailTextures(tier: QualityTier): Promise<DetailTextu
  * scatter path is not worth the difference.
  */
 function applyCanopyLight(mat: THREE.MeshStandardMaterial, key: string): void {
+  // Idempotence guard — required, not defensive.
+  //
+  // This chains onto any existing `onBeforeCompile`, so patching the same
+  // material twice runs both handlers, and each one replaces `#include <common>`
+  // again. The result is `varying vec3 vGroundWorld;` declared N times and the
+  // helper functions redefined N times, which fails GLSL compilation outright
+  // and makes the object VANISH rather than look wrong.
+  //
+  // Materials arrive here more than once in practice: glTF assets share
+  // material instances across variants and LODs, so a single `granite_lichen`
+  // is reachable from many meshes.
+  const patched = mat.userData as { canopyLit?: string };
+  if (patched.canopyLit) return;
+  patched.canopyLit = key;
+
   const previous = mat.onBeforeCompile;
   mat.onBeforeCompile = (shader, renderer) => {
     previous?.call(mat, shader, renderer);
+
+    // Second, stronger guard: check the shader source itself.
+    //
+    // The userData flag above stops us patching one material twice, but it
+    // cannot stop a handler CHAIN from running twice over the same source —
+    // and glTF materials are cloned per variant and LOD, which copies
+    // `onBeforeCompile` along with the chain already attached to it. Testing
+    // the source is the only check that cannot be defeated by how the material
+    // got here.
+    if (shader.vertexShader.includes('vGroundWorld')) return;
+
     shader.vertexShader = shader.vertexShader
       .replace(
         '#include <common>',

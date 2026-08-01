@@ -66,5 +66,13 @@
   "race.attackPoint": "Odrazový bod",
   "race.catchingFeature": "Záchytný bod",
   "race.timeLoss": "Strata",
-  "race.startOfNav": "Začiatok orientácie"
+  "race.startOfNav": "Začiatok orientácie",
+  "menu.forestRun": "Les — Lachovice",
+  "menu.forestRunSub": "Voľný beh terénom",
+  "menu.sprint": "Šprint — Český Krumlov",
+  "menu.sprintSub": "Historické centrum",
+  "menu.careerSub": "Celý týždeň Svetového pohára",
+  "menu.dailySub": "Nová trať každý deň",
+  "menu.soon": "Pripravujeme",
+  "menu.start": "Štart"
 }

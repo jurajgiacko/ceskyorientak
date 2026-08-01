@@ -11,7 +11,6 @@
  */
 
 import type { Capabilities } from '@/core/capabilities';
-import { t } from '@/i18n';
 
 export interface Screen {
   readonly id: string;
@@ -58,7 +57,8 @@ export async function mountShell(root: HTMLElement, capabilities: Capabilities):
     return;
   }
 
-  await transitionTo(makeBootScreen());
+  const { makeMenuScreen } = await import("@/ui/menuScreen");
+  await transitionTo(makeMenuScreen());
 }
 
 export function getCapabilities(): Capabilities {
@@ -83,35 +83,4 @@ export async function transitionTo(next: Screen): Promise<void> {
 
 function settle(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
-}
-
-/**
- * Placeholder boot screen. Proves the pipeline end to end — i18n, tokens,
- * capability tier, deploy — before any of the heavy subsystems exist.
- */
-function makeBootScreen(): Screen {
-  return {
-    id: 'boot',
-    mount(h) {
-      // The official OWCUP26 lockup, not a typeset imitation of it.
-      // Partner marks sit in their own band — see the colour-conflict note in
-      // src/styles/base.css: Enervit red and event orange may not share a surface.
-      h.innerHTML = `
-        <div class="boot">
-          <img class="boot__logo" src="/brand/owcup26-ver.svg"
-               alt="Orienteering World Cup 2026" width="354" height="186" />
-          <h1 class="boot__title">${t('app.title')}</h1>
-          <p class="boot__meta">Vyšší Brod &middot; Český Krumlov &middot; 5–9. 8. 2026</p>
-          <p class="boot__status">${t('app.loading')}</p>
-        </div>
-        <div class="boot__partners">
-          <span class="boot__partnerLabel">${t('brand.mainPartner')}</span>
-          <img src="/brand/enervit.png" alt="Enervit" class="boot__enervit" />
-        </div>
-        <p class="boot__tier">tier ${caps.tier} &middot; webgl2 ${caps.webgl2} &middot; dpr ${caps.dpr}</p>`;
-    },
-    unmount() {
-      /* nothing to release yet */
-    },
-  };
 }
