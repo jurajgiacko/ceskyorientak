@@ -167,3 +167,44 @@ Official red is **`#E40521`** (C0 M100 Y90 K0). Note the video's red is
 
 A white/mono version for dark UI does not exist in the supplied set and has
 **not** been invented. It is listed in `ASSETS_NEEDED.md`.
+
+---
+
+## D-010 — Carbohydrate mouth rinse as the Middle-distance mechanic
+
+**Decision.** The race belt carries a rinse option alongside gels. Rinsing costs
+~1–2 s (versus 3–5 s to take and swallow a gel), never touches Glycogen, and
+acts on **Focus** — modelled as a short, modest lift with a taper, not a spike.
+
+**Why this is the right mechanic, not a gimmick.** Our three race formats land
+almost exactly on the boundaries in the literature, which is a gift:
+
+| Format | Duration | What the evidence says |
+|---|---|---|
+| Sprint | ~13–15 min | Below every threshold. Intake does nothing. |
+| Middle | ~30–35 min | The mouth-rinse band. Ingestion is not yet metabolically useful. |
+| Long | ~90 min | 30–60 g/h. Real fuelling, real gels. |
+
+So each format gets a *genuinely different* nutrition problem for reasons that
+are true, not balanced-for-fun. That is exactly the design test in the brief:
+delete the branding and the mechanic still stands up.
+
+**Why it acts on Focus specifically.** The mechanism is not metabolic. Carter
+et al. (2004) infused glucose intravenously — blood glucose doubled, and
+performance did not move; rinsing and spitting, with zero ingestion, did. fMRI
+work (Chambers et al. 2009) puts the effect in reward and motor-control regions
+— insula/frontal operculum, dorsolateral prefrontal cortex, striatum, anterior
+cingulate. Mapping that to Glycogen would be simply wrong. Mapping it to Focus,
+our navigation stat, is both mechanistically honest and the more interesting
+game decision: do you spend two seconds of map contact to read the next control
+better?
+
+**Sizing it honestly.** Real effect is ~2–3% in one-hour time trials, with
+meta-analytic SMDs of 0.15–0.25 — small, and null for intermittent/sprint
+formats. The in-game effect is tuned to feel like a marginal gain a good athlete
+would take, not a power-up. Overstating it would fail Judge O and Judge B at
+once.
+
+**Compliance note.** This mechanic must not be described to the player in
+performance-claim language. See `docs/CLAIMS_TO_REVIEW.md` — the in-game copy
+describes what the athlete *does*, not what the product *achieves*.
