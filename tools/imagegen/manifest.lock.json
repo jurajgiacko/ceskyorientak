@@ -1,0 +1,235 @@
+{
+  "version": 1,
+  "model": "gemini-2.5-flash-image",
+  "assets": {
+    "forest-floor-needles": {
+      "id": "forest-floor-needles",
+      "fetched": true,
+      "promptHash": "0012e630b8ca5307",
+      "seed": 10301,
+      "model": "gemini-2.5-flash-image",
+      "aspect": "1:1",
+      "source": {
+        "path": "tools/imagegen/.cache/forest-floor-needles.png",
+        "bytes": 2633243,
+        "sha256": "dc432eee02d3bcd506f0d8ddba53895546bb3a2ffd52f4892d0c8b7b583fb23d"
+      },
+      "outputs": [
+        {
+          "path": "public/textures/forest-floor-needles/albedo.webp",
+          "bytes": 691612,
+          "sha256": "bcec1bfd4b001f62221b6b02496a992c7165028f376f66dc97970bd873890d5e"
+        },
+        {
+          "path": "public/textures/forest-floor-needles/albedo@512.webp",
+          "bytes": 162528,
+          "sha256": "28d980b635e2ef3599b477417fec977b75fa6bb9a2ab45891f19ee3a443020ac"
+        },
+        {
+          "path": "public/textures/forest-floor-needles/albedo@256.webp",
+          "bytes": 33642,
+          "sha256": "ba6c19786677f4be7cbfeb15c51c89a28978d830215d60db71aceeaee128a561"
+        },
+        {
+          "path": "public/textures/forest-floor-needles/normal.webp",
+          "bytes": 358702,
+          "sha256": "4dc1c1de842d96de15fef5750a9e1ac8df30c9e324f922c54acc83b639beb477"
+        },
+        {
+          "path": "public/textures/forest-floor-needles/normal@512.webp",
+          "bytes": 137792,
+          "sha256": "d2b6c0fb6b2ec6de28e6e340bf8a872a26eb51032ec9095f8dee74e10325daa1"
+        },
+        {
+          "path": "public/textures/forest-floor-needles/normal@256.webp",
+          "bytes": 36982,
+          "sha256": "ae6b027a5314dc04a8a8cf8e362421662295dfa184bf5eac63b45a5456168802"
+        },
+        {
+          "path": "public/textures/forest-floor-needles/roughness.webp",
+          "bytes": 46018,
+          "sha256": "8926c81d85fbfc142608854ea7afdaa030cfcd3d11a50dda27f2e3bf8167b511"
+        },
+        {
+          "path": "public/textures/forest-floor-needles/roughness@512.webp",
+          "bytes": 21322,
+          "sha256": "d1fdf95b7e9250515e0171fcbe01a7dc75bd880f2b5f981e5cf4cdc7bf725945"
+        },
+        {
+          "path": "public/textures/forest-floor-needles/roughness@256.webp",
+          "bytes": 10232,
+          "sha256": "876ddc6038827ef89aeea04fd215081cbdc81737d554b691654cf82ed63bc3ac"
+        },
+        {
+          "path": "public/textures/forest-floor-needles/ao.webp",
+          "bytes": 193436,
+          "sha256": "24d9dcba318ec0df1e87d4ad0d2013d9a4901c1e9ed33484135e526a1e813dea"
+        },
+        {
+          "path": "public/textures/forest-floor-needles/ao@512.webp",
+          "bytes": 86350,
+          "sha256": "dba16899390483bcff4c6b3bceabd6082ede63f51eadc0a8380560d4a1947311"
+        },
+        {
+          "path": "public/textures/forest-floor-needles/ao@256.webp",
+          "bytes": 25214,
+          "sha256": "2cab3d3fff0963ef13dc393e7f4d4adedfe15367164ddca36a897cb77e9aec11"
+        }
+      ],
+      "generatedAt": "2026-08-01T10:22:14.956Z"
+    },
+    "granite-boulder": {
+      "id": "granite-boulder",
+      "fetched": true,
+      "promptHash": "9eb8f3ba0aed1510",
+      "seed": 10201,
+      "model": "gemini-2.5-flash-image",
+      "aspect": "1:1",
+      "source": {
+        "path": "tools/imagegen/.cache/granite-boulder.png",
+        "bytes": 2411900,
+        "sha256": "c0f61efcb79414f048cd75cfb8275dae054bda1b1e1b764bdfebea3af2b3ed44"
+      },
+      "outputs": [
+        {
+          "path": "public/textures/granite-boulder/albedo.webp",
+          "bytes": 623596,
+          "sha256": "9f261a54159e6f752035543af71a53dfd4093736423b1fa090eb3e841975038d"
+        },
+        {
+          "path": "public/textures/granite-boulder/albedo@512.webp",
+          "bytes": 150712,
+          "sha256": "c8cfd47c8f840986b41e9b036e17a3f1a5fd0553b1f81e0ba13b2b9e9f1cd537"
+        },
+        {
+          "path": "public/textures/granite-boulder/albedo@256.webp",
+          "bytes": 34046,
+          "sha256": "43ae93da17d95ef9a1b012c5dfcfbd94ed9411da413524f4e6d168977a9326b1"
+        },
+        {
+          "path": "public/textures/granite-boulder/normal.webp",
+          "bytes": 458250,
+          "sha256": "d0d265a32ed922cb22cccb498658165901a8dfa24ee5ae1cbd81e4e92b65e9fe"
+        },
+        {
+          "path": "public/textures/granite-boulder/normal@512.webp",
+          "bytes": 167530,
+          "sha256": "84efefb83b8d35e4ddd3497ae3ba702d8e8d793cebfd4626d210bfb597b79241"
+        },
+        {
+          "path": "public/textures/granite-boulder/normal@256.webp",
+          "bytes": 43992,
+          "sha256": "d13dbb3d32ca7520cb0e6824f5a3992769e0b58af0fe997aead8996496996fef"
+        },
+        {
+          "path": "public/textures/granite-boulder/roughness.webp",
+          "bytes": 55300,
+          "sha256": "fed06514f55ae5c3c6547c8262f70e01ed50bf75e6893836b303e979950a46ae"
+        },
+        {
+          "path": "public/textures/granite-boulder/roughness@512.webp",
+          "bytes": 26892,
+          "sha256": "8562b5a9239eae8a0afc12f5e433728df98bcb938dba7560d399d6a5b5fd3506"
+        },
+        {
+          "path": "public/textures/granite-boulder/roughness@256.webp",
+          "bytes": 12602,
+          "sha256": "882e9fa6aefdbc1a3a2e7f7ff189f67f8bddeb577801a31dc296dc79f5ce6ff0"
+        },
+        {
+          "path": "public/textures/granite-boulder/ao.webp",
+          "bytes": 237244,
+          "sha256": "d3c51bd342612812d055a0a53faa9436c1e6e4374f886ee7a77b48a3a43010af"
+        },
+        {
+          "path": "public/textures/granite-boulder/ao@512.webp",
+          "bytes": 104698,
+          "sha256": "bb3c718b297c0c1a42971ef880fe9a60487e9a163ca8c3ca6b87bcd2815e7d19"
+        },
+        {
+          "path": "public/textures/granite-boulder/ao@256.webp",
+          "bytes": 29370,
+          "sha256": "6f562657fc83749b211d77a791e36b5ddfcbc334c44444df01efad4d33c6157a"
+        }
+      ],
+      "generatedAt": "2026-08-01T10:22:16.670Z"
+    },
+    "moss": {
+      "id": "moss",
+      "fetched": true,
+      "promptHash": "5d13257fc12d61a3",
+      "seed": 10303,
+      "model": "gemini-2.5-flash-image",
+      "aspect": "1:1",
+      "source": {
+        "path": "tools/imagegen/.cache/moss.png",
+        "bytes": 2502666,
+        "sha256": "bdbee763fec555a65a1890c0312ebc970fdfc27f3cf45d47237cc190456d8545"
+      },
+      "outputs": [
+        {
+          "path": "public/textures/moss/albedo.webp",
+          "bytes": 643448,
+          "sha256": "f9d73daf22945a92fbe048741f51c824205cded951ae85db3dc2404d9f8ad512"
+        },
+        {
+          "path": "public/textures/moss/albedo@512.webp",
+          "bytes": 150258,
+          "sha256": "ce4610a434f819d624da58e3299b8a33709231b522a7aa12b53a5f037e0670b9"
+        },
+        {
+          "path": "public/textures/moss/albedo@256.webp",
+          "bytes": 33764,
+          "sha256": "162b92e79976bbeb0705866a62d95fd68842be58da9747808e94a973348568d8"
+        },
+        {
+          "path": "public/textures/moss/normal.webp",
+          "bytes": 353574,
+          "sha256": "2ce8fca82473f133d3ae89ba80d90d268d629f681c437e98a3528d512a4d40a8"
+        },
+        {
+          "path": "public/textures/moss/normal@512.webp",
+          "bytes": 137052,
+          "sha256": "893d3b41ac1494b4bd03359910b62503bd1957f84e897e52688f90eeab486037"
+        },
+        {
+          "path": "public/textures/moss/normal@256.webp",
+          "bytes": 37446,
+          "sha256": "056257710cca1c8ac89a7c736f220bf4054e968fdef11d252685216d9a92971e"
+        },
+        {
+          "path": "public/textures/moss/roughness.webp",
+          "bytes": 37398,
+          "sha256": "82967f35ccd31710075f9af946a0ad400c859194a3e0511cd6f28e04d4516277"
+        },
+        {
+          "path": "public/textures/moss/roughness@512.webp",
+          "bytes": 17246,
+          "sha256": "9a394744d3d1dbba4356487325f8b369c5fc68771ea37fc2922aeac15dccc8ca"
+        },
+        {
+          "path": "public/textures/moss/roughness@256.webp",
+          "bytes": 8168,
+          "sha256": "c3180cb1f74880a34235f54d750b08057955192f87e83a87dc8d1f1b1e4cc1b2"
+        },
+        {
+          "path": "public/textures/moss/ao.webp",
+          "bytes": 227622,
+          "sha256": "99ab99fa4de62ff2ba4c4b46c54cd283b14571137975dd5d7882752cba2d3f25"
+        },
+        {
+          "path": "public/textures/moss/ao@512.webp",
+          "bytes": 102178,
+          "sha256": "f489ac04c485836a97974faa41c98d63a9bfc50b2d1c2ab1acb0b0f077181bc9"
+        },
+        {
+          "path": "public/textures/moss/ao@256.webp",
+          "bytes": 30272,
+          "sha256": "182d32344e50180c73ead8894b2a9dfedac42a7230c6855b039c34d71c527de8"
+        }
+      ],
+      "generatedAt": "2026-08-01T10:22:15.093Z"
+    }
+  },
+  "updatedAt": "2026-08-01T10:22:16.670Z"
+}

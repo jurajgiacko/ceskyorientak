@@ -253,6 +253,40 @@ These are the field boundaries of the vanished German villages.
   valid for the whole World Cup or a single day; parking and shuttle bus also
   sold there. **O-Tour entrants get the arena ticket free.**
 
+### 4.1 Arena site plan — the official layout
+
+Extracted from Bulletin 4 p. 56 → **`research/arena/arena-martinkov-site-plan_b4-p56.jpg`**
+(2048 × 1133). Titled *"MARTÍNKOV — ARENA, 5–9 AUGUST"*. Nine numbered zones:
+
+| # | Zone |
+|---|---|
+| 1 | **Arena entrance** — at the south, on the road |
+| 2 | **Event office, first aid** |
+| 3 | **Finish** |
+| 4 | **Team zone** — the western lobe, per §3.3 |
+| 5 | **Media, VIP** |
+| 6 | **WC, washing, water** — south-east corner |
+| 7 | **Caterings** — two positions, centre and east |
+| 8 | **Sport shops** — two positions, near the entrance |
+| 9 | **Fan zone** — the largest area, the northern lobe |
+
+**Reading the plan for layout purposes:** the arena occupies a meadow clearing
+with the **competition area (forest) to the west and north**. The **finish (3)
+sits centrally**, immediately adjacent to **media/VIP (5)** and the **event
+office (2)**, with the **team zone (4)** pushed west into its own lobe and the
+**fan zone (9)** occupying the whole northern half — so spectators and teams are
+deliberately separated, with the finish between them. Entrance (1), sport shops
+(8) and WC (6) line the southern road edge. Catering (7) is distributed rather
+than clustered.
+
+Two further graphics extracted: **`b4_p13_access-map.jpg`** (the one-way
+approach/departure routing) and **`b4_p55_graphic.png`**.
+
+> The site plan is also the best single reference for the event's visual identity
+> in application — orange `#FE5900` title band, cream `#EDECE3` display type in
+> slanted GT Planar, and the lime `#D0EC34` finish double-circle bled off the
+> top-right corner exactly as the brand manual prescribes. See `docs/BRAND.md`.
+
 ---
 
 ## 5. Embargoed areas (`B4` §7)

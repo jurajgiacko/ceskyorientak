@@ -12,7 +12,9 @@
     "gen:images": "node tools/imagegen/generate.mjs",
     "gen:terrain": "node tools/terrain/build.mjs",
     "gen:models": "node tools/blender/build.mjs",
-    "perf": "node tools/perf/budget.mjs"
+    "perf": "node tools/perf/budget.mjs",
+    "gen:pbr": "node tools/imagegen/pbr.mjs",
+    "gen:validate": "node tools/imagegen/validate.mjs"
   },
   "dependencies": {
     "three": "^0.180.0"

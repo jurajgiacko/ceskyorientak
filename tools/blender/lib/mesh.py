@@ -188,7 +188,7 @@ def bevel(obj, width, segments=2, angle_deg=30.0, clamp=True, profile=0.5):
             bmesh.ops.bevel(bm, geom=edges, offset=width, segments=segments,
                             profile=profile, affect="EDGES",
                             offset_type="OFFSET", clamp_overlap=clamp,
-                            miter_outer="MITER_ARC")
+                            miter_outer="ARC")
         except TypeError:
             bmesh.ops.bevel(bm, geom=edges, offset=width, segments=segments,
                             profile=profile, affect="EDGES")

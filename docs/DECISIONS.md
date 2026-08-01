@@ -208,3 +208,80 @@ once.
 **Compliance note.** This mechanic must not be described to the player in
 performance-claim language. See `docs/CLAIMS_TO_REVIEW.md` — the in-game copy
 describes what the athlete *does*, not what the product *achieves*.
+
+---
+
+## D-011 — Pre-race failure is under-fuelling, not "rebound hypoglycaemia"
+
+**Decision.** The BEFORE screen can send you to the start line with a genuine
+deficit, but that deficit comes from **too little carbohydrate or too long a
+fast** — never from a modelled sugar crash caused by eating too close to the
+start.
+
+**Why this overrides the brief's phrasing.** The brief says "wrong choice or
+wrong timing = you start the race with a deficit," which naturally suggests
+modelling reactive hypoglycaemia. The evidence does not support that:
+
+- The entire "don't eat in the hour before" folk rule traces to one 1979 study
+  (n=8) using fixed-intensity time-to-exhaustion — not a time trial — where the
+  effect also vanished at higher intensity.
+- The transient glucose dip is real and common (≈25–60% of athletes depending
+  on timing), but it resolves within ~10 minutes of starting and is **not
+  related to performance**. Moseley et al. (2003) states this directly.
+- Jeukendrup & Killer (2010) conclude that advice to avoid carbohydrate in the
+  hour before exercise is *unfounded*.
+
+Modelling a punishing sugar crash would teach players something false. Judge O
+would not catch it, but it would be wrong, and the brief's own compliance rule
+("no dosages invented by you", neutral factual wording) points the same way.
+
+**What we model instead, which is well supported:**
+- 1–4 g/kg carbohydrate, 1–4 h before — the actual ACSM/AND/DC 2016 guidance.
+  Note its stated scope is events **>60 min**, so it binds on Long, weakly on
+  Middle, and essentially not at all on Sprint.
+- A top-up in the final ~15 minutes is *favourable*, not risky: it produces the
+  fewest dips of any timing, and a running study (Tokmakidis 2008, 1 g/kg at
+  15 min) found a 12.8% longer time to exhaustion. So the BEFORE screen rewards
+  a late top-up rather than punishing it — the opposite of the folk rule, and
+  the more interesting decision.
+- Glycaemic index is **not** modelled. A 19-study meta-analysis found no
+  reliable performance benefit either way; adding a GI lever would be inventing
+  a mechanic the evidence does not support.
+
+---
+
+## D-012 — Hydration and sodium calibrated to bite only where they really do
+
+**Decision.** Hydration stays as one of the four stats, as the brief requires,
+but it is tuned so it can only meaningfully bind on **Long distance in warm
+conditions**. Salt is available and is a no-op outside that same envelope.
+
+**Why.** The brief has hydration "deplete with heat/humidity; low = cramp risk,
+forced pace drop." For our actual race durations that is largely unsupported,
+and an orienteer would know it:
+
+- A runner starting euhydrated loses roughly 0.7–3.5% body mass over 30–100
+  min. Only the top of that range reaches the contested 2% threshold at all.
+- Whether 2% even impairs performance in real-world short events is genuinely
+  disputed — blinded studies contradict each other, and the individual spread
+  across them runs from −1.5% to −19.2%.
+- Competitive runners in half marathons voluntarily drink ~150 ml/h and finish
+  ~2.4% down without incident.
+- Goulet & Hoffman note the reverse risk: in ~1 h events, drinking *enough* to
+  stay euhydrated can itself hurt.
+
+On sodium, the guidance is unambiguous and points the same way: ACSM sets the
+trigger at >2 h duration or >1.2 L/h sweat rate; NATA states that below one
+hour nothing but water is required, and that no evidence shows athletes are
+helped by sodium beyond their individual losses. The only performance-outcome
+data — from ultramarathons, where the case would be strongest — is null.
+
+**So:** Sprint and Middle are not hydration-limited, because in reality they are
+not. Long in heat is. Salt capsules are present in the loadout and are honestly
+marginal, which is itself the lesson. Making them a reliable power-up would be
+both a gameplay lie and a compliance problem.
+
+**Consequence for the loadout UI.** Items that are correctly a no-op for the
+chosen race must not read as bad choices — they read as *unnecessary* ones, with
+the reason stated. That distinction is the difference between the mechanic
+teaching the real protocol and it teaching superstition.

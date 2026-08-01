@@ -6,3 +6,4 @@ dist/
 *.log
 research/raw/
 .vercel/
+tools/imagegen/.cache/
