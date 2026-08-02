@@ -63,6 +63,13 @@
      pending client confirmation (see ASSETS_NEEDED.md). */
   --c-brand-accent: #e2ec00;
 
+  /* Beginner aid — the bearing band on the ground, and the coaching lines that
+     go with it. A pale sky blue, chosen because it is the one hue the sport's
+     own palette does not use: ISOM blue is water, purple is the overprint,
+     orange is the flag and the event, green is vegetation. A hint has to be
+     legible as *not part of the map*. */
+  --c-aid: #7ec8f2;
+
   /* State */
   --c-good: #4caf72;
   --c-warn: #e8a33d;

@@ -37,7 +37,7 @@
     },
     "low": {
       "height": "height-low.bin",
-      "runnability": "runnability-low.bin",
+      "runnability": "runnability.bin",
       "canopy": "canopy.bin"
     }
   },
@@ -187,20 +187,8 @@
       "bytes": 201,
       "gzipBytes": 159,
       "sha256": "cd1e49e4b9bde37139d7b99eb179afcf32308ef80003f094092176efc6b8cc1b"
-    },
-    {
-      "file": "runnability-low.bin",
-      "bytes": 361201,
-      "gzipBytes": 42740,
-      "sha256": "cf3caee8e6c79bd2926a5f64504da772754e39524c4a71334074ba00c87a9ed9"
-    },
-    {
-      "file": "runnability-low.json",
-      "bytes": 344,
-      "gzipBytes": 203,
-      "sha256": "39ba906282df8dfd26f2747b713e5ffbe530c67f91a23824ef1601ffddbc847f"
     }
   ],
-  "totalBytes": 19821896,
-  "totalGzipBytes": 12752097
+  "totalBytes": 19460351,
+  "totalGzipBytes": 12709154
 }

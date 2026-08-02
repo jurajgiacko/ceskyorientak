@@ -19,12 +19,10 @@
  * Exit codes: 0 pass, 1 a race could not be completed, 2 harness failure.
  */
 
-import { readFileSync, existsSync, mkdtempSync, rmSync } from 'node:fs';
-import { resolve, dirname, join } from 'node:path';
-import { tmpdir } from 'node:os';
+import { existsSync } from 'node:fs';
+import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createServer } from 'node:http';
-import { spawn } from 'node:child_process';
+import { serve, withChrome, openTab } from './chrome.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DIST = resolve(__dirname, '../../dist');
@@ -44,6 +42,14 @@ const CASES = [
   { id: 'sprint s3', url: '/?scene=sprint&race=1&debug=0&seed=3', loadMs: 16000 },
   { id: 'sprint s19', url: '/?scene=sprint&race=1&debug=0&seed=19', loadMs: 16000 },
   { id: 'sprint s42', url: '/?scene=sprint&race=1&debug=0&seed=42', loadMs: 16000 },
+  // A menu-shaped seed. The menu seeds with `(Date.now() / 60000) | 0`, so an
+  // eight-digit number is what every player actually gets and 3/7/19/42 is a
+  // corner of the input space nobody will ever see.
+  { id: 'sprint menu-seed', url: '/?scene=sprint&race=1&debug=0&seed=29760961', loadMs: 20000 },
+  // The `low` tier, which is what `pickTier` hands a mid-range Android phone —
+  // the device the brief is written for, and the one on which this venue was
+  // unplayable while every desktop run was green.
+  { id: 'sprint low tier', url: '/?scene=sprint&race=1&debug=0&tier=low&seed=29760961', loadMs: 20000 },
 ];
 
 /**
@@ -78,152 +84,6 @@ const CASES = [
  */
 const SIM_BUDGET_S = 4 * 3600;
 
-const MIME = {
-  '.html': 'text/html; charset=utf-8',
-  '.js': 'text/javascript; charset=utf-8',
-  '.css': 'text/css; charset=utf-8',
-  '.json': 'application/json',
-  '.webp': 'image/webp',
-  '.png': 'image/png',
-  '.svg': 'image/svg+xml',
-  '.glb': 'model/gltf-binary',
-  '.bin': 'application/octet-stream',
-  '.ktx2': 'image/ktx2',
-  '.wasm': 'application/wasm',
-};
-
-function serve(dir, port) {
-  const server = createServer((req, res) => {
-    const url = new URL(req.url, 'http://localhost');
-    let p = resolve(dir, '.' + decodeURIComponent(url.pathname));
-    if (!p.startsWith(dir)) return void res.writeHead(403).end();
-    if (!existsSync(p) || p === dir) p = resolve(dir, 'index.html');
-    try {
-      const body = readFileSync(p);
-      res.writeHead(200, { 'Content-Type': MIME[p.slice(p.lastIndexOf('.'))] ?? 'application/octet-stream' });
-      res.end(body);
-    } catch {
-      res.writeHead(404).end();
-    }
-  });
-  return new Promise((r) => server.listen(port, () => r(server)));
-}
-
-function findChrome() {
-  return [
-    process.env.CHROME_PATH,
-    '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-    '/Applications/Chromium.app/Contents/MacOS/Chromium',
-    '/usr/bin/google-chrome',
-    '/usr/bin/chromium-browser',
-    '/usr/bin/chromium',
-  ]
-    .filter(Boolean)
-    .find((c) => existsSync(c)) ?? null;
-}
-
-async function withChrome(fn) {
-  const bin = findChrome();
-  if (!bin) {
-    console.error('✗ No Chrome/Chromium found. Set CHROME_PATH.');
-    process.exit(2);
-  }
-  const port = 9722 + Math.floor(Math.random() * 400);
-  const profile = mkdtempSync(join(tmpdir(), 'orientak-race-'));
-  const proc = spawn(bin, [
-    '--headless=new',
-    `--remote-debugging-port=${port}`,
-    `--user-data-dir=${profile}`,
-    '--use-gl=angle',
-    '--enable-gpu',
-    '--no-sandbox',
-    '--window-size=1280,800',
-    'about:blank',
-  ]);
-  proc.on('error', (e) => {
-    console.error('✗ Chrome failed to start:', e.message);
-    process.exit(2);
-  });
-
-  let up = false;
-  for (let i = 0; i < 60 && !up; i++) {
-    try {
-      await (await fetch(`http://127.0.0.1:${port}/json/version`)).json();
-      up = true;
-    } catch {
-      await new Promise((r) => setTimeout(r, 250));
-    }
-  }
-  if (!up) {
-    proc.kill();
-    console.error('✗ Chrome debugging endpoint never came up.');
-    process.exit(2);
-  }
-  try {
-    return await fn(port);
-  } finally {
-    proc.kill();
-    try {
-      rmSync(profile, { recursive: true, force: true });
-    } catch {
-      /* tmp profile; losing the race with Chrome's teardown is fine */
-    }
-  }
-}
-
-async function openTab(cdpPort, url) {
-  const res = await fetch(
-    `http://127.0.0.1:${cdpPort}/json/new?${encodeURIComponent(url)}`,
-    { method: 'PUT' },
-  );
-  const target = await res.json();
-  const sock = new WebSocket(target.webSocketDebuggerUrl);
-  await new Promise((r, j) => {
-    sock.onopen = r;
-    sock.onerror = j;
-  });
-
-  let id = 0;
-  const pending = new Map();
-  const consoleErrors = [];
-  sock.onmessage = (ev) => {
-    const m = JSON.parse(ev.data);
-    if (m.method === 'Runtime.consoleAPICalled' && m.params.type === 'error') {
-      consoleErrors.push(m.params.args.map((a) => a.value ?? a.description ?? '').join(' '));
-    }
-    if (m.method === 'Runtime.exceptionThrown') {
-      consoleErrors.push(m.params.exceptionDetails?.exception?.description ?? 'exception');
-    }
-    if (m.id && pending.has(m.id)) {
-      pending.get(m.id)(m);
-      pending.delete(m.id);
-    }
-  };
-  const send = (method, params = {}) =>
-    new Promise((r) => {
-      const n = ++id;
-      pending.set(n, r);
-      sock.send(JSON.stringify({ id: n, method, params }));
-    });
-  const evaluate = async (expression) => {
-    const r = await send('Runtime.evaluate', {
-      expression,
-      returnByValue: true,
-      awaitPromise: true,
-    });
-    return r.result?.result?.value;
-  };
-  await send('Runtime.enable');
-  return {
-    evaluate,
-    consoleErrors,
-    close: async () => {
-      sock.close();
-      await fetch(`http://127.0.0.1:${cdpPort}/json/close/${target.id}`);
-    },
-  };
-}
-
 async function main() {
   if (!existsSync(DIST)) {
     console.error('✗ dist/ not found. Run `npm run build` first.');
@@ -237,9 +97,9 @@ async function main() {
     for (const c of CASES) {
       process.stdout.write(`▶ ${c.id} … `);
       const tab = await openTab(cdpPort, `http://127.0.0.1:${port}${c.url}`);
-      await new Promise((r) => setTimeout(r, c.loadMs));
-
-      const ready = await tab.evaluate('!!window.__race');
+      // Poll rather than sleep: a warm texture cache loads in a third of the
+      // time, and a sleep sized for the cold case pays for it on every run.
+      const ready = await tab.waitFor('!!window.__race', c.loadMs);
       if (!ready) {
         console.log('✗ the race never mounted');
         const errs = await tab.evaluate('JSON.stringify((window.__renderErrors||[]).slice(0,3))');

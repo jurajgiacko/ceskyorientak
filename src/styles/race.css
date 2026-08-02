@@ -1030,6 +1030,51 @@
   color: var(--c-paper-dim);
 }
 
+/* --- the beginner's coaching block ---------------------------------------
+ *
+ * Four sentences on how to run a leg, collapsible in one tap. Marked out in the
+ * aid's own pale blue rather than the event orange, because it is help rather
+ * than the race — and the card is already vertically tight on a phone, so the
+ * list is capped and scrolls rather than pushing START off the screen. */
+
+.racepanel__coach {
+  border-left: 2px solid var(--c-aid);
+  padding-left: 0.7rem;
+}
+
+.racepanel__coachTitle {
+  font-size: 0.68rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--c-aid);
+  cursor: pointer;
+}
+
+.racepanel__coachList {
+  margin: 0.5rem 0 0;
+  padding-left: 1rem;
+  display: grid;
+  gap: 0.35rem;
+  max-height: 30vh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  font-size: 0.78rem;
+  line-height: 1.4;
+  color: var(--c-paper-dim);
+}
+
+.racepanel__coachList li::marker {
+  color: var(--c-aid);
+}
+
+.racepanel__coachAid {
+  margin: 0.5rem 0 0;
+  font-size: 0.72rem;
+  line-height: 1.4;
+  color: var(--c-paper-dim);
+  opacity: 0.85;
+}
+
 .racepanel__go {
   appearance: none;
   border: 0;

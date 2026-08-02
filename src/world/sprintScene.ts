@@ -39,6 +39,8 @@ import { Landmarks, KRUMLOV_LANDMARKS, KRUMLOV_OVERRIDES, KRUMLOV_SKIP } from '.
 import { Vegetation, disposeAsset, loadAsset } from './vegetation';
 import type { Asset } from './vegetation';
 import { loadDetailTextures } from './materials';
+import { BearingBand, aidColour } from './bearingBand';
+import type { BearingAim } from './bearingBand';
 
 export interface SprintSceneOptions {
   canvas: HTMLCanvasElement;
@@ -75,6 +77,9 @@ export class SprintScene {
   private town!: Townscape;
   private vegetation: Vegetation | null = null;
   private landmarks!: Landmarks;
+  /** The beginner's bearing aid. Null until the world is built. */
+  private bearing: BearingBand | null = null;
+  private aim: BearingAim | null = null;
   private data!: TownscapeData;
   private surfaces: SurfaceTextures[] = [];
   /** See the same field on `ForestScene` — held so `dispose` can release it. */
@@ -262,6 +267,10 @@ export class SprintScene {
     this.landmarks = new Landmarks(this.field, stone);
     this.scene.add(this.landmarks.group);
 
+    // --- the beginner's bearing aid ---------------------------------------
+    this.bearing = new BearingBand(this.field, aidColour());
+    this.scene.add(this.bearing.group);
+
     // --- camera ----------------------------------------------------------
     this.camera.position.set(
       START.x,
@@ -352,6 +361,17 @@ export class SprintScene {
   /** Hand the camera to the race. See `ForestScene.setExternalPose`. */
   setExternalPose(x: number, z: number, yaw: number, pitch: number): void {
     this.external = { x, z, yaw, pitch };
+  }
+
+  /**
+   * Aim the beginner's bearing band, or `null` to put it away.
+   *
+   * The scene knows nothing about controls; it is handed three points and
+   * draws a corridor. Which points, and whether the aid is on at all, is the
+   * race controller's business. See `BearingBand`.
+   */
+  setBearingAid(aim: BearingAim | null): void {
+    this.aim = aim;
   }
 
   // -------------------------------------------------------------------------
@@ -445,6 +465,8 @@ export class SprintScene {
       this.camera.position.y +=
         (ground + EYE_HEIGHT - this.camera.position.y) * Math.min(1, dt * 12);
     }
+
+    this.bearing?.update(this.aim, dt);
 
     this.terrain.update(this.camera);
     this.buildings.update(this.camera);
@@ -563,9 +585,12 @@ export class SprintScene {
     this.stop();
     this.beforeFrame = null;
     this.external = null;
+    this.aim = null;
     for (const d of this.inputDisposers) d();
     this.inputDisposers.length = 0;
 
+    this.bearing?.dispose();
+    this.bearing = null;
     this.terrain?.dispose();
     this.buildings?.dispose();
     this.town?.dispose();

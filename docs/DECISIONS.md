@@ -975,3 +975,134 @@ rhythm, no oriel; the plaster palette is measured but narrow, so a street reads
 creamier than the real one; the roofscape has no chimneys, and Krumlov's has
 hundreds; and the tower's painted shaft is only visible from a few places in the
 town, so its polychrome is doing less work than the effort suggests.
+
+---
+
+## D-027 — A quality tier is a rendering budget, never a rules budget
+
+The client, on a phone: *"in the city we're again in some small circle,
+levitating a bit, and can't continue."* Every gate was green.
+
+`TerrainField.load` gave the `low` tier a **4 m** runnability raster
+(`runnability-low.bin`) alongside its 4 m heightmap, on the argument written
+into the comment there: *"physics and visuals must agree about where a path is;
+sampling a 1 m class raster against a 4 m mesh would put the runner on tarmac
+that is not drawn anywhere."*
+
+That argument is wrong twice.
+
+**Cosmetically**, it does not describe what happens. The ground splat is a
+per-vertex attribute, so a 4 m terrain mesh samples the class raster every 4 m
+whatever its resolution. A finer raster changes nothing about what is drawn.
+
+**Substantively**, the class raster is not a texture. D-002/D-024 make it the
+single source of passability for the map, the course generator *and* the
+collider. Downsampling it does not blur a picture; it changes the rules of the
+race. Český Krumlov's alleys are 2–3 m wide, so at 4 m the town seals:
+
+| Measured on Krumlov | 1 m raster | 4 m raster |
+|---|---|---|
+| Town centre cells `Impassable` | — | **49 %** |
+| Reachable from Náměstí Svornosti | **97.2 %** | **0.15 %** |
+| Controls the generator could site (menu seeds) | 10–18 | **1** |
+| Course length | 2.7–4.3 km | 0.4–0.6 km |
+| Ground the athlete could walk on from the start | > 2 ha | **3 040 m², 95 m across** |
+
+That last row is the client's sentence, in square metres. A 3 000 m² pocket
+around one square, with a 500 m one-control "sprint" set inside it.
+
+`pickTier` returns `low` for any Mali-G5x/G3x, Adreno 6xx or PowerVR device and
+for any touch device reporting ≤ 4 GB — which is a large share of the phones the
+brief is actually written for, and none of the machines this is developed on.
+
+**The fix**: only the heightmap follows the tier. Every tier loads
+`runnability.bin`; `runnability-low` is no longer generated and has been
+deleted. It costs ~190 kB gzip on Krumlov and ~240 kB on Martinkov against a
+25 MB device budget, and device fetch went 14.7 → 16.7 MB.
+
+**The invariant, stated once**: a tier decides how the venue is *drawn*, never
+what is out of bounds. Two players on the same seed and different phones must be
+running the same race.
+
+**Why nothing caught it.** `check:passable` read `runnability.bin` and the phone
+read `runnability-low.bin`; `check:race` only ever ran the default tier; and
+both used seeds 3/7/19/42 while the menu seeds with `(Date.now()/60000)|0`, an
+eight-digit number. Exactly the D-025 shape: green on one lucky configuration.
+
+`check:passable` now has two phases. The first flood-fills **every distinct
+raster the manifest hands to a tier**. The second loads the production build in
+headless Chrome at four menu-shaped seeds × two tiers and asserts, of the points
+the athlete is actually placed on, that none is inside a barrier or a building
+footprint; that the eye sits exactly `EYE_HEIGHT` above the heightfield and that
+the heightfield agrees with the surveyed 1 m DMR; that the runtime's own
+`reachableFraction` clears the floor and the course is a race rather than one
+control; and that the start is not sealed into a pocket. That last is measured
+as an **area**, not a radius — the pocket was 3 000 m² but 95 m across, and a
+radius threshold high enough to catch it fails honest starts in walled alleys.
+Finally it asserts that every tier loaded the *same* passability raster, which
+is the invariant above checked against what the runtime actually loaded rather
+than against the manifest, which `TerrainField.load` never reads.
+
+**On "levitating", honestly.** I could not reproduce a geometric float and I do
+not believe there is one. On both tiers the camera sits at exactly
+`field.heightAt + 1.62` and a downward ray onto the terrain mesh returns the
+same height to the centimetre; buildings, walls and steps are all founded on
+`field.heightAt` rather than on the baked `b.b`, so they cannot separate from the
+ground either. The low heightfield differs from the surveyed 1 m DMR by 0.25 m
+on average over the playable extent. The gate now measures all three of those
+anyway, because they are cheap and they are the things that would produce the
+symptom if it ever did appear. My reading is that what was described as
+levitating was the same failure as the small circle: standing on an
+enclosed square walled in by geometry the 4 m raster had thickened, with the
+roofs and the far side of the square visible past it and no way to walk to any
+of it.
+
+---
+
+## D-028 — A beginner aid that cannot become a GPS dot
+
+The client: *"the forest is OK, but maybe it'd be worth giving some smaller hint
+— a pointer, a light-blue translucent band or something — showing where a
+control is? And how to actually approach it correctly?"*
+
+The need is real: the brief asks that a non-orienteer understands the game in
+sixty seconds, and nothing told them which way to go. The risk is equally real:
+this game's one idea is that there is **no GPS dot** — your position on the map
+is your own estimate and it drifts — and a hint that points at the control
+deletes the sport.
+
+So the aid is `src/world/bearingBand.ts`, and three properties are built into
+its geometry rather than left to discipline:
+
+- **It is a bearing, not a path.** A straight ground corridor along the
+  direction to the control. It does not route round the building in front of
+  you, and in Krumlov it regularly points at a wall or across the Vltava.
+  Finding the way round is what the map is for.
+- **It flares**, at 7° a side, which is inside the running "rough compass" error
+  a real orienteer accepts (RESEARCH-SPORT §6.1). It cannot be read as a precise
+  line to a precise spot, because it is not one.
+- **It lets go**, fading to nothing between 130 m and 55 m from the control, so
+  it gets you off the start and leaves the attack point and the final approach —
+  the actual orienteering — alone.
+
+**The part that matters most**: the bearing is derived from
+`RaceView.believedPosition`, never from the true position. A player who has
+drifted gets a hint that has drifted with them; punching corrects the belief and
+the band swings straight with it. The aid is inside the mechanic rather than a
+way around it. It is only *drawn* from the true position, because it has to
+start at the player's feet.
+
+Default **on** — almost nobody arriving here has orienteered — with a toggle in
+the menu beside the hands switch, read once when the race is constructed so that
+changing it cannot alter a race in progress.
+
+The second half of the client's question is answered on the prestart card: four
+one-sentence techniques from RESEARCH-SPORT §6 — rough bearing, handrail
+(*vodicí linie*), attack point (*odrazový bod*) and the control description — in
+CZ/EN/SK, collapsible in one tap, and gone entirely with the aid switched off. A
+leg is *úsek*; *postup* is the route, not the leg.
+
+It is rendered as a `MeshBasicMaterial` with a generated alpha texture rather
+than a custom shader. That is a deliberate downgrade: a shader that fails to
+compile makes geometry vanish while every other gate stays green, and this
+project has shipped that twice.

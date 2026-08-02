@@ -111,5 +111,13 @@
   "hud.gut": "ŽALÚDOK",
   "hud.takeCost": "Spomalenie {s} s",
   "hud.focus": "HLAVA",
-  "nutrition.caffeine": "Kofeín {mg} mg"
+  "nutrition.caffeine": "Kofeín {mg} mg",
+  "settings.beginnerAid": "Pomôcka pre začiatočníkov",
+  "settings.beginnerAidHelp": "Svetlomodrý pás na zemi ukazuje azimut na ďalšiu kontrolu. Pri kontrole mizne — dohľadávka je na tebe.",
+  "race.aidHint": "Svetlomodrý pás na zemi ukazuje azimut na ďalšiu kontrolu — podľa toho, kde si myslíš, že si. Pri kontrole zmizne. Vypnúť ho môžeš v menu.",
+  "race.coachTitle": "Ako zabehnúť úsek",
+  "race.coachBearing": "Azimut: zrovnaj mapu podľa strelky a drž smer. Nemieriš na bod, ale do pásu okolo neho.",
+  "race.coachHandrail": "Vodiaca línia: bež po ceste, plote alebo potoku, aj keď je to o kus dlhšie. Je to rýchlejšie a nezablúdiš.",
+  "race.coachAttack": "Odrazový bod: vyber si neprehliadnuteľný objekt do 100 m od kontroly a až odtiaľ bež presne.",
+  "race.coachDescription": "Popis kontrol: prečítaj si, na čom kontrola stojí, ešte než dobehneš do krúžku."
 }

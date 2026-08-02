@@ -936,35 +936,6 @@ function downsampleFloat(src, w, h, factor) {
   return { data: out, w: nw, h: nh };
 }
 
-/** Majority downsample of a class field — never invent a class by averaging. */
-function downsampleClass(src, w, h, factor) {
-  const nw = Math.floor((w - 1) / factor) + 1;
-  const nh = Math.floor((h - 1) / factor) + 1;
-  const out = new Uint8Array(nw * nh);
-  const counts = new Uint16Array(11);
-  for (let j = 0; j < nh; j++) {
-    for (let i = 0; i < nw; i++) {
-      counts.fill(0);
-      for (let dj = 0; dj < factor; dj++) {
-        const jj = Math.min(h - 1, j * factor + dj);
-        for (let di = 0; di < factor; di++) {
-          const ii = Math.min(w - 1, i * factor + di);
-          counts[src[jj * w + ii]]++;
-        }
-      }
-      let best = 0;
-      let bestN = -1;
-      for (let c = 0; c < 11; c++) {
-        if (counts[c] > bestN) {
-          bestN = counts[c];
-          best = c;
-        }
-      }
-      out[j * nw + i] = best;
-    }
-  }
-  return { data: out, w: nw, h: nh };
-}
 
 const files = [];
 
@@ -1154,27 +1125,13 @@ async function buildVenue(v) {
     ),
   );
 
-  const cLow = downsampleClass(cls, grid.w, grid.h, lowF);
-  await emit(dir, 'runnability-low.bin', Buffer.from(cLow.data.buffer, 0, cLow.data.byteLength));
-  await emit(
-    dir,
-    'runnability-low.json',
-    Buffer.from(
-      JSON.stringify(
-        {
-          format: 'uint8',
-          width: cLow.w,
-          height: cLow.h,
-          resM: v.lowResM,
-          originX: grid.minX,
-          originZ: grid.minZ,
-          classes: R_NAME,
-        },
-        null,
-        2,
-      ),
-    ),
-  );
+  // There is deliberately no `runnability-low`. A downsampled *height* map is
+  // a rendering trade; a downsampled *class* raster is a rules change, because
+  // D-002 makes that one raster the passability the map draws, the ground the
+  // course generator sites on and the geometry collision stops at. Krumlov's
+  // alleys are 2–3 m wide, so a 4 m class raster sealed the town: 0.15 % of the
+  // venue reachable from the arena instead of 97 %, and the athlete walled into
+  // the square. Every tier reads `runnability.bin`. See `TerrainField.load`.
 
   // --- manifest ------------------------------------------------------------
   const totalBytes = files.reduce((a, f) => a + f.bytes, 0);
@@ -1202,7 +1159,7 @@ async function buildVenue(v) {
     tiers: {
       high: { height: 'height.bin', runnability: 'runnability.bin', canopy: 'canopy.bin' },
       medium: { height: 'height.bin', runnability: 'runnability.bin', canopy: 'canopy.bin' },
-      low: { height: 'height-low.bin', runnability: 'runnability-low.bin', canopy: 'canopy.bin' },
+      low: { height: 'height-low.bin', runnability: 'runnability.bin', canopy: 'canopy.bin' },
     },
     zabaged: zab,
     files,

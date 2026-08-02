@@ -107,8 +107,20 @@ const row = (label, value, budget, unit) => {
 };
 
 /**
+ * The exact file set a `low`-tier device pulls for one venue.
+ *
+ * Must stay in step with `TerrainField.load`. Note that `runnability.bin` is
+ * *not* the downsampled variant and there is no longer a downsampled variant to
+ * pick: a tier is a rendering budget, so the heightmap gets cheaper on a phone
+ * and the class raster — which is the passability the map, the course generator
+ * and collision all read — does not. See the comment on `TerrainField.load`.
+ */
+const LOW_TIER_TERRAIN = ['height-low.bin', 'height-low.json', 'runnability.bin', 'runnability.json', 'canopy.bin', 'canopy.json'];
+
+/**
  * Estimate what one mid-range phone actually downloads for one race:
- * the 512px tier, KTX2 only, one venue's low-detail terrain, models and audio.
+ * the 512px tier, KTX2 only, one venue's terrain at the low-tier file set,
+ * models and audio.
  *
  * Measured from the files themselves rather than assumed, so it tracks reality
  * as the asset set grows.
@@ -116,10 +128,14 @@ const row = (label, value, budget, unit) => {
 function deviceFetchBytes() {
   const oneOf = (pred) => streamed.filter(pred).reduce((a, f) => a + f.bytes, 0);
   const textures = oneOf(
-    (f) => f.rel.startsWith('textures/') && f.rel.includes('@512') && f.rel.endsWith('.ktx2'),
+    (f) => f.rel.startsWith('textures/') && f.rel.endsWith('.ktx2') && f.rel.includes('@512'),
   );
-  // A phone gets the downsampled terrain, and only the venue it is racing.
-  const terrainAll = streamed.filter((f) => f.rel.startsWith('data/') && f.rel.includes('-low'));
+  // Only the venue the phone is racing, and only the files that venue's low
+  // tier actually asks for. Averaged over the venues so adding a third does not
+  // inflate what any one device fetches.
+  const terrainAll = streamed.filter(
+    (f) => f.rel.startsWith('data/') && LOW_TIER_TERRAIN.includes(f.rel.split('/')[2] ?? ''),
+  );
   const venues = new Set(terrainAll.map((f) => f.rel.split('/')[1]));
   const terrain = venues.size
     ? terrainAll.reduce((a, f) => a + f.bytes, 0) / venues.size

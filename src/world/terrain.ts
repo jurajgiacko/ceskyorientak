@@ -107,27 +107,50 @@ export class TerrainField {
 
   static async load(venue: string, tier: QualityTier): Promise<TerrainField> {
     const base = `/data/${venue}`;
-    // The `low` tier trades 4 m terrain detail for a 16× smaller heightmap.
-    // Runnability follows it because physics and visuals must agree about
-    // where a path is; sampling a 1 m class raster against a 4 m mesh would
-    // put the runner on tarmac that is not drawn anywhere.
-    const suffix = tier === 'low' ? '-low' : '';
+    /**
+     * The `low` tier trades 4 m terrain detail for a 16× smaller heightmap.
+     * **Only the heightmap.** A tier is a rendering budget, not a rules budget.
+     *
+     * Runnability used to follow it, on the argument that physics and visuals
+     * must agree about where a path is. That argument is wrong twice over. It
+     * is cosmetically wrong — the ground splat is a per-vertex attribute, so a
+     * 4 m mesh samples the class raster every 4 m whatever its resolution, and
+     * nothing is drawn any differently. And it is *substantively* wrong,
+     * because the class raster is not a texture: D-002 makes it the single
+     * source of passability for the map, the course generator and collision
+     * alike. Downsampling it changes the rules of the race.
+     *
+     * What that cost, measured: Český Krumlov's alleys are 2–3 m wide, so at
+     * 4 m the town seals. 49 % of the centre came back `Impassable`, the ground
+     * reachable from Náměstí Svornosti fell from **97.2 % to 0.15 %**, the
+     * course generator could site **one** control instead of fifteen, and the
+     * athlete was walled into a 3 000 m² pocket around the square with no way
+     * out of it — on a phone, which is the device the brief is written for,
+     * while every desktop looked fine. That is the "stuck in a small circle in
+     * the city" the client reported, and it is why the gate in
+     * `tools/ci/check-passable.mjs` now flood-fills every raster a tier can be
+     * handed rather than only the default one.
+     *
+     * The bill is ~190 kB gzip on Krumlov and ~240 kB on Martinkov, against a
+     * 25 MB device budget. Correct rules are worth a quarter of a megabyte.
+     */
+    const heightSuffix = tier === 'low' ? '-low' : '';
 
     const [hMeta, rMeta, cMeta] = await Promise.all([
-      loadJson<HeightMeta>(`${base}/height${suffix}.json`),
-      loadJson<ClassMeta>(`${base}/runnability${suffix}.json`),
+      loadJson<HeightMeta>(`${base}/height${heightSuffix}.json`),
+      loadJson<ClassMeta>(`${base}/runnability.json`),
       loadJson<CanopyMeta>(`${base}/canopy.json`),
     ]);
     const [hBuf, rBuf, cBuf] = await Promise.all([
-      loadBin(`${base}/height${suffix}.bin`),
-      loadBin(`${base}/runnability${suffix}.bin`),
+      loadBin(`${base}/height${heightSuffix}.bin`),
+      loadBin(`${base}/runnability.bin`),
       loadBin(`${base}/canopy.bin`),
     ]);
 
     const heights = new Uint16Array(hBuf);
     if (heights.length !== hMeta.width * hMeta.height) {
       throw new Error(
-        `height${suffix}.bin is ${heights.length} samples, sidecar says ${hMeta.width}x${hMeta.height}`,
+        `height${heightSuffix}.bin is ${heights.length} samples, sidecar says ${hMeta.width}x${hMeta.height}`,
       );
     }
     return new TerrainField(

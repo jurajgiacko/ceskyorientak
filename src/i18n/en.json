@@ -111,5 +111,13 @@
   "hud.gut": "STOMACH",
   "hud.takeCost": "Slowed {s} s",
   "hud.focus": "FOCUS",
-  "nutrition.caffeine": "Caffeine {mg} mg"
+  "nutrition.caffeine": "Caffeine {mg} mg",
+  "settings.beginnerAid": "Beginner hints",
+  "settings.beginnerAidHelp": "A pale blue band on the ground shows the bearing to the next control. It fades out near the control — the search is yours.",
+  "race.aidHint": "The pale blue band on the ground shows the bearing to the next control — from where you think you are. It fades out near the control. Turn it off in the menu.",
+  "race.coachTitle": "How to run a leg",
+  "race.coachBearing": "Bearing: line the map up with the needle and hold the direction. You are aiming at a band, not at a point.",
+  "race.coachHandrail": "Handrail: follow a track, a fence or a stream even if it is longer. It is faster, and you cannot get lost on it.",
+  "race.coachAttack": "Attack point: pick something unmissable within 100 m of the control, and only navigate precisely from there.",
+  "race.coachDescription": "Control descriptions: read what the control is sitting on before you run into the circle."
 }

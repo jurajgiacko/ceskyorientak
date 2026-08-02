@@ -25,6 +25,8 @@ import { RunnerCharacter } from './runner';
 import type { RunnerIntent } from './runner';
 import { SpringArm, THIRD_PITCH_MAX, THIRD_PITCH_MIN } from './thirdPerson';
 import { Viewmodel } from './viewmodel';
+import { BearingBand, aidColour } from './bearingBand';
+import type { BearingAim } from './bearingBand';
 
 /** First person is the original camera; third is the spring-arm chase camera. */
 export type CameraMode = 'first' | 'third';
@@ -61,6 +63,9 @@ export class ForestScene {
   private vegetation!: Vegetation;
   private sky!: SkyRig;
   private godRays: GodRays | null = null;
+  /** The beginner's bearing aid. Null until the world is built. */
+  private bearing: BearingBand | null = null;
+  private aim: BearingAim | null = null;
   private ground!: GroundTextures;
   /**
    * The .glb-derived geometry and materials this scene loaded.
@@ -253,6 +258,10 @@ export class ForestScene {
     // spruce. A start clearing is also what a real arena looks like.
     this.vegetation.addExclusion(this.spawn.x, this.spawn.y, 9);
     this.scene.add(this.vegetation.group);
+
+    // --- the beginner's bearing aid ---
+    this.bearing = new BearingBand(this.field, aidColour());
+    this.scene.add(this.bearing.group);
 
     this.camera.position.set(
       this.spawn.x,
@@ -466,6 +475,8 @@ export class ForestScene {
       this.viewmodel.update(dt, this.runner.speed, this.keys.has('KeyM'), this.yaw, this.pitch);
     }
 
+    this.bearing?.update(this.aim, dt);
+
     this.terrain.update(this.camera);
     this.vegetation.update(this.camera, dt);
     if (this.sky.update(this.camera)) this.renderer.refreshShadows();
@@ -495,6 +506,17 @@ export class ForestScene {
    */
   setExternalPose(x: number, z: number, yaw: number, pitch: number): void {
     this.external = { x, z, yaw, pitch };
+  }
+
+  /**
+   * Aim the beginner's bearing band, or `null` to put it away.
+   *
+   * The scene knows nothing about controls; it is handed three points and
+   * draws a corridor. Which points, and whether the aid is on at all, is the
+   * race controller's business. See `BearingBand`.
+   */
+  setBearingAid(aim: BearingAim | null): void {
+    this.aim = aim;
   }
 
   private applyExternal(dt: number): void {
@@ -733,9 +755,12 @@ export class ForestScene {
     this.stop();
     this.beforeFrame = null;
     this.external = null;
+    this.aim = null;
     for (const d of this.inputDisposers) d();
     this.inputDisposers.length = 0;
 
+    this.bearing?.dispose();
+    this.bearing = null;
     this.viewmodel?.dispose();
     this.runner?.dispose();
     this.terrain?.dispose();

@@ -111,5 +111,13 @@
   "hud.gut": "ŽALUDEK",
   "hud.takeCost": "Zpomalení {s} s",
   "hud.focus": "HLAVA",
-  "nutrition.caffeine": "Kofein {mg} mg"
+  "nutrition.caffeine": "Kofein {mg} mg",
+  "settings.beginnerAid": "Nápověda pro začátečníky",
+  "settings.beginnerAidHelp": "Světle modrý pruh na zemi ukazuje azimut na další kontrolu. U kontroly mizí — dohledávka je na tobě.",
+  "race.aidHint": "Světle modrý pruh na zemi ukazuje azimut na další kontrolu — podle toho, kde si myslíš, že jsi. U kontroly zmizí. Vypnout ho můžeš v menu.",
+  "race.coachTitle": "Jak zaběhnout úsek",
+  "race.coachBearing": "Azimut: srovnej mapu podle střelky a drž směr. Nemíříš na bod, ale do pásu kolem něj.",
+  "race.coachHandrail": "Vodicí linie: běž po cestě, plotu nebo potoce, i když je to o kus delší. Je to rychlejší a nezabloudíš.",
+  "race.coachAttack": "Odrazový bod: vyber si nepřehlédnutelný objekt do 100 m od kontroly a teprve odtud běž přesně.",
+  "race.coachDescription": "Popis kontrol: přečti si, na čem kontrola stojí, ještě než doběhneš do kroužku."
 }

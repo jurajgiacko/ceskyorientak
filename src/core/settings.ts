@@ -11,6 +11,13 @@
  * and the town they read as unfinished. The code stays — the model, the gait
  * blend and the map texture binding are all still there and still work — and
  * this switch brings them back for anyone who wants them.
+ *
+ * `beginnerAid` defaults to **on**, which is the opposite call and the right
+ * one: almost nobody arriving here has orienteered, and the brief asks that a
+ * non-orienteer understands the game inside a minute. What it turns on is
+ * deliberately weak — a bearing band that flares, and fades out before the
+ * control — so leaving it on does not remove the sport. See
+ * `src/world/bearingBand.ts`.
  */
 
 const KEY = 'orientak.v1.settings';
@@ -20,11 +27,14 @@ export interface Settings {
   showHands: boolean;
   /** The V key and the third-person chase camera. Follows the hands switch. */
   thirdPerson: boolean;
+  /** The bearing band on the ground and the coaching line. On by default. */
+  beginnerAid: boolean;
 }
 
 const DEFAULTS: Settings = {
   showHands: false,
   thirdPerson: false,
+  beginnerAid: true,
 };
 
 let cache: Settings | null = null;

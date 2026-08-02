@@ -24,6 +24,8 @@ import type { CourseSetupResult } from './courseSetup';
 import type { Course, Discipline, VenueAnchor, World2 } from '@/core/types';
 import { GROUND_FOR_RUNNABILITY } from '@/world/terrain';
 import type { TerrainField } from '@/world/terrain';
+import type { BearingAim } from '@/world/bearingBand';
+import { getSettings } from '@/core/settings';
 import { FieldTerrain } from './terrainAdapter';
 import { buildMapData } from './mapData';
 import { RaceMap } from './raceMap';
@@ -50,6 +52,14 @@ export interface RaceSceneHost {
   readonly arena: World2;
   /** Drive the camera from outside. Called once per frame while racing. */
   setExternalPose(x: number, z: number, yaw: number, pitch: number): void;
+  /**
+   * Aim the beginner's bearing band, or `null` to put it away.
+   *
+   * Optional because a scene without one is a scene without a beginner aid,
+   * not a broken scene. See `src/world/bearingBand.ts` for what it may and may
+   * not show.
+   */
+  setBearingAid?(aim: BearingAim | null): void;
   /** Hook called at the top of the scene's own frame, so ordering is defined. */
   beforeFrame: ((dtS: number) => void) | null;
   /** Extra out-of-bounds geometry the raster does not carry (Krumlov's walls). */
@@ -107,11 +117,18 @@ export class RaceController {
   private started = false;
   private ended = false;
   private lastPunchCode = -1;
+  /**
+   * Whether the beginner's bearing band is on, read once at construction so
+   * that toggling it in the menu cannot change a race that is already running.
+   * Defaults on — most players have never orienteered.
+   */
+  private readonly beginnerAid: boolean;
   private readonly disposers: (() => void)[] = [];
 
   constructor(host: RaceSceneHost, setup: RaceSetup, canvas: HTMLElement) {
     this.host = host;
     this.setup = setup;
+    this.beginnerAid = getSettings().beginnerAid;
     this.terrain = new FieldTerrain(host.field, {
       ...(host.blockedAt ? { blocked: (x: number, z: number) => host.blockedAt!(x, z) } : {}),
       // ISSprOM territory: 1:4000 or closer means a town, and a town's controls
@@ -180,7 +197,15 @@ export class RaceController {
 
     this.controls.attachKeyboard();
     this.controls.attachMouse(canvas);
-    this.controls.yaw = bearingTo(this.course.start, this.course.controls[0]?.position ?? this.course.finish);
+    // Face the first control. Negated because a camera yaw is not a bearing:
+    // `RaceControls.step` documents the identity — three's Y rotation is
+    // counter-clockwise, so the look bearing is exactly `-yaw`. Without the
+    // sign the race opened with the athlete facing the mirror image of the
+    // first leg, which is a poor first impression of a navigation game.
+    this.controls.yaw = -bearingTo(
+      this.course.start,
+      this.course.controls[0]?.position ?? this.course.finish,
+    );
 
     const onKey = (e: KeyboardEvent) => {
       if (e.repeat) return;
@@ -257,10 +282,39 @@ export class RaceController {
           being read as a consequence of not taking a product. Art. 12(a).
         -->
         <p class="racepanel__note">${esc(t('hud.energyCause'))}</p>
+        ${this.beginnerAid ? this.coachBlock() : ''}
         <button class="racepanel__go" data-act="begin">${esc(t('race.goStart'))}</button>
       </div>`;
     const go = this.panel.querySelector('[data-act="begin"]');
     go?.addEventListener('click', () => this.begin());
+  }
+
+  /**
+   * The four sentences that answer "how do I actually approach a control?".
+   *
+   * Four, and one line each, because this is a hint and not a tutorial: the
+   * brief's test is that a non-orienteer understands the game in sixty seconds,
+   * and a wall of coaching fails that as surely as no coaching at all. They are
+   * the four techniques docs/RESEARCH-SPORT.md §6 identifies as the ones that
+   * decide a beginner's leg — rough bearing (§6.1), handrail (§6.3), attack
+   * point (§6.4) and the control description — in the federation's own Czech,
+   * where a leg is *úsek*, a route is *postup*, and an attack point is
+   * *odrazový bod*.
+   *
+   * `<details>` rather than a paragraph so it is skippable in one click, and
+   * open first time because a player who has never seen it cannot know to open
+   * it. It disappears entirely with the beginner aid switched off.
+   */
+  private coachBlock(): string {
+    const lines = ['race.coachBearing', 'race.coachHandrail', 'race.coachAttack', 'race.coachDescription'];
+    return `
+      <details class="racepanel__coach" open>
+        <summary class="racepanel__coachTitle">${esc(t('race.coachTitle'))}</summary>
+        <ul class="racepanel__coachList">
+          ${lines.map((k) => `<li>${esc(t(k))}</li>`).join('')}
+        </ul>
+        <p class="racepanel__coachAid">${esc(t('race.aidHint'))}</p>
+      </details>`;
   }
 
   begin(): void {
@@ -280,6 +334,7 @@ export class RaceController {
     this.controls.releasePointer();
     this.map.setOpen(false);
     this.host.beforeFrame = null;
+    this.host.setBearingAid?.(null);
     this.setup.onFinish(this.race.result(), this.course);
   }
 
@@ -309,6 +364,23 @@ export class RaceController {
     const v = this.race.view();
     const p = v.truePosition;
     this.host.setExternalPose(p.x, p.z, this.controls.yaw, this.controls.pitch);
+
+    // The beginner's bearing band.
+    //
+    // `believed` is the athlete's own estimate of where they are and it drifts;
+    // the bearing is measured from it, so a player who is lost gets a hint that
+    // is lost with them, and punching — which corrects the belief — corrects
+    // the hint. That is what keeps this an aid rather than a GPS dot. The band
+    // is *drawn* from `truePosition` because it has to start at the player's
+    // feet; nothing about the direction comes from there.
+    if (this.host.setBearingAid) {
+      const target = v.target?.position ?? this.course.finish;
+      this.host.setBearingAid(
+        this.beginnerAid && !this.ended
+          ? { from: p, believed: v.believedPosition, to: target }
+          : null,
+      );
+    }
 
     if (v.justPunched && v.justPunched.code !== this.lastPunchCode) {
       this.lastPunchCode = v.justPunched.code;
@@ -605,6 +677,7 @@ export class RaceController {
 
   dispose(): void {
     this.host.beforeFrame = null;
+    this.host.setBearingAid?.(null);
     for (const d of this.disposers) d();
     this.disposers.length = 0;
     this.controls.dispose();

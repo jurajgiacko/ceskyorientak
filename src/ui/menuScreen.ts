@@ -116,6 +116,12 @@ export function makeMenuScreen(): Screen {
         </div>
 
         <footer class="menu__foot">
+          <button class="menu__toggle${getSettings().beginnerAid ? ' is-on' : ''}"
+                  data-toggle="beginnerAid"
+                  aria-pressed="${getSettings().beginnerAid ? 'true' : 'false'}"
+                  title="${t('settings.beginnerAidHelp')}">
+            ${t('settings.beginnerAid')}
+          </button>
           <button class="menu__toggle${getSettings().showHands ? ' is-on' : ''}"
                   data-toggle="showHands"
                   aria-pressed="${getSettings().showHands ? 'true' : 'false'}">
@@ -147,6 +153,16 @@ export function makeMenuScreen(): Screen {
           // Re-render in place: cheaper and less jarring than a screen
           // transition for what is only a language change.
           void transitionTo(makeMenuScreen());
+          return;
+        }
+
+        // The beginner aid. On by default; this is how an orienteer turns the
+        // training wheels off. See src/world/bearingBand.ts.
+        if (target.dataset.toggle === 'beginnerAid') {
+          const next = !getSettings().beginnerAid;
+          setSetting('beginnerAid', next);
+          target.classList.toggle('is-on', next);
+          target.setAttribute('aria-pressed', next ? 'true' : 'false');
           return;
         }
 
