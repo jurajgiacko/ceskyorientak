@@ -1,6 +1,6 @@
 {
   "$schema": "./ENERVIT_SKU_MAP.schema.md",
-  "generated": "2026-08-01",
+  "generated": "2026-08-02",
   "notes": [
     "Machine-readable SKU map for the nutrition mechanic. `id` is the stable key referenced by NutritionLog.during[].skuId in src/core/types.ts.",
     "Every numeric field is per SINGLE SERVING as defined by `servingNote`, not per 100 g.",
@@ -10,6 +10,7 @@
     "phase follows Enervit's own NUTRITION SYSTEM® placement. Products usable in more than one phase carry `alsoPhase`.",
     "See NUTRITION_PROTOCOL.md for the phase timings and CLAIMS_TO_REVIEW.md before writing any player-facing copy about these products.",
     "nameCz values were read from eshop.enervit.cz and enervitshop.cz, the official Enervit CZ/SK shops operated by the distributor VITAR Sport s.r.o. IMPORTANT: the Czech market does NOT translate SKU names — products are sold under the English brand name with an 'ENERVIT' prefix, and only flavours and pack descriptors are Czech. nameCz is therefore a prefix+suffix transformation, not a translation. Flavour spellings and pack sizes carry transcription risk and should be spot-checked against the live shop before shipping. A null nameCz means the name could NOT be found and must not be guessed.",
+    "nameCz MUST BE UNIQUE across SKUs. The runtime renders it as the sole product label (skuLabel() in src/race/hud.ts prefers nameCz, and src/ui/beforeScreen.ts uses it for the loadout cards), so two SKUs sharing a nameCz are two visually identical cards the player cannot tell apart. Where the shops sell several flavours under one base name, carry the flavour in nameCz using the base+en-dash+flavour form — 'ENERVIT Carbo Gel C2:1 – pomeranč'. Re-checked 2026-08-02: the six then-colliding names were resolved from live listings, and the map's earlier belief that the Czech shops list gels only as 'mix příchutí' bundles is out of date — every flavour now has its own product page. The two shops sometimes disagree on capitalisation and on whether the flavour appears at all ('Enervit gel - cola' vs 'ENERVIT Gel'), and they use a plain hyphen; nameCz normalises to the 'ENERVIT' prefix and the en dash for consistency, but the flavour word itself is always transcribed, never invented or translated.",
     "gameStat.focus is 0.0 for EVERY SKU by design, not by omission. No product may drive the focus stat — see CLAIMS_TO_REVIEW.md §3.1 and §5. This is a compliance boundary, not a balance decision: do not 'fix' it.",
     "gameStat values are design starting points, not measurements. Only the carbsG/sodiumMg/caffeineMg/proteinG fields carry sourced data. Any player-facing statement derived from a gameStat must clear CLAIMS_TO_REVIEW.md first."
   ],
@@ -135,30 +136,30 @@
     {
       "id": "gel-citrus",
       "nameEn": "Enervit Gel Citrus",
-      "nameCz": "ENERVIT Gel",
+      "nameCz": "ENERVIT Gel s kofeinem – citrus",
       "range": "SPORT",
       "phase": "during",
       "packshotPath": "/Users/jurajgiacko/Projects/JG 2026/VitarSport2026/Context/brand-assets/enervit-brand/SPORT/GEL/GEL CITRUS/Enervit Gel foil Citrus NEW 2023 traspa.png",
       "servingNote": "1 gel = 25 ml.",
       "carbsG": 20,
       "sodiumMg": 10,
-      "caffeineMg": 0,
+      "caffeineMg": 20,
       "proteinG": 0,
       "volumeMl": 25,
       "verified": false,
-      "sourceNote": "20 g carb/serving is confirmed twice for the Enervit Gel format — front-of-pack '20g CARBS / GEL' on the Raspberry artwork (SPORT/GEL/GEL RASPBERRY/8097303 FOIL COM 2024 UK-SNDK.pdf) and Enervit's own NUTRITION SYSTEM® sheet. Sodium derived from the Raspberry panel (0.1 g salt/100 ml → 0.025 g per 25 ml gel), and the Citrus variant's own panel was not read. Citrus is assumed caffeine-free; NOT confirmed. CZ NAME: sold as 'ENERVIT Gel – mix příchutí'; the Czech shops do not list this flavour individually, so the flavour suffix is unconfirmed.",
+      "sourceNote": "20 g carb/serving is confirmed twice for the Enervit Gel format — front-of-pack '20g CARBS / GEL' on the Raspberry artwork (SPORT/GEL/GEL RASPBERRY/8097303 FOIL COM 2024 UK-SNDK.pdf) and Enervit's own NUTRITION SYSTEM® sheet. Sodium derived from the Raspberry panel (0.1 g salt/100 ml → 0.025 g per 25 ml gel); the Citrus variant's own panel was not read. CAFFEINE CORRECTED 2026-08-02: this SKU previously carried caffeineMg=0 on the map's own explicitly-unverified assumption ('Citrus is assumed caffeine-free; NOT confirmed'). That assumption was WRONG. Citrus is a caffeinated variant of Enervit Gel and is not sold without caffeine: eshop.enervit.cz/enervit-gel-s-kofeinem-citrus states 20 mg caffeine per 25 ml gel (80 mg/100 ml) and 20 g carbohydrate, i.e. identical to the Raspberry variant; enervit.com's Gel Variety Kit splits the range the same way — caffeine-free Orange/Lemon/Cola/Tropical Fruits, with-caffeine Raspberry/Citrus. verified stays false because the figure comes from the distributor shop, not from a pack panel or an enervit.com product page; confirm against the Citrus panel to promote it. CZ NAME: 'ENERVIT Gel s kofeinem – citrus', read from eshop.enervit.cz (product page) and enervitshop.cz (category listing, rendered there as 'Enervit gel s kofeinem - citrus'). The map's earlier claim that the Czech shops do not list gel flavours individually is out of date — every flavour now has its own product page.",
       "gameStat": {
         "glycogen": 0.25,
         "bloodSugar": 0.55,
         "hydration": -0.05,
         "focus": 0.0
       },
-      "gameNote": "The classic fast gel: sharp blood-sugar rise, modest glycogen. Negative hydration is deliberate — a concentrated gel taken without water pulls water into the gut. That is the mechanic that teaches 'always wash a gel down'."
+      "gameNote": "The classic fast gel: sharp blood-sugar rise, modest glycogen. Negative hydration is deliberate — a concentrated gel taken without water pulls water into the gut. That is the mechanic that teaches 'always wash a gel down'. OPEN DESIGN QUESTION (2026-08-02): now that the caffeine assumption is corrected to 20 mg, this SKU is mechanically IDENTICAL to gel-raspberry-caffeine — same carbs, sodium, caffeine, volume and gameStat, differing only in flavour. Both are in src/ui/beforeScreen.ts BELT_CHOICES, whose doc comment still assumes this gel is the caffeine-free counterpart, so the belt now offers a redundant slot rather than a 0/20/100 mg dose decision. Resolving that is a design call: either drop one of the two, or swap this slot for a genuinely caffeine-free gel — gel-cola is the candidate already in this map."
     },
     {
       "id": "gel-raspberry-caffeine",
       "nameEn": "Enervit Gel Raspberry with caffeine",
-      "nameCz": "ENERVIT Gel",
+      "nameCz": "ENERVIT Gel s kofeinem – malina",
       "range": "SPORT",
       "phase": "during",
       "packshotPath": "/Users/jurajgiacko/Projects/JG 2026/VitarSport2026/Context/brand-assets/enervit-brand/SPORT/GEL/GEL RASPBERRY/Enervit Gel foil Raspberry NEW 2023 traspa.png",
@@ -169,7 +170,7 @@
       "proteinG": 0,
       "volumeMl": 25,
       "verified": true,
-      "sourceNote": "PRIMARY: packaging artwork SPORT/GEL/GEL RASPBERRY/8097303 FOIL COM 2024 UK-SNDK.pdf. Front of pack states '20g CARBS / GEL' and 'WITH 20mg CAFFEINE' — both legible and unambiguous. Back panel per 100 ml (= 4 gels): 322 kcal, 80 g carbohydrate, 15 g sugars, 0.1 g salt, caffeine 80 mg, thiamin 0.66 mg, niacin 9.6 mg, vit B6 0.84 mg — the back panel is a low-resolution raster so the micronutrient digits are lower confidence; the per-gel carb and caffeine figures are not. Marked 'DP4 FORMULA'. NOTE the pack's own caffeine warning: 'High caffeine content (80 mg/100 ml). Not recommended for children or pregnant or breast-feeding women.' CZ NAME: sold as 'ENERVIT Gel – mix příchutí'; flavour suffix unconfirmed.",
+      "sourceNote": "PRIMARY: packaging artwork SPORT/GEL/GEL RASPBERRY/8097303 FOIL COM 2024 UK-SNDK.pdf. Front of pack states '20g CARBS / GEL' and 'WITH 20mg CAFFEINE' — both legible and unambiguous. Back panel per 100 ml (= 4 gels): 322 kcal, 80 g carbohydrate, 15 g sugars, 0.1 g salt, caffeine 80 mg, thiamin 0.66 mg, niacin 9.6 mg, vit B6 0.84 mg — the back panel is a low-resolution raster so the micronutrient digits are lower confidence; the per-gel carb and caffeine figures are not. Marked 'DP4 FORMULA'. NOTE the pack's own caffeine warning: 'High caffeine content (80 mg/100 ml). Not recommended for children or pregnant or breast-feeding women.' CZ NAME: 'ENERVIT Gel s kofeinem – malina', read from eshop.enervit.cz/enervit-gel-s-kofeinem-malina.",
       "gameStat": {
         "glycogen": 0.25,
         "bloodSugar": 0.55,
@@ -181,7 +182,7 @@
     {
       "id": "gel-cola",
       "nameEn": "Enervit Gel Cola",
-      "nameCz": "ENERVIT Gel",
+      "nameCz": "ENERVIT Gel – cola",
       "range": "SPORT",
       "phase": "during",
       "packshotPath": "/Users/jurajgiacko/Projects/JG 2026/VitarSport2026/Context/brand-assets/enervit-brand/SPORT/GEL/GEL COLA/Enervit Gel foil Cola NEW 2023 traspa.png",
@@ -192,7 +193,7 @@
       "proteinG": 0,
       "volumeMl": 25,
       "verified": false,
-      "sourceNote": "Format-level 20 g carb figure is solid. Caffeine content UNKNOWN — cola-flavoured Enervit gels usually carry caffeine but this variant's panel was not read. Leave caffeine null in the UI rather than guessing. CZ NAME: sold as 'ENERVIT Gel – mix příchutí'; flavour suffix unconfirmed.",
+      "sourceNote": "Format-level 20 g carb figure is solid. Caffeine content still UNKNOWN at panel level — this variant's panel was not read, so caffeineMg stays null rather than being guessed. Note the earlier worry that 'cola-flavoured Enervit gels usually carry caffeine' now looks unfounded for this SKU: enervit.com's Gel Variety Kit lists Cola among the caffeine-FREE flavours (with Orange, Lemon, Tropical Fruits) and puts caffeine only on Raspberry and Citrus, and the Czech shops sell it as plain 'Enervit gel - cola' while listing the caffeinated flavours explicitly as 's kofeinem'. Two independent sources therefore point at 0 mg; a panel read would settle it. CZ NAME: 'ENERVIT Gel – cola', read from the enervitshop.cz category listing (rendered there as 'Enervit gel - cola'); cola is also one of the four flavours named in the eshop.enervit.cz 'ENERVIT Gel - mix příchutí' bundle (citron, pomeranč, cola, tropické ovoce).",
       "gameStat": {
         "glycogen": 0.25,
         "bloodSugar": 0.55,
@@ -319,7 +320,7 @@
     {
       "id": "carbo-gel-orange",
       "nameEn": "Carbo Gel Orange C2:1 PRO",
-      "nameCz": "ENERVIT Carbo Gel C2:1",
+      "nameCz": "ENERVIT Carbo Gel C2:1 – pomeranč",
       "range": "C2_1",
       "phase": "during",
       "packshotPath": "/Users/jurajgiacko/Projects/JG 2026/VitarSport2026/Context/brand-assets/enervit-brand/C2_1/CARBO GEL ORANGE/Enervit Carbo Gel foil Orange 2024 traspa.png",
@@ -330,7 +331,7 @@
       "proteinG": 0,
       "volumeMl": 60,
       "verified": false,
-      "sourceNote": "The Carbo Gel format is 60 ml / 40 g carbohydrate — verified directly for the Cola variant from its own panel (C2_1/CARBO GEL COLA/Ingredienti Carbo gel cola.jpg) and corroborated for the neutral variant by an internal Enervit briefing (knowledge/2026-01-31-meeting-roberto-enervit.md: '40 g sacharidov, 200 mg sodíka'). The Orange variant's own panel was NOT read; sodium not established for this flavour. CZ NAME: base name confirmed as 'ENERVIT Carbo Gel C2:1'; an Orange flavour suffix was not found on the Czech shops.",
+      "sourceNote": "The Carbo Gel format is 60 ml / 40 g carbohydrate — verified directly for the Cola variant from its own panel (C2_1/CARBO GEL COLA/Ingredienti Carbo gel cola.jpg) and corroborated for the neutral variant by an internal Enervit briefing (knowledge/2026-01-31-meeting-roberto-enervit.md: '40 g sacharidov, 200 mg sodíka'). The Orange variant's own panel was NOT read; sodium not established for this flavour. CZ NAME: 'ENERVIT Carbo Gel C2:1 – pomeranč', read from eshop.enervit.cz/enervit-carbo-gel-c2-1-pomeranc and the enervitshop.cz category listing. The earlier note that an Orange suffix 'was not found on the Czech shops' is out of date — the full C2:1 gel flavour set is now listed individually (limetka, pomeranč, mango, neutral+sodík, citron+sodík, cola+kofein).",
       "gameStat": {
         "glycogen": 0.5,
         "bloodSugar": 0.6,
@@ -365,7 +366,7 @@
     {
       "id": "carbo-gel-lemon-sodium",
       "nameEn": "Carbo Gel Lemon Sodium C2:1 PRO",
-      "nameCz": "ENERVIT Carbo Gel C2:1 – se sodíkem",
+      "nameCz": "ENERVIT Carbo Gel C2:1 – citron+sodík",
       "range": "C2_1",
       "phase": "during",
       "packshotPath": "/Users/jurajgiacko/Projects/JG 2026/VitarSport2026/Context/brand-assets/enervit-brand/C2_1/CARBO GEL LEMON SODIUM/Enervit Carbo Gel foil Lemon Sodium 2024 traspa.png",
@@ -376,7 +377,7 @@
       "proteinG": 0,
       "volumeMl": 60,
       "verified": false,
-      "sourceNote": "40 g carbohydrate is format-verified. The 200 mg sodium figure comes from an internal Enervit briefing (knowledge/2026-01-31-meeting-roberto-enervit.md), which reports the sodium Carbo Gel line as '40 g sacharidov, 200 mg sodíka'. That is a credible first-party source but it is a meeting note, not a pack panel. Confirm against the pack before it appears in player-facing copy.",
+      "sourceNote": "40 g carbohydrate is format-verified. The 200 mg sodium figure comes from an internal Enervit briefing (knowledge/2026-01-31-meeting-roberto-enervit.md), which reports the sodium Carbo Gel line as '40 g sacharidov, 200 mg sodíka'. That is a credible first-party source but it is a meeting note, not a pack panel. Confirm against the pack before it appears in player-facing copy. CZ NAME CHANGED 2026-08-02: was the flavourless 'ENERVIT Carbo Gel C2:1 – se sodíkem', now 'ENERVIT Carbo Gel C2:1 – citron+sodík' per the enervitshop.cz category listing, which carries the sodium line as two distinct flavours ('neutral+sodík' and 'citron+sodík'). The lemon suffix matches nameEn and keeps this SKU distinguishable from the neutral sodium variant, which is NOT yet in this map.",
       "gameStat": {
         "glycogen": 0.5,
         "bloodSugar": 0.6,
@@ -411,7 +412,7 @@
     {
       "id": "carbo-gel-mango",
       "nameEn": "Carbo Gel Mango C2:1 PRO",
-      "nameCz": "ENERVIT Carbo Gel C2:1",
+      "nameCz": "ENERVIT Carbo Gel C2:1 – mango",
       "range": "C2_1",
       "phase": "during",
       "packshotPath": "/Users/jurajgiacko/Projects/JG 2026/VitarSport2026/Context/brand-assets/enervit-brand/C2_1/CARBO GEL MANGO/Enervit Carbo Gel foil Mango 2024 traspa.png",
@@ -422,7 +423,7 @@
       "proteinG": 0,
       "volumeMl": 60,
       "verified": false,
-      "sourceNote": "Format-level 40 g carbohydrate only. This variant's own panel was not read. CZ NAME: base name confirmed; Mango flavour suffix not found on the Czech shops.",
+      "sourceNote": "Format-level 40 g carbohydrate only. This variant's own panel was not read. CZ NAME: 'ENERVIT Carbo Gel C2:1 – mango', read from eshop.enervit.cz/enervit-carbo-gel-c2-1-mango and the enervitshop.cz category listing.",
       "gameStat": {
         "glycogen": 0.5,
         "bloodSugar": 0.6,
@@ -480,7 +481,7 @@
     {
       "id": "carbo-bar-peanut",
       "nameEn": "Carbo Bar Salty Peanut Butter C2:1 PRO",
-      "nameCz": null,
+      "nameCz": "ENERVIT Carbo Bar C2:1 – arašída se sodíkem",
       "range": "C2_1",
       "phase": "during",
       "packshotPath": "/Users/jurajgiacko/Projects/JG 2026/VitarSport2026/Context/brand-assets/enervit-brand/C2_1/CARBO BAR PEANUT/Carbo Bar salty peanut butter C2.1 PRO.png",
@@ -491,7 +492,7 @@
       "proteinG": 1.6,
       "volumeMl": null,
       "verified": true,
-      "sourceNote": "PRIMARY: on-pack panel C2_1/CARBO BAR PEANUT/Ingredienti Carbo bar peanut.jpg. Per 45 g bar: 159 kcal, 33 g carbohydrate, 20 g sugars, 2.0 g fat, 1.6 g protein, 0.51 g salt (→ 204 mg sodium), thiamine 0.22 mg. The 204 mg derived sodium corroborates the internal briefing's '200 mg sodíka' for the salty C2:1 bar. Contains peanuts and oats. CZ NAME NOT FOUND: the Czech shops list Carbo Bar C2:1 in 'brownie' and 'slaný karamel' (salted caramel) only. The Salty Peanut Butter variant may not be listed in CZ/SK. Do not invent a Czech name.",
+      "sourceNote": "PRIMARY: on-pack panel C2_1/CARBO BAR PEANUT/Ingredienti Carbo bar peanut.jpg. Per 45 g bar: 159 kcal, 33 g carbohydrate, 20 g sugars, 2.0 g fat, 1.6 g protein, 0.51 g salt (→ 204 mg sodium), thiamine 0.22 mg. The 204 mg derived sodium corroborates the internal briefing's '200 mg sodíka' for the salty C2:1 bar. Contains peanuts and oats. CZ NAME FOUND 2026-08-02 (was null): 'ENERVIT Carbo Bar C2:1 – arašída se sodíkem', read from the enervitshop.cz category listing and its product page, whose body copy confirms the flavour as 'slané arašídové máslo' (salted peanut butter) and states 30 g carbohydrate / 200 mg sodium — the sodium corroborating the 204 mg derived from the pack panel, and the 30 g being the 2:1-ratio fraction rather than the 33 g total, exactly as on the Brownie variant. TWO CAVEATS for the distributor: (a) eshop.enervit.cz titles the same product 'ENERVIT Carbo Bar C2:1 se sodíkem' with no flavour word at all, so the two official shops disagree; (b) 'arašída' is not standard Czech and is very likely a typo for 'arašídy' or 'arašídové máslo' on the distributor's side. The suffix here is transcribed as published rather than corrected — confirm the intended wording before it ships.",
       "gameStat": {
         "glycogen": 0.4,
         "bloodSugar": 0.25,
@@ -537,7 +538,7 @@
       "proteinG": 2,
       "volumeMl": null,
       "verified": true,
-      "sourceNote": "PRIMARY: on-pack panel C2_1/CARBO BAR NO FLAVOUR/Ingredienti carbo bar no flavour.jpg. The declared nutrition table is identical to the Brownie variant (45 g bar: 163 kcal, 33.3 g carbohydrate, 19.35 g sugars, 2 g protein, 0.018 g salt, thiamine 0.23 mg); the ingredient lists differ (no cocoa). Carries the same '30 g of carbohydrate in a 2:1 glucose:fructose ratio' statement. CZ NAME NOT FOUND: no unflavoured/'bez příchuti' Carbo Bar listing was found on the Czech shops, though Enervit global lists the SKU.",
+      "sourceNote": "PRIMARY: on-pack panel C2_1/CARBO BAR NO FLAVOUR/Ingredienti carbo bar no flavour.jpg. The declared nutrition table is identical to the Brownie variant (45 g bar: 163 kcal, 33.3 g carbohydrate, 19.35 g sugars, 2 g protein, 0.018 g salt, thiamine 0.23 mg); the ingredient lists differ (no cocoa). Carries the same '30 g of carbohydrate in a 2:1 glucose:fructose ratio' statement. CZ NAME STILL NOT FOUND (re-checked 2026-08-02): a web search surfaced a snippet claiming 'ENERVIT Carbo Bar C2:1 - bez příchuti' on enervitshop.cz, but the product page 404s and the name does not appear in that shop's own energy-bar category listing, which carries only 'ENERVIT Carbo Bar C2:1 - brownie' and 'ENERVIT Carbo Bar C2:1 arašída se sodíkem'. An unverifiable search snippet is not a source. nameCz stays null — do not promote it without a live listing or a pack.",
       "gameStat": {
         "glycogen": 0.4,
         "bloodSugar": 0.25,
