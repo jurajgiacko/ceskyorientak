@@ -62,6 +62,30 @@ const PLAYABLE_R = 600;
 const EYE_HEIGHT = 1.62;
 
 /**
+ * The longest single step the athlete can take, metres.
+ *
+ * `Race.step` moves `speed * dtS` and tests only the destination, and the
+ * scene clamps `dtS` to 0.1 s. The fastest the athlete goes is BASE_MS 4.6 on
+ * a road (`SPEED_BY_RUNNABILITY[Road]` = 1.0) with the downhill bonus capped
+ * at 1.22, so 4.6 * 1.22 * 0.1 = 0.56 m. Rounded up, because a gate that is
+ * exactly at the limit tests nothing.
+ */
+const MAX_STEP_M = 0.6;
+
+/** BASE_MS in src/sim/race.ts. */
+const BASE_MS = 4.6;
+
+/** Downhill cap on `gradeMul`, same file. */
+const DOWNHILL_MAX = 1.22;
+
+/** SPEED_BY_RUNNABILITY in src/sim/athlete.ts, by class index. */
+const SPEED_BY_CLASS = [1.0, 0.97, 0.9, 0.72, 0.8, 0.6, 0.4, 0.18, 0.45, 0.5, 0];
+
+/** Class names, for reporting. */
+const CLASS_NAME = ['Road', 'Path', 'OpenFast', 'OpenRough', 'ForestOpen', 'Green1',
+  'Green2', 'Green3', 'Marsh', 'Rock', 'Impassable'];
+
+/**
  * Thresholds.
  *
  * `minReachable` is a floor on the fraction of otherwise-open ground the arena
@@ -72,7 +96,7 @@ const EYE_HEIGHT = 1.62;
 const LIMITS = {
   minReachable: 0.9,
   /**
-   * Largest tolerated pocket the arena cannot reach, m².
+   * Largest tolerated **sealed** pocket the arena cannot reach, m².
    *
    * Not zero, and deliberately. Krumlov has walled ground that is *supposed* to
    * be shut: the Baroque zámecká zahrada behind its garden wall is 0.9 ha of
@@ -83,8 +107,38 @@ const LIMITS = {
    *
    * What the ceiling catches is the failure that actually shipped: sever the
    * bridges and the largest unreachable pocket is **54 hectares**.
+   *
+   * This applies **only to pockets the athlete cannot enter**. Ground they can
+   * get into is judged by `maxTrapM2` below, at any size, because that is a
+   * different bug with a different consequence.
    */
   maxPocketM2: 30_000,
+  /**
+   * The distinction this gate could not previously express, and the whole of
+   * the bug class behind four separate "we are stuck" reports in this venue.
+   *
+   * A pocket that is not the arena's component is *fine* if the athlete can
+   * never get into it, at any size. It is a **trap** if they can get in and
+   * cannot get out, at any size — and the gate has to test entry, not just
+   * exit, to tell the two apart.
+   *
+   * Entry is possible because `Race.step` tests only the **destination** of a
+   * step, never the swept path: a step of length `MAX_STEP_M` crosses any
+   * barrier band thinner than that. So a pocket is enterable when some point
+   * inside it is within one step of open ground in the arena's component. Once
+   * in, the athlete gets back out the same way only if they can build the same
+   * step — and they may not be able to, because step length is speed × dt and
+   * speed depends on the ground they are standing on. Entering off a road at
+   * 4.6 m/s is a 0.46 m step; leaving from grass at 3.3 m/s is 0.33 m. That
+   * asymmetry is what "we were locked in some little park on the grass" would
+   * look like in the physics, so it is tested explicitly.
+   *
+   * `minWanderM2` is the area above which a symmetric gap stops being a way
+   * out: below it the athlete is never more than a few strides from the hole
+   * they came through, above it the hole is a needle. 150 m² is about 12 m
+   * square. An *asymmetric* gap is a trap at any size at all.
+   */
+  minWanderM2: 150,
   /** Fraction of uncrossable barrier length that must appear in the raster. */
   minBarrierDrawn: 0.995,
   /**
@@ -675,15 +729,136 @@ function floodFill(venue, bin, step) {
   const cellM2 = step * step;
   const reachN = arena >= 0 ? sizes[arena] : 0;
 
-  // A trap is a pocket that is not the arena's component but is big enough to
-  // stand in — i.e. somewhere a course could be set, or a player put, and not
-  // be able to leave.
+  // Every pocket that is not the arena's component and is big enough to stand
+  // in, classified by the question that actually matters: **can the athlete get
+  // into it, and if so can they get back out?**
+  //
+  // Being disconnected is not by itself a fault. Krumlov is supposed to have
+  // shut ground in it — the zámecká zahrada behind its wall, block interiors
+  // reached only through arched passages — and none of that can strand anybody,
+  // because nobody can get in. What strands a player is ground they *can* enter
+  // and cannot leave, and telling those apart needs an entry test, which is
+  // what this gate was missing while four separate "we are stuck" reports came
+  // in against it.
+  const cellsOf = new Map();
+  for (let k = 0; k < comp.length; k++) {
+    const id = comp[k];
+    if (id < 0 || id === arena) continue;
+    let list = cellsOf.get(id);
+    if (!list) { list = []; cellsOf.set(id, list); }
+    list.push(k);
+  }
+
+  const compAt = (x, z) => {
+    const i = Math.round((x - x0) / step);
+    const j = Math.round((z - z0) / step);
+    if (i < 0 || j < 0 || i >= w || j >= h) return -1;
+    return comp[j * w + i];
+  };
+
   const traps = [];
-  for (let id = 0; id < sizes.length; id++) {
-    if (id === arena) continue;
-    const m2 = sizes[id] * cellM2;
+  for (const [id, cells] of cellsOf) {
+    const m2 = cells.length * cellM2;
     if (m2 < 6) continue;
-    traps.push({ id, m2 });
+
+    // The tightest single step from the arena's component into this pocket.
+    //
+    // Only boundary cells can be within a step of anything outside, so only
+    // boundary cells are probed — over 160 pockets that is the difference
+    // between a second and a minute.
+    let minJump = Infinity;
+    let jumpAt = null;
+    let outsideCls = IMPASSABLE;
+    // True when some point of the pocket is joined to the arena's component by
+    // a clear straight line — i.e. the pocket is not a pocket at all, the
+    // 4-connected flood just could not turn the corner.
+    let reallyConnected = false;
+    for (const k of cells) {
+      const boundary =
+        (k % w > 0 && comp[k - 1] !== id) ||
+        (k % w < w - 1 && comp[k + 1] !== id) ||
+        (k >= w && comp[k - w] !== id) ||
+        (k + w < comp.length && comp[k + w] !== id);
+      if (!boundary) continue;
+      const px = x0 + (k % w) * step;
+      const pz = z0 + ((k / w) | 0) * step;
+      for (let a = 0; a < 32; a++) {
+        const th = (a / 32) * Math.PI * 2;
+        const ux = Math.sin(th);
+        const uz = -Math.cos(th);
+        for (let d = 0.1; d <= MAX_STEP_M + 0.15; d += 0.05) {
+          const qx = px + ux * d;
+          const qz = pz + uz * d;
+          if (blocked(qx, qz)) continue;
+          // Not `break`: the first metre or two along this ray is still inside
+          // the pocket, so a bearing has to be walked out to the full step
+          // before it can be ruled out.
+          if (compAt(qx, qz) !== arena) continue;
+          // Is anything actually in the way?
+          //
+          // This distinguishes a step *over a barrier* from a step the flood
+          // merely cannot see. The component graph is 4-connected on a 0.5 m
+          // grid, so two diagonally adjacent open cells whose shared orthogonal
+          // neighbours are both blocked land in different components — while
+          // the athlete, who moves dx and dz in the same step, walks straight
+          // between them. Without this test every such corner reads as a
+          // sealed pocket entered by a 0.42 m "jump", which is the grid talking
+          // and not the town.
+          let crossed = false;
+          const segN = Math.max(4, Math.ceil(d / 0.05));
+          for (let t = 1; t < segN; t++) {
+            if (blocked(px + ux * d * (t / segN), pz + uz * d * (t / segN))) {
+              crossed = true;
+              break;
+            }
+          }
+          if (!crossed) {
+            reallyConnected = true;
+            continue;
+          }
+          if (d < minJump) {
+            minJump = d;
+            jumpAt = [qx, qz, px, pz];
+            outsideCls = rasterAt(qx, qz);
+          }
+          break;
+        }
+      }
+    }
+
+    // Step length is speed × dt, and speed is the ground you are standing on.
+    // Entering off a road buys a longer step than leaving from grass buys, so
+    // "I got in" does not imply "I can get out".
+    let insideCls = IMPASSABLE;
+    for (const k of cells) {
+      const c = rasterAt(x0 + (k % w) * step, z0 + ((k / w) | 0) * step);
+      if ((SPEED_BY_CLASS[c] ?? 0) > (SPEED_BY_CLASS[insideCls] ?? 0)) insideCls = c;
+    }
+    const dt = 0.1;
+    const stepIn = BASE_MS * (SPEED_BY_CLASS[outsideCls] ?? 0) * DOWNHILL_MAX * dt;
+    const stepOut = BASE_MS * (SPEED_BY_CLASS[insideCls] ?? 0) * DOWNHILL_MAX * dt;
+    const enterable = Number.isFinite(minJump) && minJump <= Math.max(stepIn, MAX_STEP_M);
+    const escapable = Number.isFinite(minJump) && minJump <= stepOut;
+
+    traps.push({
+      id, m2, minJump, jumpAt, enterable, escapable, reallyConnected,
+      insideCls, outsideCls,
+      // A trap is ground the player can get into and cannot get back out of —
+      // either because the step back is beyond what the ground inside allows,
+      // or because the pocket is too small to be anything but a cell.
+      // A trap is ground the player can get into and realistically cannot get
+      // back out of. Two ways that happens, and the size cuts opposite ways in
+      // each:
+      //
+      //  - **Asymmetric.** The step that got you in is longer than any step the
+      //    ground inside can produce. A fault at any size.
+      //  - **Needle in a haystack.** The gap is symmetric, but the pocket is
+      //    big enough to wander in and the way out is a 40 cm hole in a hedge.
+      //    Nobody finds that twice. Below `minWanderM2` you are never more than
+      //    a few strides from the gap you came through, which is annoying and
+      //    not a trap.
+      trap: !reallyConnected && enterable && (!escapable || m2 >= LIMITS.minWanderM2),
+    });
   }
   traps.sort((a, b) => b.m2 - a.m2);
 
@@ -889,6 +1064,8 @@ async function runtimePhase(venue, port) {
   let bad = false;
   /** The class raster each tier was handed, keyed by tier. */
   const rasterByTier = new Map();
+  /** The course each (tier, seed) produced, so tiers can be compared. */
+  const courseByTierSeed = new Map();
   await withChrome(async (cdpPort) => {
     for (const tier of TIERS) {
       for (const seed of SEEDS) {
@@ -907,6 +1084,7 @@ async function runtimePhase(venue, port) {
         const raw = await tab.evaluate(PROBE(LIMITS));
         const res = JSON.parse(raw);
         rasterByTier.set(tier, res.raster);
+        courseByTierSeed.set(`${tier}|${seed}`, { controls: res.controls, lengthM: res.lengthM });
         const ok = res.faults.length === 0 && res.renderErrors.length === 0;
         if (!ok) bad = true;
         console.log(
@@ -946,6 +1124,44 @@ async function runtimePhase(venue, port) {
   if (first && agree) {
     console.log(`  passability raster: ${first.resM} m, identical on every tier`);
   }
+
+  // Does one seed give two players the same course on two phones?
+  //
+  // Reported, not enforced, and the distinction is honest rather than lazy. The
+  // passability raster is identical on every tier and that *is* enforced above.
+  // The **heightfield** is not: `height-low.bin` is a cheaper surface, and
+  // `generateCourse` reads heights for the climb budget, so a centimetre of
+  // disagreement can flip one candidate and every subsequent draw from the
+  // seeded RNG diverges from there. That is a property of the terrain pipeline,
+  // not of the course setter, and it predates the sprint work — but it is the
+  // same shape as the bug this gate exists for, and a number nobody is looking
+  // at is a number that gets worse. So: measure it every run.
+  const seedsSeen = [...new Set([...courseByTierSeed.keys()].map((k) => k.split('|')[1]))];
+  const tiersSeen = [...rasterByTier.keys()];
+  let divergent = 0;
+  for (const seed of seedsSeen) {
+    const rows = tiersSeen
+      .map((t) => [t, courseByTierSeed.get(`${t}|${seed}`)])
+      .filter(([, v]) => v);
+    if (rows.length < 2) continue;
+    const [, ref] = rows[0];
+    const differs = rows.some(
+      ([, v]) => v.controls !== ref.controls || v.lengthM !== ref.lengthM,
+    );
+    if (differs) {
+      divergent++;
+      console.log(
+        `  · seed ${seed} gives a different course per tier: ` +
+          rows.map(([t, v]) => `${t} ${v.controls}/${v.lengthM} m`).join(' · '),
+      );
+    }
+  }
+  console.log(
+    divergent
+      ? `  ${divergent}/${seedsSeen.length} seeds diverge across tiers — the heightfield differs by tier` +
+          ` and generateCourse reads it (see TerrainField.load and the climb budget in specFor)`
+      : `  every seed gives the same course on every tier`,
+  );
   return bad;
 }
 
@@ -1060,10 +1276,34 @@ async function main() {
     console.log(
       `  reachable from arena ${(f.fraction * 100).toFixed(1)} %  (${f.reachHa.toFixed(1)} ha)`,
     );
-    console.log(`  disconnected pockets over 6 m²: ${f.traps.length}`);
+    // Four kinds, and only one of them is a bug.
+    const artifact = f.traps.filter((t) => t.reallyConnected);
+    const sealed = f.traps.filter((t) => !t.reallyConnected && !t.enterable);
+    const porous = f.traps.filter((t) => !t.reallyConnected && t.enterable && !t.trap);
+    const trapped = f.traps.filter((t) => t.trap);
+    console.log(
+      `  disconnected pockets over 6 m²: ${f.traps.length}  ` +
+        `(${sealed.length} sealed shut · ${porous.length} porous both ways · ` +
+        `${artifact.length} grid artifacts · ${trapped.length} traps)`,
+    );
+    if (artifact.length) {
+      console.log(
+        `    grid artifacts are 4-connectivity corners: open diagonally, so the athlete walks` +
+          ` through them\n    and only this 0.5 m flood thinks they are shut. Not a fault; see` +
+          ` \`reallyConnected\`.`,
+      );
+    }
     for (const t of f.traps.slice(0, 6)) {
       const c = f.centreOf(t.id);
-      console.log(`    ${t.m2.toFixed(0).padStart(7)} m²  near (${c.x}, ${c.z})`);
+      const how = t.reallyConnected
+        ? 'grid artifact — open on the diagonal, the athlete walks through'
+        : !t.enterable
+        ? 'sealed — the athlete cannot get in either'
+        : t.trap
+          ? `TRAP — enter over ${t.minJump.toFixed(2)} m from ${CLASS_NAME[t.outsideCls]}, ` +
+            `leave needs the same from ${CLASS_NAME[t.insideCls]}`
+          : `porous — ${t.minJump.toFixed(2)} m step either way`;
+      console.log(`    ${t.m2.toFixed(0).padStart(7)} m²  near (${c.x}, ${c.z})  ${how}`);
     }
     console.log(
       `  uncrossable barriers drawn on the map: ${(f.barrierDrawn * 100).toFixed(1)} %`,
@@ -1084,11 +1324,29 @@ async function main() {
       );
       bad = true;
     }
-    const worst = f.traps[0];
-    if (worst && worst.m2 > LIMITS.maxPocketM2) {
-      const c = f.centreOf(worst.id);
+    // Ground the player can get into and not out of. A fault at any size —
+    // this is the bug class, and a 40 m² one ends the race just as completely
+    // as a 4 000 m² one.
+    for (const t of f.traps.filter((x) => x.trap)) {
+      const c = f.centreOf(t.id);
+      const [qx, qz, px, pz] = t.jumpAt ?? [0, 0, 0, 0];
       console.error(
-        `✗ ${bin}: a ${(worst.m2 / 1e4).toFixed(1)} ha pocket near (${c.x}, ${c.z}) is sealed off from the arena`,
+        `✗ ${bin}: a ${t.m2.toFixed(0)} m² pocket near (${c.x}, ${c.z}) can be entered and not left.\n` +
+          `  A step of ${t.minJump.toFixed(2)} m from (${qx.toFixed(1)}, ${qz.toFixed(1)}) lands inside at` +
+          ` (${px.toFixed(1)}, ${pz.toFixed(1)}).\n` +
+          `  Race.step tests only the destination of a step, so any barrier thinner than the step is\n` +
+          `  crossable; the ground inside is ${CLASS_NAME[t.insideCls]}, the ${CLASS_NAME[t.outsideCls]} outside\n` +
+          `  buys a longer one. Close the gap or widen the barrier — see LIMITS.minWanderM2.`,
+      );
+      bad = true;
+    }
+    // A large pocket nobody can enter is legitimate, but a *very* large one is
+    // the severed-bridge failure wearing a hat.
+    const worstSealed = f.traps.filter((t) => !t.enterable)[0];
+    if (worstSealed && worstSealed.m2 > LIMITS.maxPocketM2) {
+      const c = f.centreOf(worstSealed.id);
+      console.error(
+        `✗ ${bin}: a ${(worstSealed.m2 / 1e4).toFixed(1)} ha pocket near (${c.x}, ${c.z}) is sealed off from the arena`,
       );
       bad = true;
     }

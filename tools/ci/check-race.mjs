@@ -108,6 +108,32 @@ const SIM_BUDGET_S = 4 * 3600;
  */
 const MISPUNCH_DECOY_M = 12;
 
+/**
+ * What a sprint course has to look like, asserted independently of the code
+ * that produces it.
+ *
+ * `specFor` in src/sim/courseGen.ts aims at 1.5 km and `courseLengthBand` gives
+ * itself ±25%; reading those numbers back out of the build would be the gate
+ * marking its own homework. These are the sport's numbers instead. A sprint is
+ * 1.5–2.0 km of straight-line course for a 13–15 minute winning time (IOF
+ * Competition Rules appendix 2; RESEARCH-SPORT §7.2), and the band here is that
+ * with room for a real street network at either end. Krumlov used to produce
+ * 2.7–4.3 km, which is what the client was sent out to run.
+ */
+const SPRINT_LENGTH_M = { min: 1200, max: 2200 };
+
+/**
+ * How far a sprint control may sit from a runnable paved way, metres.
+ *
+ * The measurement that distinguishes a sprint from a cross-country run, and the
+ * one the client's report was actually about — *"the city should be running in
+ * the alleys, not on the grass and by the water"*. Asserted as a distribution
+ * rather than as a maximum, because one control tucked in a courtyard 15 m off
+ * the network is good course setting and fifteen of them out in a meadow is the
+ * bug. `p90` is the shape of the course; `max` only catches an outlier.
+ */
+const SPRINT_PAVED_M = { p90: 8, max: 25 };
+
 async function main() {
   if (!existsSync(DIST)) {
     console.error('✗ dist/ not found. Run `npm run build` first.');
@@ -183,6 +209,18 @@ async function main() {
 
         return JSON.stringify({
           onBarrier,
+          discipline: r.course.discipline,
+          // How far each control sits from the street network. Computed at
+          // course-setting time by src/race/courseSetup.ts, which is the only
+          // place that holds the paved index.
+          pavedM: info.pavedDistanceM || [],
+          // The smallest ground any sited point opens onto, measured with the
+          // runtime's own collider. -1 means every point opened onto more than
+          // the cap, which is the answer that says nobody can be stranded.
+          tightestEscapeM2:
+            info.tightestEscapeM2 === Infinity ? -1 : Math.round(info.tightestEscapeM2),
+          // Anything the in-race enclosure watchdog caught. Should be empty.
+          trapEvents: (window.__trapEvents || []).slice(0, 3),
           phase: v.phase,
           mispunchDecoyM: decoy,
           mispunchStrayM: stray,
@@ -222,18 +260,65 @@ async function main() {
         (c.autopilotMustPunch ||
           (r.mispunchDecoyM >= 0 && r.mispunchDecoyM <= r.punchRadiusM + MISPUNCH_DECOY_M));
 
+      // Sprint course shape. Two properties, both of them the client's report
+      // stated as a number: a sprint is 1.5–2.0 km, and its controls are on the
+      // street network rather than out on the grass.
+      const sprintFaults = [];
+      const paved = [...r.pavedM].sort((a, b) => a - b);
+      const p90 = paved.length ? paved[Math.min(paved.length - 1, Math.floor(paved.length * 0.9))] : 0;
+      const pavedMax = paved.length ? paved[paved.length - 1] : 0;
+      if (r.discipline === 'sprint') {
+        if (r.lengthM < SPRINT_LENGTH_M.min || r.lengthM > SPRINT_LENGTH_M.max) {
+          sprintFaults.push(
+            `the course is ${r.lengthM} m — a sprint is ${SPRINT_LENGTH_M.min}–${SPRINT_LENGTH_M.max} m` +
+              ` for a 13–15 min winning time (see specFor in src/sim/courseGen.ts)`,
+          );
+        }
+        if (paved.length && p90 > SPRINT_PAVED_M.p90) {
+          sprintFaults.push(
+            `90% of controls are within ${p90.toFixed(1)} m of a runnable way, not ${SPRINT_PAVED_M.p90} m` +
+              ` — this is a run across open ground, not a sprint through streets`,
+          );
+        }
+        if (paved.length && pavedMax > SPRINT_PAVED_M.max) {
+          sprintFaults.push(
+            `a control sits ${pavedMax.toFixed(1)} m from the nearest runnable way`,
+          );
+        }
+        if (!paved.length) {
+          sprintFaults.push('no paved distances were measured — the townscape never reached the course setter');
+        }
+      }
+      // The enclosure guarantee, from both ends: no sited point may be shut in,
+      // and the in-race watchdog must never have had to free anybody.
+      if (r.tightestEscapeM2 >= 0) {
+        sprintFaults.push(
+          `a sited point opens onto only ${r.tightestEscapeM2} m² — see MIN_ESCAPE_M2 in src/race/courseSetup.ts`,
+        );
+      }
+      if (r.trapEvents.length) {
+        sprintFaults.push(
+          `the enclosure watchdog freed the athlete ${r.trapEvents.length}× — ${JSON.stringify(r.trapEvents[0])}`,
+        );
+      }
+
       const ok =
         (c.autopilotMustPunch ? r.punched === r.controls : true) &&
         r.controls > 0 &&
         r.brokenLegs.length === 0 &&
         r.onBarrier === 0 &&
         !decoyed &&
+        sprintFaults.length === 0 &&
         r.renderErrors.length === 0;
 
       console.log(
         `${ok ? '✓' : '✗'} ${r.phase} · ${r.punched}/${r.controls} controls${c.autopilotMustPunch ? '' : ' (autopilot, not gated)'} · ` +
           `${r.lengthM} m · ${r.climbM} m climb · ${Math.round(r.timeS / 60)} min · ` +
           `reachable ${(r.reachable * 100).toFixed(0)}% · all legs routable` +
+          (r.pavedM.length
+            ? ` · paved med ${paved[(paved.length / 2) | 0].toFixed(1)} m / p90 ${p90.toFixed(1)} m / max ${pavedMax.toFixed(1)} m`
+            : '') +
+          (r.tightestEscapeM2 < 0 ? ' · every point opens onto the town' : ` · tightest escape ${r.tightestEscapeM2} m²`) +
           (r.dropped ? ` · ${r.dropped} dropped` : '') +
           (r.seedsTried > 1 ? ` · ${r.seedsTried} seeds` : ''),
       );
@@ -251,6 +336,7 @@ async function main() {
               ` distance of the route to the right one, so a competitor reading the map can mispunch here`,
           );
         }
+        for (const f of sprintFaults) console.log(`     ✗ ${f}`);
         if (r.onBarrier) console.log(`     ${r.onBarrier} sited point(s) inside a barrier`);
         if (r.brokenLegs.length) console.log(`     legs with no route: ${r.brokenLegs.join(', ')}`);
         if (r.renderErrors.length) console.log(`     renderErrors ${JSON.stringify(r.renderErrors)}`);

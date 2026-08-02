@@ -36,6 +36,15 @@ export interface CourseSetupResult {
    * bisect to find it.
    */
   tightestEscapeM2: number;
+  /**
+   * Metres from each control to the nearest runnable paved way, in course
+   * order. Empty where the terrain has no street network to measure against.
+   *
+   * The number that says whether this is a sprint through a street network or a
+   * cross-country run past a castle, and it is reported rather than merely
+   * asserted: the client's complaint was a distribution, not a single failure.
+   */
+  pavedDistanceM: number[];
 }
 
 /** How many seeds to try before accepting an edited course. */
@@ -125,6 +134,7 @@ export function setCourse(
             droppedControls: 0,
             reachableFraction: fraction,
             tightestEscapeM2: escape,
+            pavedDistanceM: pavedDistances(terrain, course),
           };
         }
         // Keep the best runner-up: enough controls first, then closest to the
@@ -148,6 +158,7 @@ export function setCourse(
       droppedControls: 0,
       reachableFraction: fraction,
       tightestEscapeM2: complete.escape,
+      pavedDistanceM: pavedDistances(terrain, complete.course),
     };
   }
 
@@ -162,7 +173,16 @@ export function setCourse(
     droppedControls: fallback.controls.length - kept.length,
     reachableFraction: fraction,
     tightestEscapeM2: tightestEscape(terrain, edited),
+    pavedDistanceM: pavedDistances(terrain, edited),
   };
+}
+
+/** How far each control sits from the street network, metres. */
+function pavedDistances(terrain: FieldTerrain, course: Course): number[] {
+  return course.controls
+    .map((c) => terrain.pavedDistanceAt(c.position.x, c.position.z))
+    .filter((d) => Number.isFinite(d))
+    .map((d) => Math.round(d * 10) / 10);
 }
 
 /**

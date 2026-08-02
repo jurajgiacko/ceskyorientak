@@ -107,6 +107,7 @@
   "nutrition.dataNote": "Údaje o složení na jednu dávku podle obalu. Herní zjednodušení, nejde o výživové doporučení.",
   "results.mispunchAt": "Chybné ražení na kontrole {n}",
   "race.relocatedBy": "Zorientováno {m} m",
+  "race.freedFromTrap": "Byl jsi zaseknutý v uzavřeném prostoru — hra tě přesunula na nejbližší průchozí místo.",
   "race.punchedControl": "Kontrola {n} oražena",
   "hud.energy": "ENERGIE",
   "hud.energyCause": "Energie klesá tempem, stoupáním a teplem. Nic jiného ji nesnižuje.",

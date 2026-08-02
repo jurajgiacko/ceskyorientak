@@ -22,6 +22,8 @@ import type { RaceView } from '@/sim/race';
 import { setCourse } from './courseSetup';
 import type { CourseSetupResult } from './courseSetup';
 import type { Course, Discipline, VenueAnchor, World2 } from '@/core/types';
+import { Runnability } from '@/core/types';
+import { dist2 } from '@/core/geo';
 import { GROUND_FOR_RUNNABILITY } from '@/world/terrain';
 import type { TerrainField } from '@/world/terrain';
 import type { BearingAim } from '@/world/bearingBand';
@@ -103,6 +105,38 @@ export interface RaceSetup {
   onFinish: (result: RunResult, course: Course) => void;
   onQuit: () => void;
 }
+
+/**
+ * How long the athlete has to be asking to move before it is worth measuring
+ * whether they can, seconds.
+ *
+ * Long enough that running into a wall for a moment — which is a normal thing
+ * to do in a sprint — never triggers it.
+ */
+const STUCK_WINDOW_S = 1.5;
+
+/**
+ * Ground covered in that window, below which the athlete is going nowhere.
+ *
+ * 1.5 m, not 4. The flood that follows costs a couple of milliseconds, which is
+ * a tenth of a frame — fine when the player is genuinely stuck and standing
+ * still, a visible hitch if it fires while they are merely slow. Reading the
+ * map costs 45% of pace and running through scrub costs more, and 4 m in 1.5 s
+ * is inside what those produce; 1 m/s is not something any ground in this game
+ * does to a runner asking to move.
+ */
+const STUCK_MOVED_M = 1.5;
+
+/**
+ * Ground the athlete must be able to reach from where they stand, m².
+ *
+ * Smaller than `courseSetup.MIN_ESCAPE_M2`, and it should be: that one governs
+ * where a course may be *set*, where there is no reason to be near the line.
+ * This one fires on a player who has run somewhere unexpected, so it has to be
+ * unambiguous — a walled Krumlov courtyard you can legitimately be in and run
+ * out of is bigger than this, and 600 m² is 25 m square.
+ */
+const TRAP_M2 = 600;
 
 export class RaceController {
   readonly root: HTMLElement;
@@ -547,7 +581,7 @@ export class RaceController {
       z: Math.round(p.z * 10) / 10,
       escapeM2: Math.round(m2),
       ground: this.terrain.runnabilityAt(p.x, p.z),
-      ring: ring.join(''),
+      ring,
       control: this.race.view().nextControl,
       seed: this.setup.seed,
     };

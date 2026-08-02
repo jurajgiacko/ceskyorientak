@@ -107,6 +107,7 @@
   "nutrition.dataNote": "Composition per serving, from the pack. Simplified for the game; not nutrition advice.",
   "results.mispunchAt": "Mispunch at control {n}",
   "race.relocatedBy": "Relocated {m} m",
+  "race.freedFromTrap": "You were shut into an enclosed space — the game has moved you to the nearest passable ground.",
   "race.punchedControl": "Control {n} punched",
   "hud.energy": "ENERGY",
   "hud.energyCause": "Energy falls with pace, climb and heat. Nothing else lowers it.",
