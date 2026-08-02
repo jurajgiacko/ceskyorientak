@@ -61,6 +61,28 @@ export interface CourseTerrain {
    * vocabulary, which is the right vocabulary there.
    */
   siteAt?(x: number, z: number): ControlSite | null;
+  /**
+   * How much ground the athlete can reach from this point, m², measured with
+   * the runtime's own collision, stopping once it is provably above `capM2`.
+   *
+   * Optional because a synthetic terrain in a harness has no collider. Where it
+   * exists, the start and the finish are checked against it *here* rather than
+   * only in `src/race/courseSetup.ts`: that layer can reject a whole course for
+   * a sealed point and shop for another seed, which is a coarse and expensive
+   * way to say "not that spot". See `FieldTerrain.escapeAreaM2`.
+   */
+  escapeAreaM2?(p: World2, capM2: number): { m2: number; sealed: boolean };
+  /**
+   * Metres to the nearest runnable paved way, or `Infinity` where the terrain
+   * has no street network. Only meaningful in a town.
+   *
+   * This is what tells a garden from a street. A walled garden with a gate is
+   * connected — the escape flood walks straight out through the gate and
+   * reports open ground — so enclosure alone cannot see it; what it *is* is
+   * ground well off the network, and that is measurable. See
+   * `FieldTerrain.pavedDistanceAt`.
+   */
+  pavedDistanceAt?(x: number, z: number): number;
 }
 
 /** Target shape per discipline. Winning times are the IOF-specified quantity. */
@@ -115,6 +137,40 @@ interface Spec {
    * of climb over 2 km — 4.5%, four times what a sprint is set to.
    */
   maxLegClimbOverM: number;
+  /**
+   * How far apart the start and the finish must be, metres.
+   *
+   * **They may share an arena. They are never adjacent.** Both in one arena is
+   * normal and wanted — the spectators, the commentary and the big screen are
+   * all in one place — but a start you can see the finish gantry from is not a
+   * start, and the client played exactly that: *"I started in some garden and
+   * the finish gate was right there"*. Nothing in this generator prevented it;
+   * both points were drawn from an annulus around the same arena centre with no
+   * relationship to each other, and over 40 menu-shaped Krumlov seeds the
+   * closest pair came out 116 m apart with the first leg pointing 3° off the
+   * bearing to the finish.
+   *
+   * Scaled to the discipline because a sight line is. A sprint arena is compact
+   * and a town shuts the view down in fifty metres, so 200 m of separation there
+   * is a finish you genuinely cannot see. Forest arenas are open fields and the
+   * courses are five times longer, so the equivalent is 350 m.
+   */
+  minStartFinishM: number;
+  /**
+   * How close the course may come to the finish before the run-in, metres.
+   *
+   * The finish is the end of a run-in, not a roundabout. Without this the
+   * generator happily threaded leg 6 within 2 m of the finish — the player runs
+   * through the gantry mid-race, which is nonsense on the ground and nonsense on
+   * the map, where the double circle means *the end*. Applied to whole legs
+   * rather than to control sites, because a control 90 m clear of the finish on
+   * a leg that sweeps past it at 10 m is the same fault.
+   *
+   * It doubles as the run-in length: the home bias aims the last legs at the
+   * finish and this is what stops them arriving, so the last control settles
+   * just outside the ring.
+   */
+  finishClearanceM: number;
 }
 
 function specFor(d: Discipline, anchor: VenueAnchor): Spec {
@@ -141,6 +197,8 @@ function specFor(d: Discipline, anchor: VenueAnchor): Spec {
         minSeparationM: 45,
         routeStepM: 2.5,
         maxLegClimbOverM: 7,
+        minStartFinishM: 200,
+        finishClearanceM: 75,
       };
     case 'middle':
       // ~30–35 min, constant direction change, technically demanding.
@@ -153,6 +211,8 @@ function specFor(d: Discipline, anchor: VenueAnchor): Spec {
         minSeparationM: 110,
         routeStepM: 25,
         maxLegClimbOverM: 45,
+        minStartFinishM: 350,
+        finishClearanceM: 130,
       };
     case 'long':
       // ~90 min, route choice, long legs. Capped by the venue we actually have.
@@ -165,6 +225,8 @@ function specFor(d: Discipline, anchor: VenueAnchor): Spec {
         minSeparationM: 110,
         routeStepM: 25,
         maxLegClimbOverM: 45,
+        minStartFinishM: 350,
+        finishClearanceM: 130,
       };
     default:
       return {
@@ -176,6 +238,8 @@ function specFor(d: Discipline, anchor: VenueAnchor): Spec {
         minSeparationM: 110,
         routeStepM: 25,
         maxLegClimbOverM: 45,
+        minStartFinishM: 350,
+        finishClearanceM: 130,
       };
   }
 }
@@ -193,16 +257,87 @@ function specFor(d: Discipline, anchor: VenueAnchor): Spec {
  * 1.5–2.0 km; a generator laying out fifteen legs on a real street network,
  * under separation and climb rules that reject candidates unevenly, cannot hit
  * a 500 m window on every draw, and forcing it to would mean rejecting good
- * courses for arithmetic. ±25% around the target is what Krumlov actually
- * yields with the median sitting inside the IOF band.
+ * courses for arithmetic. A band a quarter wide at the top of the target is
+ * what Krumlov actually yields, with the median sitting inside the IOF band.
+ *
+ * **The band is not symmetric, and the low edge is the interesting one.** It
+ * used to be −25%, which put it at 1125 m for a sprint while
+ * `tools/ci/check-race.mjs` rejects anything under 1200 — so `setCourse` was
+ * shopping for a course the gate would refuse, and one seed in a hundred and
+ * twenty duly landed in the gap. Once the finish clearance started rejecting
+ * late legs it was three, and one of them was a seed the gate runs. A setter
+ * whose acceptance test is looser than the judge's is not a setter. −20% puts
+ * the low edge exactly on the number the sport gives, and costs 3 draws in 120,
+ * which the ten-seed search absorbs without noticing.
  */
 export function courseLengthBand(
   d: Discipline,
   anchor: VenueAnchor,
 ): { min: number; max: number } {
   const target = specFor(d, anchor).targetLengthM;
-  return { min: Math.round(target * 0.75), max: Math.round(target * 1.25) };
+  return { min: Math.round(target * 0.8), max: Math.round(target * 1.25) };
 }
+
+/**
+ * How much ground the start and the finish must open onto, m².
+ *
+ * The same number and the same reasoning as `MIN_ESCAPE_M2` in
+ * `src/race/courseSetup.ts`, applied a layer earlier. That one can only reject
+ * a whole course and go looking for another seed; this one rejects the *spot*,
+ * which is what is actually wrong, and costs one flood rather than a
+ * regeneration. Both are kept: this is a preference expressed while siting, and
+ * that is the guarantee made about the course that ships.
+ */
+const MIN_ARENA_ESCAPE_M2 = 3_000;
+
+/**
+ * How far from a runnable way the start and the finish may sit in a town,
+ * metres.
+ *
+ * The enclosure flood cannot see a walled garden that has a gate — it walks out
+ * through the gate and reports the whole town. What distinguishes the garden is
+ * that it is *off the network*: over 40 Krumlov seeds, 84% of sited controls
+ * are within 2 m of a paved way and the furthest is 17.5 m, so a start more than
+ * fifteen metres from anything you can run on is not on a street. Applied only
+ * where there is a network to measure against — see `CourseTerrain.pavedDistanceAt`.
+ */
+const MAX_ARENA_PAVED_M = 15;
+
+/**
+ * How far off the bearing to the finish the first leg must lead, radians.
+ *
+ * 70°. A real start is sited so the first leg takes the field *away* from the
+ * arena — that is why the start triangle is a triangle, it has a direction —
+ * and a first leg that runs back past the finish shows the player the gantry
+ * before they have navigated anything. `tools/ci/check-race.mjs` asserts 60°,
+ * deliberately looser: the gate states the sport's floor, this states what the
+ * generator aims at, and the gap between them is the room the terrain gets.
+ */
+const FIRST_LEG_AWAY_RAD = 1.22;
+
+/**
+ * How much of the finish clearance a leg may give back when it has nowhere
+ * else to go. See the retry in `generateCourse`.
+ */
+const RELAXED_CLEARANCE = 0.7;
+
+/**
+ * How much of the start–finish separation the last-resort start band keeps.
+ *
+ * The bands relax openness, ground speed and the sector; this is the one figure
+ * they never give up entirely, because a start next to the finish is the whole
+ * complaint. 85% of a number chosen for a sight line is still a sight line.
+ */
+const LAST_RESORT_SEPARATION = 0.85;
+
+/**
+ * How many candidate sites are worth an escape flood, per band.
+ *
+ * The flood is a couple of milliseconds — cheap once, ruinous sixty times. The
+ * candidates are checked best-first, and in practice the first one passes:
+ * every legitimate Krumlov site opens onto the whole town.
+ */
+const MAX_VERIFY = 3;
 
 export interface GenerateOptions {
   venue: VenueAnchor;
@@ -211,6 +346,54 @@ export interface GenerateOptions {
   terrain: CourseTerrain;
   /** Where the arena is. Start and finish are placed near it. */
   arena?: World2;
+}
+
+/**
+ * What is wrong with a course's arena, in the reader's own words. Empty is good.
+ *
+ * Exported because `setCourse` shops between seeds and has to be able to say
+ * "not that one": it pulls the start and the finish onto the reachable component
+ * after generation, which can move them, so the guarantee this file makes while
+ * siting has to be re-checked on the course that actually ships.
+ *
+ * Deliberately does not take the terrain. These are three statements about the
+ * geometry of a course and nothing else, so they can be checked anywhere — which
+ * is also why `tools/ci/check-race.mjs` re-derives them from its own constants
+ * rather than importing these.
+ */
+export function arenaFaults(course: Course, discipline: Discipline, venue: VenueAnchor): string[] {
+  const spec = specFor(discipline, venue);
+  const out: string[] = [];
+  // The **floors**, not the targets. `generateCourse` aims at the full figures
+  // and gives a little of them back where the terrain refuses — the last start
+  // band and the leg retry — so checking the targets here would reject courses
+  // the generator deliberately accepted and send `setCourse` shopping for
+  // nothing. What this states is what is guaranteed.
+  const minSepM = spec.minStartFinishM * LAST_RESORT_SEPARATION;
+  const minClearM = spec.finishClearanceM * RELAXED_CLEARANCE;
+  const sep = dist2(course.start, course.finish);
+  if (sep < minSepM) {
+    out.push(`start ${Math.round(sep)} m from the finish, under ${Math.round(minSepM)} m`);
+  }
+  const first = course.controls[0]?.position;
+  if (first) {
+    const away = Math.abs(
+      wrapAngle(bearing(course.start, first) - bearing(course.start, course.finish)),
+    );
+    if (away < FIRST_LEG_AWAY_RAD) {
+      out.push(`first leg only ${Math.round((away * 180) / Math.PI)}° off the bearing to the finish`);
+    }
+  }
+  // Every leg but the run-in. Ending at the finish is what the run-in is for.
+  const points = [course.start, ...course.controls.map((c) => c.position), course.finish];
+  for (let i = 0; i < points.length - 2; i++) {
+    const d = pointToSegmentM(course.finish, points[i]!, points[i + 1]!);
+    if (d < minClearM) {
+      out.push(`leg ${i} passes ${Math.round(d)} m from the finish`);
+      break;
+    }
+  }
+  return out;
 }
 
 export function generateCourse(o: GenerateOptions): Course {
@@ -223,7 +406,45 @@ export function generateCourse(o: GenerateOptions): Course {
     Math.abs(p.x) < halfX * 0.92 && Math.abs(p.z) < halfZ * 0.92;
 
   const arena = o.arena ?? { x: 0, z: 0 };
-  // The start must be somewhere you can actually run out of in any direction.
+  // ISSprOM territory: 1:4000 or closer is a town, and a town has a street
+  // network worth measuring against. Same test as `RaceController` uses.
+  const urban = o.venue.mapScale <= 5000;
+
+  /**
+   * Neither the start nor the finish may sit in an enclosed garden or courtyard.
+   *
+   * Two different questions, asked separately because they catch different
+   * gardens. `escapeAreaM2` catches the sealed one — a courtyard whose gate is
+   * shut — and is the expensive half, so it runs on the best few candidates
+   * only. `pavedDistanceAt` catches the one with a gate, which the flood walks
+   * straight out of and reports as open: what makes it a garden is that it is
+   * off the network, and that is cheap to measure on every sample.
+   */
+  const onNetwork = (p: World2): boolean => {
+    if (!urban || !o.terrain.pavedDistanceAt) return true;
+    return o.terrain.pavedDistanceAt(p.x, p.z) <= MAX_ARENA_PAVED_M;
+  };
+  const opensOut = (p: World2): boolean => {
+    if (!o.terrain.escapeAreaM2) return true;
+    const e = o.terrain.escapeAreaM2(p, MIN_ARENA_ESCAPE_M2);
+    return !e.sealed || e.m2 >= MIN_ARENA_ESCAPE_M2;
+  };
+
+  // **The finish is sited first, and the start is sited against it.**
+  //
+  // That order is the fix. Both used to be drawn from an annulus around the
+  // arena with no relationship to each other, so nothing stopped them landing
+  // a few metres apart — which is what the client played.
+  const finish = pickOpenSite(rng, o.terrain, inBounds, [
+    { around: arena, min: 60, max: 180, open: 0.7, speed: 0.8, accept: onNetwork, verify: opensOut },
+    { around: arena, min: 60, max: 320, open: 0.55, speed: 0.72, accept: onNetwork, verify: opensOut },
+    { around: arena, min: 40, max: 420, open: 0.4, speed: 0.6, verify: opensOut },
+    { around: arena, min: 40, max: 420, open: 0.4 },
+    { around: arena, min: 40, max: 420, open: 0 },
+  ]) ?? arena;
+
+  // The start must be somewhere you can actually run out of in any direction,
+  // and it must be a long way from the finish on the far side of the arena.
   //
   // Relax progressively rather than falling straight through to "anywhere
   // legal": a dense old town may genuinely have no 75%-open spot near the
@@ -231,19 +452,39 @@ export function generateCourse(o: GenerateOptions): Course {
   // difference is whether the first ten seconds of the race feel broken.
   // Widening the annulus matters as much as lowering the bar — the open ground
   // in Krumlov is the square, and the square may be 400 m away.
-  const start = pickOpenSite(arena, rng, o.terrain, inBounds, [
-    { min: 120, max: 260, open: 0.75, speed: 0.8 },
-    { min: 120, max: 420, open: 0.75, speed: 0.8 },
-    { min: 80, max: 520, open: 0.6, speed: 0.72 },
-    { min: 60, max: 600, open: 0.45, speed: 0.6 },
-    { min: 60, max: 600, open: 0.45 },
-    { min: 60, max: 600, open: 0 },
+  //
+  // What is *not* relaxed away is the separation. Every band carries it, the
+  // last two at a reduced figure rather than none, because a start next to the
+  // finish is the failure this whole sequence exists to prevent and falling
+  // back to it would make the rest theatre. The sector — the far side of the
+  // arena from the finish, widening as the bands loosen — is how the separation
+  // is met without simply pushing the start to the edge of the map.
+  const away = bearing(finish, arena);
+  const far = (m: number) => (p: World2) => dist2(p, finish) >= m;
+  const sep = spec.minStartFinishM;
+  const start = pickOpenSite(rng, o.terrain, inBounds, [
+    { around: arena, min: 120, max: 260, open: 0.75, speed: 0.8, sector: { centre: away, half: 1.05 }, accept: both(far(sep), onNetwork), verify: opensOut },
+    { around: arena, min: 120, max: 420, open: 0.75, speed: 0.8, sector: { centre: away, half: 1.75 }, accept: both(far(sep), onNetwork), verify: opensOut },
+    { around: arena, min: 80, max: 520, open: 0.6, speed: 0.72, sector: { centre: away, half: 2.45 }, accept: far(sep), verify: opensOut },
+    { around: arena, min: 60, max: 600, open: 0.45, speed: 0.6, accept: far(sep) },
+    { around: arena, min: 60, max: 600, open: 0.45, accept: far(sep * LAST_RESORT_SEPARATION) },
+    // Last resort: sample around the *finish* rather than the arena, so the one
+    // property that cannot be given up is met by construction.
+    { around: finish, min: sep * LAST_RESORT_SEPARATION, max: sep * LAST_RESORT_SEPARATION + 260, open: 0 },
   ]) ?? arena;
 
   const targetLegs = spec.legCount[0] + Math.floor(rng.next() * (spec.legCount[1] - spec.legCount[0] + 1));
   const controls: Control[] = [];
   let current = start;
-  let lastBearing = rng.next() * Math.PI * 2;
+  // The bearing to the finish, standing in for the leg you have just run.
+  //
+  // `pickNextControl` turns away from whatever it is given here, so handing it
+  // the direction of the finish makes the existing rule do the new job: the
+  // first leg leaves into the course instead of back across the arena. It used
+  // to be a random draw, which is why a first leg 3° off the finish was possible
+  // at all. `awayFrom` below tightens the same constraint rather than fighting
+  // it — the two agree on which way is wrong.
+  let lastBearing = bearing(start, finish);
   let code = 31 + Math.floor(rng.next() * 40);
   // Whole-course climb allowance, spent down as legs are placed.
   let climbLeftM = spec.targetLengthM * spec.climbRatio;
@@ -286,7 +527,7 @@ export function generateCourse(o: GenerateOptions): Course {
           : 0.55 + rng.next() * 0.3;
     const legLength = Math.max(spec.minLegM, Math.min(spec.maxLegM, meanLegM * ratio));
 
-    const site = pickNextControl({
+    const leg = (finishClearanceM: number): World2 | null => pickNextControl({
       from: current,
       lastBearing,
       legLength,
@@ -297,10 +538,19 @@ export function generateCourse(o: GenerateOptions): Course {
       routeStepM: spec.routeStepM,
       maxLegClimbOverM: spec.maxLegClimbOverM,
       punchRadiusM: o.discipline === 'sprint' ? 6 : 9,
-      // Late in the course, bend back toward the arena so the finish is not a
-      // forced sprint across the whole map.
+      // Late in the course, bend back toward the finish so the run-in is not a
+      // forced sprint across the whole map. The finish rather than the arena
+      // centre, now that the two are deliberately not the same point: what the
+      // course has to converge on is the thing it ends at.
       homeBias: i >= targetLegs - 3 ? (i - (targetLegs - 4)) / 3 : 0,
-      home: arena,
+      home: finish,
+      // The finish is not a control and the course does not pass it. Kept clear
+      // by whole legs rather than by control sites — a control 90 m from the
+      // finish reached on a leg that sweeps past it at 10 m is the same fault —
+      // and it is what leaves a run-in for the last control to sit outside.
+      clearOf: { p: finish, m: finishClearanceM },
+      // Leg 1 only: leave the arena, do not run back through it.
+      ...(i === 0 ? { awayFrom: { p: finish, rad: FIRST_LEG_AWAY_RAD } } : {}),
       // A floor, so an exhausted budget does not reject every candidate and
       // strand the course — but a floor proportional to the budget rather than
       // a flat 25 m, which on a sprint's 19 m allowance *is* the whole budget
@@ -308,6 +558,18 @@ export function generateCourse(o: GenerateOptions): Course {
       climbLeftM: Math.max(spec.targetLengthM * spec.climbRatio * 0.3, climbLeftM),
       placed: [start, ...controls.map((c) => c.position)],
     });
+
+    // Full clearance first; a narrower pass rather than no leg at all.
+    //
+    // Every rule here rejects candidates, and the finish clearance rejects them
+    // where the home bias is pushing hardest — so on a tight seed the last leg
+    // has nowhere to go and the loop breaks, which does not shorten the course
+    // by one leg, it ends it. Measured over 120 menu-shaped Krumlov seeds, the
+    // hard rule alone pushed five of them under the 1.2 km a sprint is
+    // specified at, against one before. A setter faced with the same corner
+    // accepts a tighter pass; so does this, once, and `RELAXED_CLEARANCE`
+    // stays clear of what `tools/ci/check-race.mjs` will accept.
+    const site = leg(spec.finishClearanceM) ?? leg(spec.finishClearanceM * RELAXED_CLEARANCE);
     if (!site) break;
 
     climbLeftM -= legClimbM(current, site, o.terrain);
@@ -330,14 +592,6 @@ export function generateCourse(o: GenerateOptions): Course {
     code += 1 + Math.floor(rng.next() * 4);
     if (code > 999) code = 31;
   }
-
-  const finish = pickOpenSite(arena, rng, o.terrain, inBounds, [
-    { min: 60, max: 180, open: 0.7, speed: 0.8 },
-    { min: 60, max: 320, open: 0.55, speed: 0.72 },
-    { min: 40, max: 420, open: 0.4, speed: 0.6 },
-    { min: 40, max: 420, open: 0.4 },
-    { min: 40, max: 420, open: 0 },
-  ]) ?? arena;
 
   const lengthM = measureLength(start, controls, finish);
   const climbM = measureClimb(start, controls, finish, o.terrain);
@@ -385,6 +639,16 @@ interface PickOptions {
   punchRadiusM: number;
   /** See `Spec.maxLegClimbOverM`. */
   maxLegClimbOverM: number;
+  /**
+   * A point the whole leg must stay clear of, and by how much. The finish: see
+   * `Spec.finishClearanceM`.
+   */
+  clearOf?: { p: World2; m: number };
+  /**
+   * A point the leg must lead away from, and by how much, in radians. Used for
+   * the first leg only — see `FIRST_LEG_AWAY_RAD`.
+   */
+  awayFrom?: { p: World2; rad: number };
 }
 
 /** Perpendicular distance from `p` to the segment `a`–`b`, metres. */
@@ -458,11 +722,34 @@ function pickNextControl(o: PickOptions): World2 | null {
     // dog-legs produces them anyway. In a town it costs nothing: there is a
     // corner every few metres.
     const nudgeR = Math.max(12, Math.min(45, o.legLength * 0.3));
-    const sited = findControlSite(p, 0, nudgeR, o.rng, o.terrain, o.inBounds, 0.5);
+    const sited = findControlSite({
+      around: p,
+      minR: 0,
+      maxR: nudgeR,
+      rng: o.rng,
+      terrain: o.terrain,
+      inBounds: o.inBounds,
+      minOpenness: 0.5,
+    });
     if (!sited) continue;
 
     const feature = o.terrain.featureScoreAt(sited.x, sited.z);
     if (feature < 0.25) continue;
+
+    // The finish is the end of a run-in, not somewhere the course goes past.
+    // Measured against the whole leg rather than against the endpoint: the
+    // seed that produced this rule threaded a leg within 2 m of the finish
+    // while both its controls were comfortably clear of it.
+    if (o.clearOf && pointToSegmentM(o.clearOf.p, o.from, sited) < o.clearOf.m) continue;
+
+    // Leg 1: leave the arena. See `FIRST_LEG_AWAY_RAD`.
+    if (
+      o.awayFrom &&
+      Math.abs(wrapAngle(bearing(o.from, sited) - bearing(o.from, o.awayFrom.p))) <
+        o.awayFrom.rad
+    ) {
+      continue;
+    }
 
     // The turn as *placed*, not as intended.
     //
@@ -551,59 +838,114 @@ function openness(p: World2, terrain: CourseTerrain, radiusM: number): number {
   return open / N;
 }
 
+/** One attempt at siting a start or a finish. Tried in order, loosest last. */
+interface SiteBand extends Omit<SiteOptions, 'rng' | 'terrain' | 'inBounds'> {
+  /** Legacy shorthand kept at the call sites: openness at 8 m, 0..1. */
+  open: number;
+  /** Minimum ground speed factor, 0..1. */
+  speed?: number;
+}
+
 /**
- * Try successively looser (radius, openness) bands until one yields a site.
+ * Try successively looser bands until one yields a site.
  * Returns the first hit, or null if even the loosest band fails.
  */
 function pickOpenSite(
-  around: World2,
   rng: Rng,
   terrain: CourseTerrain,
   inBounds: (p: World2) => boolean,
-  bands: { min: number; max: number; open: number; speed?: number }[],
+  bands: SiteBand[],
 ): World2 | null {
   for (const b of bands) {
-    const p = findControlSite(
-      around, b.min, b.max, rng, terrain, inBounds, b.open, b.speed ?? 0,
-    );
+    const p = findControlSite({
+      ...b,
+      rng,
+      terrain,
+      inBounds,
+      minOpenness: b.open,
+      minSpeed: b.speed ?? 0,
+    });
     if (p) return p;
   }
   return null;
 }
 
+/** Both predicates, as one. Reads better at the band table than `&&` does. */
+function both(
+  a: (p: World2) => boolean,
+  b: (p: World2) => boolean,
+): (p: World2) => boolean {
+  return (p) => a(p) && b(p);
+}
+
+interface SiteOptions {
+  around: World2;
+  minR?: number;
+  maxR?: number;
+  /** Shorthands used by the band tables. */
+  min?: number;
+  max?: number;
+  rng: Rng;
+  terrain: CourseTerrain;
+  inBounds: (p: World2) => boolean;
+  minOpenness?: number;
+  minSpeed?: number;
+  /**
+   * Restrict sampled bearings to ±`half` radians around `centre`.
+   *
+   * Not a filter — the samples are *drawn* inside the sector, so a 60° window
+   * costs the same sixty samples a full circle does. That matters: the start is
+   * wanted on the far side of the arena from the finish, and rejecting five
+   * sixths of a uniform circle would leave ten usable draws to pick from.
+   */
+  sector?: { centre: number; half: number };
+  /** A cheap test every sample must pass. */
+  accept?: (p: World2) => boolean;
+  /**
+   * An expensive test, run on the best candidates only — at most `MAX_VERIFY`
+   * of them, best first. The escape flood.
+   */
+  verify?: (p: World2) => boolean;
+}
+
 /** Find a describable feature near a point. */
-function findControlSite(
-  around: World2,
-  minR: number,
-  maxR: number,
-  rng: Rng,
-  terrain: CourseTerrain,
-  inBounds: (p: World2) => boolean,
-  minOpenness = 0,
-  minSpeed = 0,
-): World2 | null {
-  let best: { p: World2; s: number } | null = null;
+function findControlSite(o: SiteOptions): World2 | null {
+  const minR = o.minR ?? o.min ?? 0;
+  const maxR = o.maxR ?? o.max ?? 0;
+  const minOpenness = o.minOpenness ?? 0;
+  const minSpeed = o.minSpeed ?? 0;
+  const found: { p: World2; s: number }[] = [];
+
   for (let i = 0; i < 60; i++) {
-    const a = rng.next() * Math.PI * 2;
-    const r = minR + rng.next() * (maxR - minR);
-    const p = { x: around.x + Math.sin(a) * r, z: around.z - Math.cos(a) * r };
-    if (!inBounds(p)) continue;
+    const a = o.sector
+      ? wrapAngle(o.sector.centre + (o.rng.next() * 2 - 1) * o.sector.half)
+      : o.rng.next() * Math.PI * 2;
+    const r = minR + o.rng.next() * (maxR - minR);
+    const p = { x: o.around.x + Math.sin(a) * r, z: o.around.z - Math.cos(a) * r };
+    if (!o.inBounds(p)) continue;
     // A control may not sit in impassable ground — in sprint that is a DSQ
     // offence for the runner, so it must never be the target.
-    if (terrain.runnabilityAt(p.x, p.z) === Runnability.Impassable) continue;
+    if (o.terrain.runnabilityAt(p.x, p.z) === Runnability.Impassable) continue;
     // Require room to move, not just a legal cell to stand on.
-    if (minOpenness > 0 && openness(p, terrain, 8) < minOpenness) continue;
+    if (minOpenness > 0 && openness(p, o.terrain, 8) < minOpenness) continue;
     // And require ground worth standing on. A start can be perfectly open and
     // still be in scrub: the Krumlov start landed on Green2 at 0.4x speed, so
     // the first strides crawled and the game read as broken even though
     // nothing was blocking. Openness and runnability are different problems.
-    if (minSpeed > 0 && (SPEED_BY_RUNNABILITY[terrain.runnabilityAt(p.x, p.z)] ?? 0) < minSpeed) {
+    if (minSpeed > 0 && (SPEED_BY_RUNNABILITY[o.terrain.runnabilityAt(p.x, p.z)] ?? 0) < minSpeed) {
       continue;
     }
-    const s = terrain.featureScoreAt(p.x, p.z);
-    if (!best || s > best.s) best = { p, s };
+    if (o.accept && !o.accept(p)) continue;
+    found.push({ p, s: o.terrain.featureScoreAt(p.x, p.z) });
   }
-  return best?.p ?? null;
+
+  if (!found.length) return null;
+  found.sort((a, b) => b.s - a.s);
+  if (!o.verify) return found[0]!.p;
+  for (let i = 0; i < Math.min(MAX_VERIFY, found.length); i++) {
+    if (o.verify(found[i]!.p)) return found[i]!.p;
+  }
+  return null;
 }
 
 /**

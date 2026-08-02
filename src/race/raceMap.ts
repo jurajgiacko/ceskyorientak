@@ -39,6 +39,15 @@ export interface MapSubject {
   heading: number;
   /** 0..1 — Focus, which degrades the sheet at the edges. */
   clarity: number;
+  /**
+   * How many controls have been punched.
+   *
+   * Not a position and not a fix — it is the count off the SI card, which the
+   * athlete knows because they heard it beep. The map is allowed to know it for
+   * the same reason it is allowed to draw the course at all: it is what the
+   * runner already has in their hand.
+   */
+  punched: number;
 }
 
 export interface RaceMapOptions {
@@ -221,6 +230,7 @@ export class RaceMap {
       buildingsAsBlack: this.opts.anchor.mapScale <= 5000,
       contours: this.cull(centre, w, h, view.pxPerMm),
       course: this.opts.course,
+      punched: s.punched,
       believedPosition: s.believedPosition,
       heldBearing: s.heading,
       clarity: s.clarity,
@@ -261,6 +271,7 @@ export class RaceMap {
       buildingsAsBlack: this.opts.anchor.mapScale <= 5000,
       contours: this.cull(s.believedPosition, w, h, view.pxPerMm),
       course: this.opts.course,
+      punched: s.punched,
       believedPosition: s.believedPosition,
       clarity: s.clarity,
       view,

@@ -17,7 +17,7 @@
  * terrain refuses.
  */
 
-import { courseLengthBand, generateCourse } from '@/sim/courseGen';
+import { arenaFaults, courseLengthBand, generateCourse } from '@/sim/courseGen';
 import type { Course, Control, Discipline, VenueAnchor, World2 } from '@/core/types';
 import { dist2 } from '@/core/geo';
 import type { FieldTerrain } from './terrainAdapter';
@@ -45,6 +45,15 @@ export interface CourseSetupResult {
    * asserted: the client's complaint was a distribution, not a single failure.
    */
   pavedDistanceM: number[];
+  /**
+   * What is wrong with the arena, if anything — start and finish too close, a
+   * first leg pointing back through the run-in, a leg passing the finish. Empty
+   * on every course this function is willing to offer, and reported rather than
+   * swallowed for the same reason `tightestEscapeM2` is: when it is not empty,
+   * the terrain refused every seed and somebody should be able to see that
+   * without a bisect.
+   */
+  arenaFaults: string[];
 }
 
 /** How many seeds to try before accepting an edited course. */
@@ -88,6 +97,18 @@ export function setCourse(
   let best: { course: Course; missing: number } | null = null;
   let complete: { course: Course; escape: number } | null = null;
 
+  /**
+   * The arena, re-checked on the course that ships rather than trusted.
+   *
+   * `generateCourse` sites the finish first and the start against it, so the
+   * separation, the first leg's bearing and the clearance round the finish hold
+   * when it hands the course over. Then the two lines below pull both points
+   * onto the arena's connected component, which can move them — and a start
+   * dragged 200 m to get out of a courtyard is a start that may now be next to
+   * the finish. So the property is asserted where it has to be true.
+   */
+  const arenaOf = (c: Course): string[] => arenaFaults(c, o.discipline, o.venue);
+
   for (let attempt = 0; attempt < MAX_SEEDS; attempt++) {
     const seed = (o.seed + attempt * 7919) | 0;
     const raw = generateCourse({ ...o, seed, terrain });
@@ -127,7 +148,8 @@ export function setCourse(
         // seeds satisfy both first time.
         const enough = course.controls.length >= MIN_CONTROLS_FOR_A_RACE;
         const inBand = course.lengthM >= band.min && course.lengthM <= band.max;
-        if (enough && inBand) {
+        const arena = arenaOf(course);
+        if (enough && inBand && arena.length === 0) {
           return {
             course,
             seedsTried: attempt + 1,
@@ -135,16 +157,23 @@ export function setCourse(
             reachableFraction: fraction,
             tightestEscapeM2: escape,
             pavedDistanceM: pavedDistances(terrain, course),
+            arenaFaults: arena,
           };
         }
-        // Keep the best runner-up: enough controls first, then closest to the
-        // middle of the band.
+        // Keep the best runner-up: a sound arena first, then enough controls,
+        // then closest to the middle of the band. Arena first because the other
+        // two are matters of degree — a 1.3 km sprint is a short sprint — and a
+        // start you can see the finish from is not a race at all.
         const mid = (band.min + band.max) / 2;
+        const soundNow = arena.length === 0;
+        const soundBefore = complete ? arenaOf(complete.course).length === 0 : false;
         const better =
           !complete ||
-          (complete.course.controls.length < MIN_CONTROLS_FOR_A_RACE && enough) ||
-          (complete.course.controls.length >= MIN_CONTROLS_FOR_A_RACE === enough &&
-            Math.abs(course.lengthM - mid) < Math.abs(complete.course.lengthM - mid));
+          (soundNow && !soundBefore) ||
+          (soundNow === soundBefore &&
+            ((complete.course.controls.length < MIN_CONTROLS_FOR_A_RACE && enough) ||
+              (complete.course.controls.length >= MIN_CONTROLS_FOR_A_RACE === enough &&
+                Math.abs(course.lengthM - mid) < Math.abs(complete.course.lengthM - mid))));
         if (better) complete = { course, escape };
       }
     }
@@ -159,6 +188,7 @@ export function setCourse(
       reachableFraction: fraction,
       tightestEscapeM2: complete.escape,
       pavedDistanceM: pavedDistances(terrain, complete.course),
+      arenaFaults: arenaOf(complete.course),
     };
   }
 
@@ -174,6 +204,7 @@ export function setCourse(
     reachableFraction: fraction,
     tightestEscapeM2: tightestEscape(terrain, edited),
     pavedDistanceM: pavedDistances(terrain, edited),
+    arenaFaults: arenaOf(edited),
   };
 }
 

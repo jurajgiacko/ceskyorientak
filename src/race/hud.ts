@@ -77,6 +77,8 @@ export class RaceHud {
   private readonly ctrlNo: HTMLElement;
   private readonly ctrlCode: HTMLElement;
   private readonly picto: HTMLElement;
+  private readonly progress: HTMLElement;
+  private readonly pips: HTMLElement[] = [];
   private readonly needle: HTMLElement;
   private readonly bearing: HTMLElement;
   private readonly flash: HTMLElement;
@@ -134,6 +136,14 @@ export class RaceHud {
           <span class="hud__ctrlCode" data-role="ctrlCode">31</span>
         </div>
         <div class="hud__picto" data-role="picto"></div>
+        <!--
+          Progress, as a shape rather than as a number.
+          "3/15" says which control is next; it does not say how much of the
+          course is behind you, and at a glance in sunlight a fraction is two
+          numbers to read and compare. A strip of pips is one. The count stays
+          as the accessible name, because a screen reader cannot see a shape.
+        -->
+        <div class="hud__progress" data-role="progress" role="img"></div>
       </div>
 
       <!--
@@ -208,6 +218,7 @@ export class RaceHud {
     this.ctrlNo = must(this.root, 'ctrlNo');
     this.ctrlCode = must(this.root, 'ctrlCode');
     this.picto = must(this.root, 'picto');
+    this.progress = must(this.root, 'progress');
     this.needle = must(this.root, 'needle');
     this.bearing = must(this.root, 'bearing');
     this.flash = must(this.root, 'flash');
@@ -231,6 +242,7 @@ export class RaceHud {
     if (!toggle) throw new Error('hud: missing belt toggle');
     this.beltToggle = toggle;
 
+    this.buildProgress();
     this.renderBelt(o.belt.map(() => true));
 
     const onClick = (ev: Event) => {
@@ -246,6 +258,43 @@ export class RaceHud {
     };
     this.root.addEventListener('click', onClick);
     this.disposers.push(() => this.root.removeEventListener('click', onClick));
+  }
+
+  // -------------------------------------------------------------------------
+  // Progress
+  // -------------------------------------------------------------------------
+
+  /**
+   * One pip per control, built once.
+   *
+   * Built rather than re-rendered per punch because this sits next to the
+   * energy meter, which already documents why a per-frame DOM write is a
+   * measurable cost on the phones this is for. `renderTarget` only flips a
+   * dataset attribute, and only when the target changes.
+   */
+  private buildProgress(): void {
+    const n = this.opts.course.controls.length;
+    this.progress.innerHTML = '';
+    this.pips.length = 0;
+    for (let i = 0; i < n; i++) {
+      const pip = document.createElement('i');
+      pip.className = 'hud__pip';
+      pip.dataset.state = 'todo';
+      this.progress.appendChild(pip);
+      this.pips.push(pip);
+    }
+    this.paintProgress(0);
+  }
+
+  private paintProgress(next: number): void {
+    const n = this.pips.length;
+    for (let i = 0; i < n; i++) {
+      this.pips[i]!.dataset.state = i < next ? 'done' : i === next ? 'now' : 'todo';
+    }
+    this.progress.setAttribute(
+      'aria-label',
+      t('hud.progress', { done: Math.min(next, n), total: n }),
+    );
   }
 
   // -------------------------------------------------------------------------
@@ -472,7 +521,9 @@ export class RaceHud {
 
   private renderTarget(v: RaceView): void {
     const target = v.target;
+    this.paintProgress(v.nextControl);
     if (!target) {
+      // Every control is behind you and the only thing left is the run-in.
       this.ctrlNo.textContent = '';
       this.ctrlCode.textContent = t('race.finish');
       this.picto.innerHTML = '';

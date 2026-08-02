@@ -138,6 +138,17 @@ export interface ControlMarkerState {
   visible: readonly boolean[];
   /** Index just punched — non-null for exactly one frame, then null again. */
   punched: number | null;
+  /**
+   * Which markers are behind the athlete, in the same order.
+   *
+   * Distinct from `punched`, which is the *event* — one frame, a beep and a
+   * light. This is the *state*, and it is the thing that was missing: a control
+   * you have punched stays on the ground looking exactly like the one you are
+   * hunting, so a player who comes back past it has no way to tell that it is
+   * spent. Optional, because a scene given no array simply draws every flag
+   * live, which is what it did before.
+   */
+  done?: readonly boolean[];
 }
 
 export interface ControlMarkerAssets {
@@ -239,6 +250,24 @@ function flagColour(): THREE.Color {
   return token('--c-flag', '#f25c19');
 }
 
+/**
+ * What a punched control is multiplied by.
+ *
+ * A *tint*, not a colour: three multiplies the material's own diffuse by the
+ * instance colour, so this darkens and slightly cools everything the marker is
+ * made of — the kite, the mast, the station — rather than repainting any of it.
+ * That is the right treatment for "spent": the flag is still an IOF kite, still
+ * orange, still 30 cm, and still exactly where the map says it is. It has just
+ * stopped being the thing you are looking for.
+ *
+ * Repainting it some other hue was the alternative and it is wrong twice over.
+ * The kite's orange is a specification, and a second flag colour in the terrain
+ * would teach a beginner that orange-and-white means something conditional.
+ */
+function spentColour(): THREE.Color {
+  return token('--c-spent', '#9aa39c');
+}
+
 // ---------------------------------------------------------------------------
 // Loading
 // ---------------------------------------------------------------------------
@@ -306,6 +335,21 @@ class Instanced {
       for (const part of lod.parts) {
         const im = new THREE.InstancedMesh(part.geometry, part.material, capacity);
         im.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+        // Per-instance tint, which is how a punched control reads as spent
+        // without a second material or a second draw call. three multiplies
+        // the material's diffuse by this in the fragment shader; setting the
+        // attribute at all is what switches that on, so it is allocated here
+        // and left at white for everything that has not been punched.
+        //
+        // Deliberately *not* a custom shader. `bearingBand.ts` states the rule
+        // and this file's own flash texture follows it: a shader that fails to
+        // compile makes geometry vanish while every gate stays green, and this
+        // project has shipped that twice. `instanceColor` is stock three.
+        im.instanceColor = new THREE.InstancedBufferAttribute(
+          new Float32Array(capacity * 3).fill(1),
+          3,
+        );
+        im.instanceColor.setUsage(THREE.DynamicDrawUsage);
         im.castShadow = true;
         im.receiveShadow = true;
         // Instances are scattered over the whole course, so the mesh's own
@@ -325,12 +369,15 @@ class Instanced {
     for (const l of this.levels) l.count = 0;
   }
 
-  push(lod: number, matrix: THREE.Matrix4): void {
+  push(lod: number, matrix: THREE.Matrix4, tint: THREE.Color): void {
     const level = this.levels[Math.min(lod, this.levels.length - 1)];
     if (!level) return;
     const first = level.meshes[0];
     if (!first || level.count >= first.instanceMatrix.count) return;
-    for (const m of level.meshes) m.setMatrixAt(level.count, matrix);
+    for (const m of level.meshes) {
+      m.setMatrixAt(level.count, matrix);
+      m.setColorAt(level.count, tint);
+    }
     level.count++;
   }
 
@@ -340,6 +387,7 @@ class Instanced {
         m.count = l.count;
         m.visible = l.count > 0;
         m.instanceMatrix.needsUpdate = true;
+        if (m.instanceColor) m.instanceColor.needsUpdate = true;
       }
     }
   }
@@ -385,6 +433,11 @@ export class ControlMarkers {
 
   private placed: Placed[] = [];
   private visible: readonly boolean[] = [];
+  private done: readonly boolean[] = [];
+
+  /** Per-instance tints: live is white (no change), spent is the token below. */
+  private readonly liveTint = new THREE.Color(1, 1, 1);
+  private readonly spentTint = new THREE.Color(1, 1, 1);
 
   /** The punch flash: one additive billboard, hidden except for half a second. */
   private readonly flash: THREE.Mesh;
@@ -401,6 +454,7 @@ export class ControlMarkers {
     this.assets = assets;
     this.group.name = 'controlMarkers';
     this.warnings.push(...assertGeometry(assets));
+    this.spentTint.copy(spentColour());
 
     this.flashMaterial = new THREE.MeshBasicMaterial({
       color: token('--c-lime', '#d0ec34'),
@@ -432,6 +486,7 @@ export class ControlMarkers {
     this.buildBuckets(markers.length);
     this.placed = markers.map((m) => this.place(m));
     this.visible = markers.map(() => false);
+    this.done = markers.map(() => false);
     this.stats.markers = this.placed.length;
     this.flashLeft = 0;
     this.flash.visible = false;
@@ -440,6 +495,7 @@ export class ControlMarkers {
   /** Which markers are drawn this frame, and whether one has just been punched. */
   setState(state: ControlMarkerState): void {
     this.visible = state.visible;
+    this.done = state.done ?? this.done;
     const i = state.punched;
     if (i !== null && i >= 0 && i < this.placed.length) {
       this.flashLeft = FLASH_S;
@@ -471,10 +527,11 @@ export class ControlMarkers {
       while (lod < LOD_SWITCH_M.length && d > LOD_SWITCH_M[lod]!) lod++;
       drawn++;
 
-      if (p.stand) this.stand?.push(lod, p.stand);
-      if (p.flag) this.flag?.push(lod, p.flag);
-      if (p.si) this.si?.push(lod, p.si);
-      if (p.gantry) this.gantry?.push(lod, p.gantry);
+      const tint = this.done[i] ? this.spentTint : this.liveTint;
+      if (p.stand) this.stand?.push(lod, p.stand, tint);
+      if (p.flag) this.flag?.push(lod, p.flag, tint);
+      if (p.si) this.si?.push(lod, p.si, tint);
+      if (p.gantry) this.gantry?.push(lod, p.gantry, tint);
     }
     this.stats.drawn = drawn;
 
@@ -608,6 +665,7 @@ export class ControlMarkers {
     this.group.clear();
     this.placed = [];
     this.visible = [];
+    this.done = [];
   }
 }
 

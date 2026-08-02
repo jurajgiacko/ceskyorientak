@@ -182,6 +182,14 @@ export class RaceController {
    * the whole race. The rule it encodes is the important part — see `frame`.
    */
   private readonly markerVisible: boolean[];
+  /**
+   * Which flags are behind the athlete, same indexing as `markerVisible`.
+   *
+   * The world's counterpart to the map's purple 50%: a punched control keeps
+   * standing there looking exactly like the one being hunted unless something
+   * says otherwise, and the beep and the flash are gone in half a second.
+   */
+  private readonly markerDone: boolean[];
   /** Marker index punched this frame. Non-null for exactly one frame. */
   private punchedMarker: number | null = null;
   /**
@@ -248,6 +256,9 @@ export class RaceController {
           believedPosition: v.believedPosition,
           heading: v.heading,
           clarity: v.clarity,
+          // The count off the SI card. `nextControl` is the index being sought,
+          // so it is also how many are behind you.
+          punched: v.nextControl,
         };
       },
       onReadingChange: (reading) => this.setReading(reading),
@@ -334,6 +345,7 @@ export class RaceController {
     // in the forest and the circle on the paper cannot end up in two places.
     const markers = courseMarkers(this.course);
     this.markerVisible = markers.map(() => false);
+    this.markerDone = markers.map(() => false);
     host.setCourseMarkers?.(markers);
 
     host.beforeFrame = (dt) => this.frame(dt);
@@ -696,11 +708,21 @@ export class RaceController {
     if (this.host.setMarkerState) {
       const n = this.course.controls.length;
       this.markerVisible[0] = true;
-      for (let i = 0; i < n; i++) this.markerVisible[i + 1] = i <= v.nextControl;
+      // "Behind you" means one thing everywhere: you have punched past it. A
+      // control is spent at `i < nextControl`, and the start goes with the leg
+      // that leaves it, so it is spent once control 1 is in — which is exactly
+      // when the map's start triangle goes to purple 50%. The finish is never
+      // spent: you are not past it until there is no race left.
+      this.markerDone[0] = v.nextControl > 0;
+      for (let i = 0; i < n; i++) {
+        this.markerVisible[i + 1] = i <= v.nextControl;
+        this.markerDone[i + 1] = i < v.nextControl;
+      }
       this.markerVisible[n + 1] = true;
       this.host.setMarkerState({
         visible: this.markerVisible,
         punched: this.punchedMarker,
+        done: this.markerDone,
       });
       this.punchedMarker = null;
     }

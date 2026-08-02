@@ -151,6 +151,40 @@
   gap: 0.3rem;
 }
 
+/* Progress: one pip per control, punched ones filled.
+   A shape rather than a second number. The reader is running, in sunlight, with
+   a thumb on each stick — "how much is left" has to be answerable in the glance
+   they already give the plate to read the control code, and a filled-to-empty
+   edge answers it without being read at all. It sits under the pictogram
+   because that is the bottom of the plate: nothing has to move to make room. */
+.hud__progress {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  max-width: 11rem;
+}
+
+.hud__pip {
+  width: 9px;
+  height: 5px;
+  border-radius: 1px;
+  /* Purple is the course's colour and the plate is already keyed to it (see the
+     border-left above), so progress along the course is stated in the same ink.
+     Three states, one hue: spent is the flat tint, the control being hunted is
+     full strength, and what is still to come is barely there. */
+  background: color-mix(in srgb, var(--c-purple) 22%, transparent);
+}
+
+.hud__pip[data-state='done'] {
+  background: var(--c-spent);
+}
+
+.hud__pip[data-state='now'] {
+  background: var(--c-purple);
+  /* The one pip that is not just a mark: it is where you are. */
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.35);
+}
+
 /* The IOF symbols are pure black on white by specification, so they get a
    white tile — recolouring them would stop them being the real symbols. */
 .hud__symbol {

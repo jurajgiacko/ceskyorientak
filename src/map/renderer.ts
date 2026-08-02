@@ -62,6 +62,15 @@ export interface MapRenderOptions {
   buildingsAsBlack?: boolean;
   contours: Contour[];
   course?: Course;
+  /**
+   * How many controls have been punched. Everything before that point on the
+   * course is drawn as visited — see `drawCourse`.
+   *
+   * Optional and defaulting to zero, so a map drawn outside a race (the results
+   * screen, a course preview) shows the whole course live, which is what a
+   * printed map is.
+   */
+  punched?: number;
   /** Where the athlete *believes* they are. There is no true-position marker. */
   believedPosition?: World2;
   /** Compass bearing being held, if any. */
@@ -107,7 +116,7 @@ export function renderMap(
 
   drawRunnability(ctx, o);
   drawContours(ctx, o);
-  if (o.course) drawCourse(ctx, o.course, anchor);
+  if (o.course) drawCourse(ctx, o.course, anchor, o.punched ?? 0);
   if (o.believedPosition) drawThumb(ctx, o.believedPosition, pxPerM);
 
   ctx.restore();
@@ -211,71 +220,111 @@ function drawContours(ctx: CanvasRenderingContext2D, o: MapRenderOptions): void 
  * broken where they would obscure map detail — the control circle marks *where*
  * the feature is, and hiding the feature would defeat it. We implement it by
  * shortening every connecting line at both ends so it never enters a circle.
+ *
+ * ## What a punched control looks like
+ *
+ * Everything behind the athlete is drawn in **ISOM purple 50%** instead of
+ * purple 100%. That is a real ink with a normative CMYK — it is what the
+ * standard already uses for purple *areas* — so this stays inside the map's own
+ * language rather than inventing a colour that would compete with the course.
+ * Nothing moves, nothing is hidden and the geometry is identical: a competitor
+ * comparing this sheet with the printed one sees the same course, printed
+ * lighter where they have already been.
+ *
+ * This is the persistent half of the punch. The beep, the flash and the HUD
+ * line all say *it happened*; none of them survives the next two seconds, so a
+ * player who opened the map a minute later had nothing at all telling them
+ * which circles were behind them.
+ *
+ * Drawn spent-first so the live course strokes over it: where a leg you have
+ * run crosses one you have not, the one you are on is the one on top.
  */
-function drawCourse(ctx: CanvasRenderingContext2D, course: Course, anchor: VenueAnchor): void {
+function drawCourse(
+  ctx: CanvasRenderingContext2D,
+  course: Course,
+  anchor: VenueAnchor,
+  punched: number,
+): void {
   const mPerMm = anchor.mapScale / 1000;
   const spec = anchor.mapScale <= 5000 ? OVERPRINT.issprom : OVERPRINT.isom;
 
   const radius = (spec.controlCircleDiameterMm / 2) * mPerMm;
   const lineW = spec.lineWidthMm * mPerMm;
   const gap = OVERPRINT_GAP_MM * mPerMm;
+  const ro = (spec.finishOuterMm / 2) * mPerMm;
+  const ri = (spec.finishInnerMm / 2) * mPerMm;
 
-  ctx.strokeStyle = ISOM.purple.hex;
   ctx.lineWidth = lineW;
   ctx.lineCap = 'butt';
 
   const points: World2[] = [course.start, ...course.controls.map((c) => c.position), course.finish];
+  // Leg i runs points[i] → points[i+1], so it is behind the athlete once
+  // control i+1 has been punched. The start triangle goes with leg 0.
+  const legDone = (i: number): boolean => i < punched;
+  const controlDone = (i: number): boolean => i < punched;
 
-  // Connecting lines, trimmed clear of each circle.
-  ctx.beginPath();
-  for (let i = 0; i < points.length - 1; i++) {
-    const a = points[i]!;
-    const b = points[i + 1]!;
-    const d = dist2(a, b);
-    if (d < 1e-6) continue;
-    const ux = (b.x - a.x) / d;
-    const uz = (b.z - a.z) / d;
+  for (const spent of [true, false]) {
+    ctx.strokeStyle = spent ? ISOM.purple50.hex : ISOM.purple.hex;
+    ctx.fillStyle = ctx.strokeStyle;
 
-    // The start is a triangle, the finish a double circle, so their clearances
-    // differ from a plain control.
-    const startClear = i === 0 ? (spec.startTriangleSideMm / 2) * mPerMm + gap : radius + gap;
-    const endClear =
-      i === points.length - 2 ? (spec.finishOuterMm / 2) * mPerMm + gap : radius + gap;
+    // Connecting lines, trimmed clear of each circle.
+    ctx.beginPath();
+    for (let i = 0; i < points.length - 1; i++) {
+      if (legDone(i) !== spent) continue;
+      const a = points[i]!;
+      const b = points[i + 1]!;
+      const d = dist2(a, b);
+      if (d < 1e-6) continue;
+      const ux = (b.x - a.x) / d;
+      const uz = (b.z - a.z) / d;
 
-    if (d <= startClear + endClear) continue;
-    ctx.moveTo(a.x + ux * startClear, a.z + uz * startClear);
-    ctx.lineTo(b.x - ux * endClear, b.z - uz * endClear);
+      // The start is a triangle, the finish a double circle, so their clearances
+      // differ from a plain control.
+      const startClear = i === 0 ? (spec.startTriangleSideMm / 2) * mPerMm + gap : radius + gap;
+      const endClear =
+        i === points.length - 2 ? (spec.finishOuterMm / 2) * mPerMm + gap : radius + gap;
+
+      if (d <= startClear + endClear) continue;
+      ctx.moveTo(a.x + ux * startClear, a.z + uz * startClear);
+      ctx.lineTo(b.x - ux * endClear, b.z - uz * endClear);
+    }
+    ctx.stroke();
+
+    // Start triangle: equilateral, pointing at the first control.
+    if (legDone(0) === spent) {
+      drawStartTriangle(
+        ctx,
+        course.start,
+        points[1] ?? course.finish,
+        spec.startTriangleSideMm * mPerMm,
+        lineW,
+      );
+    }
+
+    // Control circles.
+    ctx.beginPath();
+    course.controls.forEach((c, i) => {
+      if (controlDone(i) !== spent) return;
+      ctx.moveTo(c.position.x + radius, c.position.z);
+      ctx.arc(c.position.x, c.position.z, radius, 0, Math.PI * 2);
+    });
+    ctx.stroke();
+
+    // Finish: double circle. Never spent — you are not past it until the race
+    // is over, and then there is no map.
+    if (!spent) {
+      ctx.beginPath();
+      ctx.moveTo(course.finish.x + ro, course.finish.z);
+      ctx.arc(course.finish.x, course.finish.z, ro, 0, Math.PI * 2);
+      ctx.moveTo(course.finish.x + ri, course.finish.z);
+      ctx.arc(course.finish.x, course.finish.z, ri, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+
+    drawControlNumbers(ctx, course, radius, spec.numberHeightMm * mPerMm, (i) =>
+      controlDone(i) === spent,
+    );
   }
-  ctx.stroke();
-
-  // Start triangle: equilateral, pointing at the first control.
-  drawStartTriangle(
-    ctx,
-    course.start,
-    points[1] ?? course.finish,
-    spec.startTriangleSideMm * mPerMm,
-    lineW,
-  );
-
-  // Control circles.
-  ctx.beginPath();
-  for (const c of course.controls) {
-    ctx.moveTo(c.position.x + radius, c.position.z);
-    ctx.arc(c.position.x, c.position.z, radius, 0, Math.PI * 2);
-  }
-  ctx.stroke();
-
-  // Finish: double circle.
-  ctx.beginPath();
-  const ro = (spec.finishOuterMm / 2) * mPerMm;
-  const ri = (spec.finishInnerMm / 2) * mPerMm;
-  ctx.moveTo(course.finish.x + ro, course.finish.z);
-  ctx.arc(course.finish.x, course.finish.z, ro, 0, Math.PI * 2);
-  ctx.moveTo(course.finish.x + ri, course.finish.z);
-  ctx.arc(course.finish.x, course.finish.z, ri, 0, Math.PI * 2);
-  ctx.stroke();
-
-  drawControlNumbers(ctx, course, radius, spec.numberHeightMm * mPerMm);
 }
 
 function drawStartTriangle(
@@ -312,8 +361,10 @@ function drawControlNumbers(
   course: Course,
   radius: number,
   height: number,
+  include: (index: number) => boolean,
 ): void {
-  ctx.fillStyle = ISOM.purple.hex;
+  // The caller has already set the ink for this pass — purple, or purple 50%
+  // for the part of the course that is behind the athlete.
   ctx.font = `${height}px sans-serif`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
@@ -321,6 +372,7 @@ function drawControlNumbers(
   const pts: World2[] = [course.start, ...course.controls.map((c) => c.position), course.finish];
 
   course.controls.forEach((c, idx) => {
+    if (!include(idx)) return;
     const prev = pts[idx]!;
     const next = pts[idx + 2] ?? course.finish;
     // Put the number opposite the average direction of the two legs, so it

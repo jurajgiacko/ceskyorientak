@@ -31,6 +31,7 @@
   "race.scale": "Mierka",
   "race.contourInterval": "Ekvidištancia",
   "hud.map": "Mapa",
+  "hud.progress": "Orazené {done} z {total}",
   "hud.compass": "Buzola",
   "hud.descriptions": "Popisy kontrol",
   "hud.belt": "Pás",

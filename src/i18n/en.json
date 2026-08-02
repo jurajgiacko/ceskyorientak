@@ -31,6 +31,7 @@
   "race.scale": "Scale",
   "race.contourInterval": "Contour interval",
   "hud.map": "Map",
+  "hud.progress": "{done} of {total} punched",
   "hud.compass": "Compass",
   "hud.descriptions": "Control descriptions",
   "hud.belt": "Belt",

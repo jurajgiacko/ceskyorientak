@@ -22,7 +22,7 @@
  * Usage: node tools/sim/sprint-check.mjs [--seeds=24] [--svg=out.svg]
  */
 
-import { readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { resolve, join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -43,7 +43,12 @@ async function load(entry) {
       rollupOptions: { external: ['three'] },
     },
   });
-  const p = `/tmp/sc_${Math.abs([...entry].reduce((a, c) => (a * 31 + c.charCodeAt(0)) | 0, 7))}.mjs`;
+  // Inside the repo, not /tmp: the bundle leaves `three` external, and a module
+  // sitting in the system temp directory has no node_modules above it to
+  // resolve it from. `.cache/` is gitignored.
+  const cache = join(ROOT, '.cache');
+  mkdirSync(cache, { recursive: true });
+  const p = join(cache, `sc_${Math.abs([...entry].reduce((a, c) => (a * 31 + c.charCodeAt(0)) | 0, 7))}.mjs`);
   writeFileSync(p, out[0].output[0].code);
   return import(p);
 }
@@ -159,6 +164,11 @@ const cellOf = (x, z, m) => {
 const field = {
   runnability,
   rMeta,
+  // The rules lattice. `FieldTerrain` computes height and gradient off the
+  // *stored* samples so every quality tier agrees on one surface — see
+  // `rulesHeightAt` — so the stub has to carry them, not just `heightAt`.
+  hMeta,
+  heights: hBuf,
   spanX: (hMeta.width - 1) * hMeta.resM,
   spanZ: (hMeta.height - 1) * hMeta.resM,
   minX: hMeta.originX,
@@ -225,6 +235,10 @@ let first = null;
 let doglegs = 0;
 let tightTurns = 0;
 let legTotal = 0;
+/** Start–finish separation, first-leg bearing away from the finish, nearest pass. */
+const sepAll = [];
+const awayAll = [];
+const brushAll = [];
 
 // One terrain for the whole run, as the game has one per race: `bakedRaster`
 // and the reachability flood are per-venue work, not per-seed, and timing them
@@ -259,11 +273,35 @@ for (const seed of seeds) {
     if (turn < 40) tightTurns++;
     if (turn < 20) doglegs++;
   }
+  // The arena. Start and finish may share one — spectators want both — but a
+  // start you can see the finish from is not a start, and a course that brushes
+  // the finish on the way round makes nonsense of the run-in.
+  const sep = Math.hypot(c.start.x - c.finish.x, c.start.z - c.finish.z);
+  sepAll.push(sep);
+  let away = -1;
+  if (c.controls.length) {
+    const b1 = Math.atan2(c.controls[0].position.x - c.start.x, -(c.controls[0].position.z - c.start.z));
+    const bf = Math.atan2(c.finish.x - c.start.x, -(c.finish.z - c.start.z));
+    away = (Math.abs(((b1 - bf + Math.PI * 3) % (Math.PI * 2)) - Math.PI) * 180) / Math.PI;
+    awayAll.push(away);
+  }
+  let brush = Infinity;
+  for (let i = 0; i < pts.length - 2; i++) {
+    const a = pts[i], b = pts[i + 1];
+    const ux = b.x - a.x, uz = b.z - a.z;
+    const l2 = ux * ux + uz * uz;
+    let t = l2 > 1e-9 ? ((c.finish.x - a.x) * ux + (c.finish.z - a.z) * uz) / l2 : 0;
+    t = t < 0 ? 0 : t > 1 ? 1 : t;
+    brush = Math.min(brush, Math.hypot(a.x + ux * t - c.finish.x, a.z + uz * t - c.finish.z));
+  }
+  brushAll.push(brush);
+
   if (!first) first = { course: c, terrain };
   console.log(
     `seed ${String(seed).padStart(9)} · ${String(c.controls.length).padStart(2)} controls · ` +
       `${String(c.lengthM).padStart(4)} m · ${String(c.climbM).padStart(3)} m climb · ` +
       `paved med ${median(paved).toFixed(1)} m / max ${Math.max(...paved).toFixed(1)} m · ` +
+      `S–F ${sep.toFixed(0).padStart(3)} m at ${away.toFixed(0).padStart(3)}° · pass ${brush.toFixed(0).padStart(3)} m · ` +
       `escape ${set.tightestEscapeM2 === Infinity ? 'open' : `${set.tightestEscapeM2} m²`} · ` +
       `${set.seedsTried} seed(s) · ${setupMs[setupMs.length - 1].toFixed(0)} ms`,
   );
@@ -298,6 +336,18 @@ console.log(
 );
 console.log(
   `turns       ${tightTurns}/${legTotal} under 40° · ${doglegs} dog-legs (under 20°)`,
+);
+console.log(
+  `start–fin   min ${Math.min(...sepAll).toFixed(0)} · median ${median(sepAll).toFixed(0)} · ` +
+    `max ${Math.max(...sepAll).toFixed(0)} m`,
+);
+console.log(
+  `leg 1 away  min ${Math.min(...awayAll).toFixed(0)} · median ${median(awayAll).toFixed(0)} · ` +
+    `max ${Math.max(...awayAll).toFixed(0)}°  (180° is straight away from the finish)`,
+);
+console.log(
+  `nearest pass min ${Math.min(...brushAll).toFixed(0)} · median ${median(brushAll).toFixed(0)} · ` +
+    `max ${Math.max(...brushAll).toFixed(0)} m  (how close a leg other than the run-in comes to the finish)`,
 );
 console.log(`setup       median ${median(setupMs).toFixed(0)} ms · max ${Math.max(...setupMs).toFixed(0)} ms`);
 

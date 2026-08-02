@@ -70,6 +70,23 @@
      legible as *not part of the map*. */
   --c-aid: #7ec8f2;
 
+  /* Punched. What a control that is behind you is *multiplied* by, in the world
+     and on the HUD's progress strip — a darkening tint rather than a colour of
+     its own, so a spent kite is still the IOF orange-and-white, just no longer
+     the thing being hunted. Introducing a second flag colour would teach a
+     beginner that the kite's colour means something conditional, and it does
+     not. The map does not use this: there the answer is ISOM's own purple 50%,
+     which is a printed ink and belongs in src/map/isom.ts.
+
+     The value is a compromise found by looking at it. #5d6660 was the first
+     try and it is too strong: multiplied through, a punched kite standing
+     against Krumlov's dark stone all but disappeared, and a control you cannot
+     see is not a control you have finished with — a player coming back past it
+     should read "that one is done", not "there is nothing there". This keeps
+     about a third of the light, which is plainly faded at ten metres and still
+     unmistakably an orange-and-white kite at three. */
+  --c-spent: #9aa39c;
+
   /* State */
   --c-good: #4caf72;
   --c-warn: #e8a33d;
