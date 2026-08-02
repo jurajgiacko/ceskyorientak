@@ -177,8 +177,26 @@ function specFor(d: Discipline, anchor: VenueAnchor): Spec {
   const extent = Math.min(anchor.sizeX, anchor.sizeZ);
   switch (d) {
     case 'sprint':
-      // A real sprint is 1.5–2.0 km of straight-line course for a 13–15 minute
-      // winning time (IOF Competition Rules, appendix 2; RESEARCH-SPORT §7.2).
+      // 1.5 km, and the citation this used to carry was wrong in a way worth
+      // correcting rather than deleting.
+      //
+      // It read "a real sprint is 1.5–2.0 km ... (IOF Competition Rules,
+      // appendix 2; RESEARCH-SPORT §7.2)". The rules say no such thing:
+      // RESEARCH-SPORT §7.3 opens by stating that **the rules do not specify
+      // course length in km, nor control count, for any format** — length is
+      // derived backwards from the mandated winning time. §7.2 gives the times
+      // and no distances. And the measured elite sprint *final* is 3.5–4.3 km
+      // (Terezín 2021, Edinburgh 2024) at 3:30–4:20/km, which is more than
+      // double what is written here, not less.
+      //
+      // What 1.5 km actually is: a **Knock-Out Sprint round**. §7.3's measured
+      // table puts those at 1.6–2.4 km for the mandated 6–8 minutes, and that
+      // is a real IOF format rather than a shortened one — 1:4000, technically
+      // easy, urban, spectators along the course. Which is Krumlov. So the
+      // course this generator sets is honestly describable; it is simply a
+      // different event from the one the comment claimed.
+      //
+      // It has to be, because of the venue. See docs/DECISIONS.md D-030.
       //
       // The 3.4 km that used to be here is a *forest* number. At sprint pace —
       // call it 4 min/km on paved streets with the turns and the map reading —

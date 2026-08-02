@@ -234,6 +234,36 @@ const LIMITS = {
    * of one control over 500 m is the shape a sealed venue produces.
    */
   minControls: 8,
+  /**
+   * How far a point sited on a bridge must stand above the water, metres.
+   *
+   * Only sited points over water are asked, and for those the answer used to be
+   * *minus five*. Half a metre is not a clearance requirement — a real Krumlov
+   * footbridge sits about a metre over the Vltava — it is the line between
+   * "standing on the deck" and "standing in the river", and it wants to be
+   * comfortably above the noise in the abutment heights the deck is derived
+   * from.
+   */
+  minFreeboardM: 0.5,
+  /**
+   * How much of the fastest run between controls must be on the street network,
+   * as a fraction of the whole course.
+   *
+   * The client's sentence is *"runs through the alleys"*, and controls sitting
+   * near paved ground does not establish it: a control on a corner reached
+   * across a meadow satisfies every per-control measure and fails the sentence.
+   * So this measures the **legs**. For each leg the gate runs a Dijkstra over
+   * the runnable mask with the athlete's own class speeds — the fastest way
+   * there, which is the route an orienteer takes — and asks what fraction of it
+   * is on Road or Path.
+   *
+   * 0.75 rather than 1.0 because a sprint in this town legitimately crosses
+   * Náměstí Svornosti, the castle gardens and a couple of grassed terraces, and
+   * a gate that forbade those would be setting a worse course than the one it
+   * rejected. What it catches is a course whose legs are bearings over open
+   * ground with streets merely nearby.
+   */
+  minLegsOnNetwork: 0.75,
 };
 
 /**
@@ -396,6 +426,57 @@ class Colliders {
       if (px * px + pz * pz <= half * half) return true;
     }
     return false;
+  }
+}
+
+/**
+ * `SprintScene.blockedAt`'s water clause, offline.
+ *
+ * Mirrors `TownSurface.inWater` in src/world/surface.ts: water is out of bounds
+ * under ISSprOM 301 **unless a bridge carries you over it**. Both halves are
+ * pure geometry out of `townscape.json` — no heights and no tier — which is
+ * what lets this file reproduce them exactly.
+ *
+ * `DECK_HALF_MIN_M` is the same 1.4 m floor `stampRaster` paints the deck into
+ * the raster with, so the ground that is passable and the ground that is
+ * exempt from the water rule are one band.
+ */
+const DECK_HALF_MIN_M = 1.4;
+
+class WaterBounds {
+  constructor(town) {
+    this.water = new Colliders({ buildings: [], walls: [] });
+    for (const w of town.water ?? []) {
+      if (w.p && w.p.length >= 6) this.water.addRing(w.p);
+      else if (w.l && w.w) {
+        for (let i = 0; i + 3 < w.l.length; i += 2) {
+          this.water.addSeg(w.l[i], w.l[i + 1], w.l[i + 2], w.l[i + 3], w.w * 0.5);
+        }
+      }
+    }
+    this.decks = new Colliders({ buildings: [], walls: [] });
+    for (const way of town.paved ?? []) {
+      if (!way.b) continue;
+      const half = Math.max(DECK_HALF_MIN_M, way.w * 0.5);
+      for (let i = 0; i + 3 < way.l.length; i += 2) {
+        this.decks.addSeg(way.l[i], way.l[i + 1], way.l[i + 2], way.l[i + 3], half);
+      }
+    }
+  }
+
+  /** Is water drawn over (x, z)? */
+  wet(x, z) {
+    return this.water.inBuilding(x, z) || this.water.inBarrier(x, z);
+  }
+
+  /** Is (x, z) carried across the water by a bridge? */
+  onDeck(x, z) {
+    return this.decks.inBarrier(x, z);
+  }
+
+  /** Out of bounds because of water. */
+  blocks(x, z) {
+    return this.wet(x, z) && !this.onDeck(x, z);
   }
 }
 
@@ -643,6 +724,7 @@ function agreement(venue, bin) {
 function floodFill(venue, bin, step) {
   const { rMeta, r, town } = loadVenue(venue, bin);
   const col = new Colliders(town);
+  const wb = new WaterBounds(town);
 
   const rasterAt = (x, z) => {
     const i = Math.round((x - rMeta.originX) / rMeta.resM);
@@ -653,7 +735,10 @@ function floodFill(venue, bin, step) {
 
   /** Exactly `SprintScene.blockedAt`. */
   const blocked = (x, z) =>
-    col.inBuilding(x, z) || col.inBarrier(x, z) || rasterAt(x, z) === IMPASSABLE;
+    col.inBuilding(x, z) ||
+    col.inBarrier(x, z) ||
+    rasterAt(x, z) === IMPASSABLE ||
+    wb.blocks(x, z);
 
   const R = PLAYABLE_R;
   const w = Math.floor((2 * R) / step) + 1;
@@ -908,6 +993,263 @@ function floodFill(venue, bin, step) {
 }
 
 // ---------------------------------------------------------------------------
+// Do the legs run through the alleys?
+// ---------------------------------------------------------------------------
+
+/**
+ * Build a leg router for a venue: the fastest route from control to control,
+ * and how much of it is street.
+ *
+ * A *factory* rather than a plain function because the expensive half — asking
+ * the continuous collider about 360 000 lattice cells — depends only on the
+ * venue, while the cheap half runs once per candidate course.
+ * `tools/sim/pick-course.mjs` scores several hundred candidates against one
+ * venue, so rebuilding the lattice each time would dominate everything else.
+ *
+ * Every other measure in this file is about a *point*: is the start out of the
+ * river, is a control near a paved way, can the athlete escape the finish. The
+ * client's sentence is about the *legs* — "runs through the alleys" — and a
+ * course can satisfy every point-wise measure and still be a set of bearings
+ * across open ground with streets incidentally nearby.
+ *
+ * So this routes each leg the way the athlete would run it: a Dijkstra on a 2 m
+ * lattice over the same collision the game enforces, with edge cost = distance
+ * divided by `SPEED_BY_CLASS`, which is the athlete's own speed model from
+ * src/sim/athlete.ts. The result is the quickest way there, which for a sprint
+ * is the route choice, and then the question is simply what fraction of it is
+ * spent on Road or Path.
+ *
+ * 2 m rather than the 0.5 m the flood-fill uses because this runs sixteen times
+ * per course and the answer is a fraction rather than a topology: at 2 m an
+ * alley two cells wide is still an alley, and the route through it is the same
+ * route. Cells the continuous collider rejects are excluded outright, so the
+ * router cannot cut a corner the athlete could not.
+ */
+export function makeLegRouter(venue, bin) {
+  const { rMeta, r, town } = loadVenue(venue, bin);
+  const col = new Colliders(town);
+  const wb = new WaterBounds(town);
+  const rasterAt = (x, z) => {
+    const i = Math.round((x - rMeta.originX) / rMeta.resM);
+    const j = Math.round((z - rMeta.originZ) / rMeta.resM);
+    if (i < 0 || j < 0 || i >= rMeta.width || j >= rMeta.height) return IMPASSABLE;
+    return r[j * rMeta.width + i];
+  };
+  const blocked = (x, z) =>
+    col.inBuilding(x, z) ||
+    col.inBarrier(x, z) ||
+    rasterAt(x, z) === IMPASSABLE ||
+    wb.blocks(x, z);
+
+  const step = 2;
+  const R = PLAYABLE_R;
+  const w = Math.floor((2 * R) / step) + 1;
+  const h = w;
+  const idx = (i, j) => j * w + i;
+  const xOf = (i) => -R + i * step;
+  const zOf = (j) => -R + j * step;
+
+  const speed = new Float32Array(w * h);
+  const paved = new Uint8Array(w * h);
+  for (let j = 0; j < h; j++) {
+    for (let i = 0; i < w; i++) {
+      const x = xOf(i);
+      const z = zOf(j);
+      if (blocked(x, z)) continue;
+      const cls = rasterAt(x, z);
+      speed[idx(i, j)] = SPEED_BY_CLASS[cls] ?? 0;
+      paved[idx(i, j)] = cls === 0 || cls === 1 ? 1 : 0;
+    }
+  }
+
+  /**
+   * The lattice cell a sited point is routed from, snapped to open ground.
+   *
+   * A control is sited to the centimetre and is guaranteed not to be inside a
+   * barrier *at its own coordinates*; rounded onto a 2 m lattice it can easily
+   * land on a cell centre that is, because a Krumlov control sits on a corner
+   * and a corner is a metre from a wall. Left unsnapped, the router then walks
+   * the entire 100 ha component before reporting a leg it cannot run — wrong
+   * and slow at once.
+   *
+   * 3 m of search is half the lattice diagonal of the widest thing a control
+   * can be sited against; beyond that the point really is enclosed and the
+   * caller should hear about it.
+   */
+  const cellOf = (p) => {
+    const i0 = Math.max(0, Math.min(w - 1, Math.round((p.x + R) / step)));
+    const j0 = Math.max(0, Math.min(h - 1, Math.round((p.z + R) / step)));
+    if (speed[idx(i0, j0)] > 0) return [i0, j0];
+    const reach = Math.ceil(3 / step);
+    let best = null;
+    let bestD = Infinity;
+    for (let dj = -reach; dj <= reach; dj++) {
+      for (let di = -reach; di <= reach; di++) {
+        const i = i0 + di;
+        const j = j0 + dj;
+        if (i < 0 || j < 0 || i >= w || j >= h) continue;
+        if (speed[idx(i, j)] <= 0) continue;
+        const d = di * di + dj * dj;
+        if (d < bestD) {
+          bestD = d;
+          best = [i, j];
+        }
+      }
+    }
+    return best;
+  };
+
+  const NB = [
+    [1, 0, 1], [-1, 0, 1], [0, 1, 1], [0, -1, 1],
+    [1, 1, Math.SQRT2], [1, -1, Math.SQRT2], [-1, 1, Math.SQRT2], [-1, -1, Math.SQRT2],
+  ];
+
+  /**
+   * A binary min-heap over (cost, cell), in two flat typed arrays.
+   *
+   * Worth the thirty lines. A linear scan for the minimum turns each leg into
+   * an O(n²) walk over a 600 × 600 lattice, which is fine once in a gate and
+   * ruinous in `tools/sim/pick-course.mjs`, where this runs sixteen times per
+   * candidate over several hundred candidates.
+   */
+  let heapC = new Float64Array(1 << 16);
+  let heapK = new Int32Array(1 << 16);
+  let heapN = 0;
+  const push = (c, k) => {
+    if (heapN === heapC.length) {
+      const c2 = new Float64Array(heapN * 2);
+      const k2 = new Int32Array(heapN * 2);
+      c2.set(heapC);
+      k2.set(heapK);
+      heapC = c2;
+      heapK = k2;
+    }
+    let i = heapN++;
+    heapC[i] = c;
+    heapK[i] = k;
+    while (i > 0) {
+      const p = (i - 1) >> 1;
+      if (heapC[p] <= heapC[i]) break;
+      const tc = heapC[p], tk = heapK[p];
+      heapC[p] = heapC[i]; heapK[p] = heapK[i];
+      heapC[i] = tc; heapK[i] = tk;
+      i = p;
+    }
+  };
+  const pop = () => {
+    const c = heapC[0];
+    const k = heapK[0];
+    heapN--;
+    heapC[0] = heapC[heapN];
+    heapK[0] = heapK[heapN];
+    let i = 0;
+    for (;;) {
+      const l = i * 2 + 1;
+      const r = l + 1;
+      let m = i;
+      if (l < heapN && heapC[l] < heapC[m]) m = l;
+      if (r < heapN && heapC[r] < heapC[m]) m = r;
+      if (m === i) break;
+      const tc = heapC[m], tk = heapK[m];
+      heapC[m] = heapC[i]; heapK[m] = heapK[i];
+      heapC[i] = tc; heapK[i] = tk;
+      i = m;
+    }
+    return [c, k];
+  };
+
+  // Float64, not Float32, and it matters: the heap holds the cost at full
+  // precision, so a 32-bit `cost` array rounds every entry on the way in and
+  // the `c > cost[k0]` staleness test then rejects roughly half of all valid
+  // pops. The symptom is a router that reports every leg unroutable in ten
+  // milliseconds, which reads exactly like a sealed venue.
+  const cost = new Float64Array(w * h);
+  const from = new Int32Array(w * h);
+  const stamp = new Int32Array(w * h);
+  let visit = 0;
+
+  const route = function route(points) {
+  const legs = [];
+  for (let k = 0; k + 1 < points.length; k++) {
+    const a = cellOf(points[k]);
+    const b = cellOf(points[k + 1]);
+    if (!a || !b) {
+      legs.push({ leg: k, routed: false, pavedFraction: 0, lengthM: 0 });
+      continue;
+    }
+    const goal = idx(b[0], b[1]);
+    const start = idx(a[0], a[1]);
+
+    // `stamp` replaces clearing two 360 000-entry arrays per leg.
+    visit++;
+    heapN = 0;
+    cost[start] = 0;
+    from[start] = -1;
+    stamp[start] = visit;
+    push(0, start);
+    let found = false;
+    while (heapN) {
+      const [c, k0] = pop();
+      if (c > cost[k0]) continue;
+      if (k0 === goal) { found = true; break; }
+      const i0 = k0 % w;
+      const j0 = (k0 / w) | 0;
+      for (const [di, dj, d] of NB) {
+        const i1 = i0 + di;
+        const j1 = j0 + dj;
+        if (i1 < 0 || j1 < 0 || i1 >= w || j1 >= h) continue;
+        const k1 = idx(i1, j1);
+        const v = speed[k1];
+        if (v <= 0) continue;
+        // Diagonals may not cut a corner the collider closes.
+        if (di && dj && (speed[idx(i0 + di, j0)] <= 0 || speed[idx(i0, j0 + dj)] <= 0)) continue;
+        const nc = c + (d * step) / v;
+        if (stamp[k1] === visit && nc >= cost[k1]) continue;
+        stamp[k1] = visit;
+        cost[k1] = nc;
+        from[k1] = k0;
+        push(nc, k1);
+      }
+    }
+
+    if (!found) {
+      legs.push({ leg: k, routed: false, pavedFraction: 0, lengthM: 0 });
+      continue;
+    }
+    let lengthM = 0;
+    let pavedM = 0;
+    let cur = goal;
+    while (from[cur] >= 0) {
+      const prev = from[cur];
+      const d =
+        (prev % w) === (cur % w) || ((prev / w) | 0) === ((cur / w) | 0) ? step : step * Math.SQRT2;
+      lengthM += d;
+      if (paved[cur]) pavedM += d;
+      cur = prev;
+    }
+    legs.push({
+      leg: k,
+      routed: true,
+      lengthM: Math.round(lengthM),
+      pavedFraction: lengthM > 0 ? pavedM / lengthM : 0,
+    });
+  }
+
+  const total = legs.reduce((a, l) => a + l.lengthM, 0);
+  const onNet = legs.reduce((a, l) => a + l.lengthM * l.pavedFraction, 0);
+  return { legs, totalM: Math.round(total), fraction: total > 0 ? onNet / total : 0 };
+  };
+  // Diagnostics: how much of the lattice the router can stand on at all. If this
+  // collapses, every leg comes back unroutable and the cause is the collision
+  // model, not the course.
+  let openCells = 0;
+  for (let i = 0; i < speed.length; i++) if (speed[i] > 0) openCells++;
+  route.openCells = openCells;
+  route.latticeCells = w * h;
+  return route;
+}
+
+// ---------------------------------------------------------------------------
 // Phase 2 — the points the athlete is actually placed on
 // ---------------------------------------------------------------------------
 
@@ -1006,6 +1348,33 @@ const PROBE = (limits) => `(async () => {
     .concat([{ n: 'finish', p: c.finish }]);
 
   const faults = [];
+
+  /**
+   * Is a sited point in the river, and if so how deep?
+   *
+   * This is the client's own report — *"I even started in the river"* — turned
+   * into an assertion, and it is asked of the running game rather than
+   * reconstructed here, because the scene is the thing that decides both halves
+   * of it: \`surface.water\` is the geometry that is drawn, and \`groundAt\` is
+   * the height the athlete is placed at. A gate that rebuilt either would be
+   * checking its own arithmetic against itself.
+   *
+   * Two separate failures are caught, and they had separate causes:
+   *
+   *  - **over water at all.** ISSprOM 301 — the Vltava is out of bounds, so no
+   *    control, start or finish may be sited in it. The exception, and the only
+   *    one, is a bridge deck.
+   *  - **below the waterline.** A point may be legally on a bridge and still
+   *    render underwater, because the heightfield is bare earth and the bare
+   *    earth under a bridge is the riverbed. That is what actually shipped: the
+   *    main Vltava crossing sags 5.2 m, so the eye sat at the water surface.
+   *
+   * \`freeboard\` is metres from the athlete's feet to the water they are over;
+   * the distribution is reported whether or not anything failed, because the
+   * client's complaint was one draw out of a distribution.
+   */
+  const wetness = [];
+  const surf = w.surface;
   for (const o of named) {
     const { x, z } = o.p;
     if (blocked(x, z)) faults.push(o.n + ' is inside a barrier');
@@ -1014,13 +1383,43 @@ const PROBE = (limits) => `(async () => {
     if (drift > ${limits.maxHeightDriftM}) {
       faults.push(o.n + ' stands ' + drift.toFixed(1) + ' m off the surveyed ground');
     }
+    if (!surf) continue;
+    const terrainY = w.field.heightAt(x, z);
+    const level = surf.water.levelAt(x, z, terrainY);
+    if (level === null) continue;
+    const feet = w.groundAt(x, z);
+    const onDeck = surf.decks.covers(x, z);
+    wetness.push({ n: o.n, onDeck, freeboard: Number((feet - level).toFixed(2)) });
+    if (!onDeck) {
+      faults.push(
+        o.n + ' is sited over water (ISSprOM 301) with no bridge under it, at ' +
+        x.toFixed(0) + ',' + z.toFixed(0),
+      );
+    } else if (feet < level + ${limits.minFreeboardM}) {
+      faults.push(
+        o.n + ' stands on a bridge but ' + (level - feet).toFixed(2) +
+        ' m below the water surface',
+      );
+    }
   }
 
   // The eye, measured where the scene actually put it.
+  //
+  // Against \`groundAt\`, not \`field.heightAt\`: the heightfield is a bare-earth
+  // DMR and the athlete may legitimately be standing on something built over
+  // it. The contract is unchanged — the eye sits exactly EYE_HEIGHT above the
+  // surface it is standing on — it is the surface that got a name.
   const cam = w.camera.position;
-  const eyeErr = Math.abs(cam.y - (w.field.heightAt(cam.x, cam.z) + EYE));
+  const eyeErr = Math.abs(cam.y - (w.groundAt(cam.x, cam.z) + EYE));
   if (eyeErr > ${limits.maxEyeErrorM}) {
-    faults.push('the eye is ' + eyeErr.toFixed(2) + ' m off terrain + eye height');
+    faults.push('the eye is ' + eyeErr.toFixed(2) + ' m off ground + eye height');
+  }
+  // And the eye itself must be out of the water, wherever the race put it.
+  {
+    const level = surf ? surf.water.levelAt(cam.x, cam.z, w.field.heightAt(cam.x, cam.z)) : null;
+    if (level !== null && cam.y < level + EYE * 0.5) {
+      faults.push('the eye is ' + (level - cam.y).toFixed(2) + ' m under the water surface');
+    }
   }
 
   const pocket = startPocket(c.start.x, c.start.z, ${limits.minStartPocketM2});
@@ -1086,8 +1485,18 @@ const PROBE = (limits) => `(async () => {
     controls: c.controls.length,
     lengthM: c.lengthM,
     climbM: c.climbM,
+    courseId: c.id,
     courseKey,
     rulesKey,
+    wetness,
+    // Every sited point, so the caller can route the legs over the same
+    // collision the game enforces and ask whether they run in the streets.
+    points: named.map((o) => ({ n: o.n, x: o.p.x, z: o.p.z })),
+    startFinishM: Number(
+      Math.hypot(c.start.x - c.finish.x, c.start.z - c.finish.z).toFixed(1),
+    ),
+    pavedDistanceM: r.courseInfo.pavedDistanceM,
+    arenaFaults: r.courseInfo.arenaFaults,
     reachable: Number(reachable.toFixed(3)),
     pocketM2: pocket.sealed ? Number(pocket.m2.toFixed(0)) : -1,
     eyeErr: Number(eyeErr.toFixed(3)),
@@ -1105,6 +1514,26 @@ async function runtimePhase(venue, port) {
   const rasterByTier = new Map();
   /** The course each (tier, seed) produced, so tiers can be compared. */
   const courseByTierSeed = new Map();
+  /** Every sited point that sat over water, for the distribution below. */
+  const wetnessAll = [];
+  /** How much of each course's legs ran on the street network. */
+  const legsAll = [];
+  /** Which raster each tier reads, so the leg router uses the same one. */
+  const tierBin = new Map();
+  {
+    const dir = venueDir(venue);
+    const manifest = JSON.parse(readFileSync(join(dir, 'manifest.json'), 'utf8'));
+    for (const [tier, files] of Object.entries(manifest.tiers ?? {})) {
+      tierBin.set(tier, files.runnability ?? 'runnability.bin');
+    }
+  }
+  /** One router per raster, built lazily and reused across seeds. */
+  const routers = new Map();
+  const routerFor = (tier) => {
+    const bin = tierBin.get(tier) ?? 'runnability.bin';
+    if (!routers.has(bin)) routers.set(bin, makeLegRouter(venue, bin));
+    return routers.get(bin);
+  };
   await withChrome(async (cdpPort) => {
     for (const tier of TIERS) {
       for (const seed of SEEDS) {
@@ -1123,17 +1552,37 @@ async function runtimePhase(venue, port) {
         const raw = await tab.evaluate(PROBE(LIMITS));
         const res = JSON.parse(raw);
         rasterByTier.set(tier, res.raster);
+
+        // Do the legs run through the streets? Routed offline, over the same
+        // collision the page just enforced, so the answer is about the course
+        // and not about which tier drew it.
+        const routed = routerFor(tier)(res.points);
+        if (routed.fraction < LIMITS.minLegsOnNetwork) {
+          res.faults.push(
+            `the legs run ${(routed.fraction * 100).toFixed(0)} % on the street network, ` +
+              `under ${(LIMITS.minLegsOnNetwork * 100).toFixed(0)} %`,
+          );
+        }
+        const unroutable = routed.legs.filter((l) => !l.routed);
+        for (const l of unroutable) {
+          res.faults.push(`leg ${l.leg} cannot be run at all — no route between its ends`);
+        }
+
         courseByTierSeed.set(`${tier}|${seed}`, {
           controls: res.controls,
           lengthM: res.lengthM,
           climbM: res.climbM,
+          courseId: res.courseId,
           courseKey: res.courseKey,
           rulesKey: res.rulesKey,
         });
+        wetnessAll.push(...res.wetness.map((x) => ({ ...x, tier, seed })));
+        legsAll.push({ tier, seed, ...routed });
         const ok = res.faults.length === 0 && res.renderErrors.length === 0;
         if (!ok) bad = true;
         console.log(
           `${ok ? '✓' : '✗'} ${res.controls} controls · ${res.lengthM} m · ` +
+            `legs ${(routed.fraction * 100).toFixed(0)}% street · ` +
             `reachable ${(res.reachable * 100).toFixed(0)}% · ` +
             (res.pocketM2 < 0 ? 'start opens onto the venue' : `start pocket ${res.pocketM2} m²`),
         );
@@ -1223,6 +1672,98 @@ async function runtimePhase(venue, port) {
   if (!divergent && !surfaceDivergent) {
     console.log(
       `  every seed gives the same course, on the same rules surface, on every tier`,
+    );
+  }
+
+  // --- how close to the water did anything get? --------------------------
+  //
+  // Reported whether or not anything failed, because the client's report was a
+  // draw out of a distribution rather than a single event, and the number that
+  // says whether this is fixed is *how much freeboard the worst point had*, not
+  // *did the assertion pass today*. Before this change, sited points over water
+  // were routine — 1 menu-shaped seed in 40 put the start itself in the Vltava,
+  // 9 in 40 put some control there — and the worst freeboard was −5.2 m.
+  if (!wetnessAll.length) {
+    console.log('  no sited point on any seed or tier stood over water at all');
+  } else {
+    const fb = wetnessAll.map((x) => x.freeboard).sort((a, b) => a - b);
+    const onDeck = wetnessAll.filter((x) => x.onDeck).length;
+    console.log(
+      `  ${wetnessAll.length} sited point(s) stood over water, ${onDeck} of them on a bridge` +
+        `\n    freeboard min ${fb[0].toFixed(2)} m · median ${fb[fb.length >> 1].toFixed(2)} m` +
+        ` · max ${fb[fb.length - 1].toFixed(2)} m`,
+    );
+  }
+
+  // --- do the legs run through the alleys? -------------------------------
+  if (legsAll.length) {
+    const fr = legsAll.map((l) => l.fraction).sort((a, b) => a - b);
+    console.log(
+      `  legs on the street network: min ${(fr[0] * 100).toFixed(0)} %` +
+        ` · median ${(fr[fr.length >> 1] * 100).toFixed(0)} %` +
+        ` · max ${(fr[fr.length - 1] * 100).toFixed(0)} %`,
+    );
+  }
+
+  return bad;
+}
+
+/**
+ * The same course, every time the venue is opened.
+ *
+ * The client's sentence begins *"always the same course"*, and until this
+ * change the menu seeded every race with `(Date.now() / 60000) | 0` — a new
+ * course every minute, which is why the personal bests and ghosts in
+ * `LocalStore`, keyed by course id, had never once been read back.
+ *
+ * Cross-*tier* agreement was already asserted above and is a different claim: it
+ * says two phones agree, not that two runs agree. So this loads the venue the
+ * way a player does — the deep link with **no seed**, which falls through to the
+ * venue's own fixed seed exactly as the menu does — several times, and requires
+ * the course id and the full course fingerprint to be identical every time. Two
+ * loads would catch a clock-derived seed; four also catch one that changes
+ * every few minutes rather than every minute.
+ */
+async function stabilityPhase(venue, port, runs = 4) {
+  let bad = false;
+  const seen = [];
+  await withChrome(async (cdpPort) => {
+    for (let i = 0; i < runs; i++) {
+      const url = `http://127.0.0.1:${port}/?scene=sprint&race=1&debug=0&tier=high`;
+      const tab = await openTab(cdpPort, url);
+      const ready = await tab.waitFor('!!(window.__race && window.__world)', 45_000);
+      if (!ready) {
+        console.log(`  ✗ run ${i + 1}: the race never mounted`);
+        bad = true;
+        await tab.close();
+        continue;
+      }
+      const raw = await tab.evaluate(PROBE(LIMITS));
+      const res = JSON.parse(raw);
+      seen.push({ id: res.courseId, key: res.courseKey, n: res.controls, m: res.lengthM });
+      await tab.close();
+      // A minute apart would be the honest test of a per-minute seed, and this
+      // gate cannot afford four minutes. It does not need to: the seed is now a
+      // constant, so any clock in it shows up as a *different constant* between
+      // two loads only if the clock moved — which is why the id is compared as
+      // well as the fingerprint. A seed derived from the date would pass here
+      // and is the daily challenge's business, not the main entries'.
+    }
+  });
+  if (seen.length < 2) return bad;
+  const ref = seen[0];
+  const same = seen.every((s) => s.id === ref.id && s.key === ref.key);
+  if (!same) {
+    console.error(
+      `  ✗ ${venue} does not hold to one course: ` +
+        seen.map((s) => `${s.id} (${s.n}/${s.m} m)`).join(' · ') +
+        `\n    A venue has one course. A rotating seed belongs to the daily challenge —` +
+        `\n    see VENUES in src/core/venues.ts and docs/ROADMAP.md.`,
+    );
+    bad = true;
+  } else {
+    console.log(
+      `  ${seen.length} separate loads all gave course ${ref.id} — ${ref.n} controls, ${ref.m} m`,
     );
   }
   return bad;
@@ -1434,6 +1975,8 @@ async function main() {
     const server = await serve(DIST, port);
     try {
       if (await runtimePhase(venue, port)) bad = true;
+      console.log(`\n· ${venue} holds to one course`);
+      if (await stabilityPhase(venue, port)) bad = true;
     } finally {
       server.close();
     }
@@ -1446,7 +1989,12 @@ async function main() {
   console.log('\n✓ passability OK');
 }
 
-main().catch((e) => {
-  console.error('✗ harness error:', e);
-  process.exit(2);
-});
+// Guarded so the course-setting tool can import `routeLegs` — the measure that
+// decides whether a candidate course runs through the alleys — rather than
+// keeping a second copy of it that could drift from the gate's.
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  main().catch((e) => {
+    console.error('✗ harness error:', e);
+    process.exit(2);
+  });
+}

@@ -16,6 +16,7 @@
     "preview:models": "node tools/blender/build.mjs --previews",
     "perf": "node tools/perf/budget.mjs",
     "check:race": "node tools/ci/check-race.mjs",
+    "pick:course": "node tools/sim/pick-course.mjs",
     "check:passable": "node tools/ci/check-passable.mjs",
     "check:locales": "node tools/ci/check-locales.mjs",
     "check:payload": "node tools/ci/check-payload.mjs",

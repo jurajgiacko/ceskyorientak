@@ -11,7 +11,8 @@
  */
 
 import type { Capabilities } from '@/core/capabilities';
-import type { Discipline } from '@/core/types';
+import { courseSeed } from '@/core/venues';
+import type { Discipline, VenueId } from '@/core/types';
 import type { RaceRequest, ScreenRaceSetup } from '@/ui/beforeScreen';
 import { applyPreRace, FORMAT } from '@/nutrition/protocol';
 import { SKUS } from '@/data/enervit';
@@ -110,10 +111,16 @@ function deepLinkRace(scene: 'forest' | 'sprint', params: URLSearchParams): Scre
         ? wanted
         : 'middle';
   const heat = scene === 'sprint' ? 0.45 : 0.4;
+  const venue: VenueId = scene === 'sprint' ? 'krumlov' : 'martinkov';
   const request: RaceRequest = {
-    venue: scene === 'sprint' ? 'krumlov' : 'martinkov',
+    venue,
     discipline,
-    seed: Number(params.get('seed') ?? 7) || 7,
+    // No `&seed=` means the venue's own course — the one the menu opens and the
+    // one a player races. It used to mean seed 7, which is a course no player
+    // has ever seen, so a deep link checked something nobody plays.
+    // `tools/ci/check-passable.mjs` asserts that repeated loads of exactly this
+    // URL give exactly this course.
+    seed: Number(params.get('seed') ?? courseSeed(venue)) || courseSeed(venue),
     heat,
     startInMin: 60,
   };

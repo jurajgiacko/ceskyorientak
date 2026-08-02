@@ -34,7 +34,7 @@
  */
 
 import * as THREE from 'three';
-import type { TerrainField } from './terrain';
+import type { GroundSurface } from './surface';
 
 /** Half-width of the corridor at the athlete's feet, metres. */
 const NEAR_HALF_W = 0.9;
@@ -73,7 +73,7 @@ export interface BearingAim {
 export class BearingBand {
   readonly group = new THREE.Group();
 
-  private readonly field: TerrainField;
+  private readonly field: GroundSurface;
   private readonly geometry: THREE.BufferGeometry;
   private readonly material: THREE.MeshBasicMaterial;
   private readonly mesh: THREE.Mesh;
@@ -83,7 +83,7 @@ export class BearingBand {
 
   private alpha = 0;
 
-  constructor(field: TerrainField, colour: THREE.ColorRepresentation) {
+  constructor(field: GroundSurface, colour: THREE.ColorRepresentation) {
     this.field = field;
     this.group.name = 'bearingBand';
     this.segs = Math.ceil(MAX_LEN_M / SEG_M);

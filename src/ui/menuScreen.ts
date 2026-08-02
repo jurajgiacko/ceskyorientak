@@ -18,15 +18,23 @@ import { t, getLocale, setLocale } from '@/i18n';
 import { LOCALES } from '@/core/types';
 import type { Locale } from '@/core/types';
 import { getSettings, setSetting } from '@/core/settings';
+import { courseSeed } from '@/core/venues';
 
-/**
- * A fresh course every few minutes, and the same course for everyone who starts
- * within the same minute. Deterministic per seed, so a shared link would be a
- * shared race — which is what the daily challenge will be built on.
+/*
+ * On seeds.
+ *
+ * This file used to hold `seedNow()`, returning `(Date.now() / 60000) | 0` — a
+ * new course every minute. The client's report on it is the shortest statement
+ * of what was wrong: *"the city still starts at random places — it doesn't hold
+ * to one race map"*. A venue has one course. You learn it, and the second run
+ * is a comparison.
+ *
+ * Both entries below now take that venue's fixed seed from `COURSE_SEED` in
+ * src/core/venues.ts, which is where the choice is documented and where the
+ * tool that made it can be re-run. The rotating seed belongs to the daily
+ * challenge, three entries down, seeded by the date; it is still "coming soon"
+ * and building it is not this change.
  */
-function seedNow(): number {
-  return (Date.now() / 60000) | 0;
-}
 
 interface MenuEntry {
   id: string;
@@ -48,7 +56,7 @@ const ENTRIES: MenuEntry[] = [
         makeBeforeScreen({
           venue: 'martinkov',
           discipline: 'middle',
-          seed: seedNow(),
+          seed: courseSeed('martinkov'),
           // An August morning in the Vltava valley. Warm, not brutal.
           heat: 0.4,
           startInMin: 60,
@@ -66,7 +74,7 @@ const ENTRIES: MenuEntry[] = [
         makeBeforeScreen({
           venue: 'krumlov',
           discipline: 'sprint',
-          seed: seedNow(),
+          seed: courseSeed('krumlov'),
           heat: 0.45,
           startInMin: 45,
         }),

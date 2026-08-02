@@ -22,6 +22,8 @@ import type { QualityTier } from '@/core/capabilities';
 import type { TerrainField } from './terrain';
 import type { SurfaceTextures, TownscapeData, WallRecord } from './buildings';
 import type { Asset } from './vegetation';
+import { pointAt } from './surface';
+import type { BridgeDecks, DeckSpan } from './surface';
 
 // ---------------------------------------------------------------------------
 // Blocking segments
@@ -233,6 +235,15 @@ export interface TownscapeOptions {
   tier: QualityTier;
   /** Beech, used for the street and garden trees. Optional. */
   beech?: Asset;
+  /**
+   * The crossings that stand above the bare earth.
+   *
+   * Given, the decks are drawn as real surfaces at the height the athlete is
+   * placed on. Omitted — a venue with no bridges — nothing is drawn and nothing
+   * changes. It must be the *same* `BridgeDecks` the scene founds the camera
+   * on, or the athlete walks on a surface that is not the one under them.
+   */
+  decks?: BridgeDecks;
 }
 
 /**
@@ -262,6 +273,18 @@ export interface TownscapeOptions {
  */
 export const CROSSABLE_MAX_H = 0.9;
 
+/**
+ * How finely a bridge deck is tessellated along its length, metres.
+ *
+ * Matches `DECK_STEP_M` in surface.ts, which is what the lift was measured on:
+ * drawing a deck coarser than it was measured would let a span pass the lift
+ * test and then be drawn through the ground it was measured against.
+ */
+const DECK_SEGMENT_M = 2;
+
+/** How far a deck's skirt sinks below the bare earth at the abutments, metres. */
+const DECK_SKIRT_M = 0.5;
+
 const WALL_SPEC: Record<number, { thick: number; mat: 'stone' | 'metal' | 'hedge' }> = {
   0: { thick: 0.45, mat: 'stone' },
   1: { thick: 1.15, mat: 'stone' },
@@ -275,7 +298,7 @@ export class Townscape {
   /** Uncrossable line features — ISSprOM 411/515/518, all DSQ under Rule 17.2. */
   readonly blocks = new SegmentIndex();
 
-  readonly stats = { walls: 0, steps: 0, water: 0, trees: 0, triangles: 0 };
+  readonly stats = { walls: 0, steps: 0, water: 0, decks: 0, trees: 0, triangles: 0 };
 
   private readonly water: THREE.MeshStandardMaterial;
   private readonly materials: THREE.Material[] = [];
@@ -333,6 +356,13 @@ export class Townscape {
     for (const s of data.steps) {
       this.buildSteps(stoneBuf, s.p, s.n, s.w, field);
       this.stats.steps++;
+    }
+
+    // Before the water, so a deck drawn over the river wins the depth test at
+    // its own edges rather than trading z-fighting with the surface below it.
+    for (const span of opts.decks?.spans ?? []) {
+      this.buildDeck(stoneBuf, span, field);
+      this.stats.decks++;
     }
 
     for (const w of data.water) {
@@ -509,6 +539,84 @@ export class Townscape {
         half * 2,
         Math.abs(y - yLow),
       );
+    }
+  }
+
+  /**
+   * A bridge deck: the surface the athlete is actually standing on.
+   *
+   * Drawn because raising the athlete without it would trade one artefact for a
+   * worse one — the client would have gone from starting in the river to
+   * hovering over it. The deck is a paved strip at the chord height
+   * `BridgeDecks` computes, with a skirt down each side to the bare earth so
+   * the crossing reads as a solid thing rather than as a floating carpet, and
+   * so there is no line of sight under it to the terrain below.
+   *
+   * Stone, off the shared surface set, because every road bridge in Krumlov is
+   * masonry. No parapets: the railings along these decks are already in
+   * `data.walls`, drawn and blocked from the same flag as every other barrier,
+   * and inventing a second set here would put geometry in front of the athlete
+   * that the map does not draw.
+   */
+  private buildDeck(b: Buf, span: DeckSpan, field: TerrainField): void {
+    const steps = Math.max(2, Math.ceil(span.length / DECK_SEGMENT_M));
+    const v = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
+
+    /** Deck top and skirt foot at arc length `s`. */
+    const rib = (
+      s: number,
+    ): { x: number; z: number; px: number; pz: number; top: number; foot: number } => {
+      const p = pointAt(span.line, span.at, s);
+      const top = span.y0 + (span.y1 - span.y0) * (s / span.length);
+      const ground = field.heightAt(p.x, p.z);
+      return {
+        x: p.x,
+        z: p.z,
+        px: -p.tz * span.half,
+        pz: p.tx * span.half,
+        // Never above the deck, and always far enough below it to bury the
+        // joint: over the river the skirt reaches the water, on the abutments
+        // it sinks a little into the bank.
+        top: Math.max(top, ground),
+        foot: Math.min(ground, top) - DECK_SKIRT_M,
+      };
+    };
+
+    let a = rib(0);
+    for (let k = 1; k <= steps; k++) {
+      const c = rib((k / steps) * span.length);
+      const u = span.length / steps;
+
+      // The running surface.
+      quad(
+        b,
+        v(a.x - a.px, a.top, a.z - a.pz),
+        v(c.x - c.px, c.top, c.z - c.pz),
+        v(c.x + c.px, c.top, c.z + c.pz),
+        v(a.x + a.px, a.top, a.z + a.pz),
+        u,
+        span.half * 2,
+      );
+      // Both flanks, deck down to the bare earth.
+      quad(
+        b,
+        v(a.x + a.px, a.foot, a.z + a.pz),
+        v(c.x + c.px, c.foot, c.z + c.pz),
+        v(c.x + c.px, c.top, c.z + c.pz),
+        v(a.x + a.px, a.top, a.z + a.pz),
+        u,
+        a.top - a.foot,
+      );
+      quad(
+        b,
+        v(c.x - c.px, c.foot, c.z - c.pz),
+        v(a.x - a.px, a.foot, a.z - a.pz),
+        v(a.x - a.px, a.top, a.z - a.pz),
+        v(c.x - c.px, c.top, c.z - c.pz),
+        u,
+        a.top - a.foot,
+      );
+      a = c;
     }
   }
 

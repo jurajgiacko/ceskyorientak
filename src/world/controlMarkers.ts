@@ -54,7 +54,7 @@
 import * as THREE from 'three';
 import { loadAsset } from './vegetation';
 import type { Asset, AssetVariant } from './vegetation';
-import type { TerrainField } from './terrain';
+import type { GroundSurface } from './surface';
 import { t } from '@/i18n';
 
 // ---------------------------------------------------------------------------
@@ -423,7 +423,7 @@ export class ControlMarkers {
   readonly group = new THREE.Group();
   readonly warnings: string[] = [];
 
-  private readonly field: TerrainField;
+  private readonly field: GroundSurface;
   private readonly assets: ControlMarkerAssets;
 
   private stand: Instanced | null = null;
@@ -449,7 +449,7 @@ export class ControlMarkers {
   /** Live counts for the debug overlay. */
   readonly stats = { markers: 0, drawn: 0 };
 
-  constructor(field: TerrainField, assets: ControlMarkerAssets) {
+  constructor(field: GroundSurface, assets: ControlMarkerAssets) {
     this.field = field;
     this.assets = assets;
     this.group.name = 'controlMarkers';

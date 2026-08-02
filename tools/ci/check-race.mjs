@@ -37,14 +37,39 @@ const DIST = resolve(__dirname, '../../dist');
  * inside the old town while the venue as a whole was cut in half.
  */
 const CASES = [
+  // **The two courses that ship.**
+  //
+  // No `&seed=`, which now resolves to the venue's own `COURSE_SEED` — the
+  // course the menu opens and the only one a player ever runs. Every case below
+  // exercises the generator on terrain a player will never see; these two are
+  // the race. See D-032.
+  { id: 'forest the course', url: '/?scene=forest&race=1&debug=0', loadMs: 16000, autopilotMustPunch: true },
+  { id: 'sprint the course', url: '/?scene=sprint&race=1&debug=0', loadMs: 20000 },
   { id: 'forest', url: '/?scene=forest&race=1&debug=0&seed=11', loadMs: 14000, autopilotMustPunch: true },
+  // Long, which no other case reaches. The menu offers Middle and Sprint only,
+  // so without this the long length band and its containment check were dead
+  // code asserting nothing — and long is the one discipline whose target is
+  // venue-dependent (`min(9000, extent × 4.5)`), which is exactly the kind of
+  // figure that goes wrong quietly when the AOI is resized. The autopilot is
+  // not required to finish 9 km inside the sim budget; the deterministic
+  // properties are what this case is here for.
+  { id: 'forest long', url: '/?scene=forest&race=1&debug=0&discipline=long&seed=11', loadMs: 14000 },
   { id: 'sprint s7', url: '/?scene=sprint&race=1&debug=0&seed=7', loadMs: 16000 },
   { id: 'sprint s3', url: '/?scene=sprint&race=1&debug=0&seed=3', loadMs: 16000 },
   { id: 'sprint s19', url: '/?scene=sprint&race=1&debug=0&seed=19', loadMs: 16000 },
   { id: 'sprint s42', url: '/?scene=sprint&race=1&debug=0&seed=42', loadMs: 16000 },
-  // A menu-shaped seed. The menu seeds with `(Date.now() / 60000) | 0`, so an
-  // eight-digit number is what every player actually gets and 3/7/19/42 is a
-  // corner of the input space nobody will ever see.
+  // An eight-digit seed. This used to be justified as "menu-shaped", because
+  // the menu seeded with `(Date.now() / 60000) | 0` and 3/7/19/42 was a corner
+  // of the input space no player would ever land in. D-032 deleted that clock,
+  // so nothing is menu-shaped any more — the menu now opens exactly the two
+  // cases at the top of this list.
+  //
+  // Kept anyway, and worth being clear that the reason is different now: the
+  // shipped seeds were *chosen* by `tools/sim/pick-course.mjs` from a few
+  // hundred candidates, which makes them the generator's best behaviour rather
+  // than its typical behaviour. These arbitrary seeds are what still says the
+  // generator is sound on a draw nobody curated — the difference between "our
+  // course works" and "the thing that makes courses works".
   { id: 'sprint menu-seed', url: '/?scene=sprint&race=1&debug=0&seed=29760961', loadMs: 20000 },
   // The `low` tier, which is what `pickTier` hands a mid-range Android phone —
   // the device the brief is written for, and the one on which this venue was
@@ -147,17 +172,20 @@ const MISPUNCH_DECOY_M = 12;
  *    draw. Long is forest-only by construction (see `deepLinkRace`), so no
  *    such venue is reachable today.
  *
- * ⚠ **The sprint figure's citation does not check out.** It is written in three
- * places as "IOF Competition Rules appendix 2; RESEARCH-SPORT §7.2", but §7.3
- * states plainly that the rules specify *no* course length in km for any
- * format — length is derived from the mandated winning time — and the research
- * file's own envelope for an elite sprint is **3.5–4.3 km** at 3:30–4:20/km.
- * 1.5 km is a venue accommodation: Krumlov's AOI is 1200 m square and its old
- * town about 500 m across, so a 4 km sprint cannot be set inside it without
- * leaving for the meadows, which is exactly the complaint. That is a sound
- * reason and it is not the reason the comments give. Left as it stands here —
- * changing the target changes the game, and this gate is not the place to
- * decide it — but the citation should be corrected to say what it is.
+ * **On the sprint figure, whose citation used to be wrong.** It was written as
+ * "IOF Competition Rules appendix 2; RESEARCH-SPORT §7.2". §7.3 states plainly
+ * that the rules specify *no* course length in km for any format — length is
+ * derived from the mandated winning time — and the measured elite sprint final
+ * is **3.5–4.3 km** at 3:30–4:20/km, well over double the figure being cited
+ * for it.
+ *
+ * The number stayed and the description changed, because the number was never
+ * really a sprint-final number: 1.2–2.2 km against §7.3's measured **1.6–2.4 km
+ * for a Knock-Out Sprint round**. That is a real IOF format at this venue's
+ * scale — 1:4000, technically easy, urban — rather than a sprint cut short to
+ * fit. Krumlov's AOI is 1200 m square and its old town about 500 m across, so a
+ * 4 km sprint final cannot be set inside it without leaving for the meadows,
+ * which is precisely the run the client complained about. See D-030.
  */
 const COURSE_LENGTH_M = {
   sprint: { min: 1200, max: 2200 },

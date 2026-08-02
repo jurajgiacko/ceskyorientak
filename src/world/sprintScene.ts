@@ -42,6 +42,8 @@ import { loadDetailTextures } from './materials';
 import { BearingBand, aidColour } from './bearingBand';
 import type { BearingAim } from './bearingBand';
 import { ControlMarkers, loadControlAssets } from './controlMarkers';
+import { TownSurface } from './surface';
+import type { GroundSurface } from './surface';
 import type { ControlMarker, ControlMarkerAssets, ControlMarkerState } from './controlMarkers';
 
 export interface SprintSceneOptions {
@@ -72,6 +74,17 @@ export class SprintScene {
 
   /** Public: the race controller samples it through a thin adapter. */
   field!: TerrainField;
+  /**
+   * What the town has built on top of the bare earth, and what is water.
+   *
+   * Public because the race gate reads it: `tools/ci/check-passable.mjs` asks
+   * the running game whether any sited point is over water and how far the eye
+   * is above the surface there, and a gate that reconstructed either answer
+   * itself would be checking its own arithmetic. See src/world/surface.ts.
+   */
+  surface!: TownSurface;
+  /** `groundAt` behind the `GroundSurface` interface, for the pieces that stand on it. */
+  private walkable!: GroundSurface;
   private terrain!: TerrainMesh;
   private sky!: SkyRig;
   private ground!: GroundTextures;
@@ -258,10 +271,19 @@ export class SprintScene {
     });
     this.scene.add(this.buildings.group);
 
-    // --- walls, steps, river, street trees --------------------------------
+    // --- what stands above the ground, and what is out of bounds -----------
+    //
+    // Built before anything that founds itself on the surface, because from
+    // here on `this.groundAt` — not `this.field.heightAt` — is what the town
+    // stands on.
+    this.surface = new TownSurface(this.data, (x, z) => this.field.heightAt(x, z));
+    this.walkable = { heightAt: (x, z) => this.groundAt(x, z) };
+
+    // --- walls, steps, river, bridge decks, street trees -------------------
     this.town = new Townscape(this.data, this.field, stone, {
       tier: this.tier,
       beech: assets?.beech,
+      decks: this.surface.decks,
     });
     this.scene.add(this.town.group);
 
@@ -282,12 +304,12 @@ export class SprintScene {
     this.scene.add(this.landmarks.group);
 
     // --- the beginner's bearing aid ---------------------------------------
-    this.bearing = new BearingBand(this.field, aidColour());
+    this.bearing = new BearingBand(this.walkable, aidColour());
     this.scene.add(this.bearing.group);
 
     // --- the control flags -------------------------------------------------
     if (this.controlAssets) {
-      this.markers = new ControlMarkers(this.field, this.controlAssets);
+      this.markers = new ControlMarkers(this.walkable, this.controlAssets);
       this.warnings.push(...this.markers.warnings);
       for (const w of this.markers.warnings) console.warn('[controls]', w);
       this.scene.add(this.markers.group);
@@ -296,7 +318,7 @@ export class SprintScene {
     // --- camera ----------------------------------------------------------
     this.camera.position.set(
       START.x,
-      this.field.heightAt(START.x, START.z) + EYE_HEIGHT,
+      this.groundAt(START.x, START.z) + EYE_HEIGHT,
       START.z,
     );
     this.yaw = headingTo(START, KRUMLOV_LANDMARKS.castleTower);
@@ -369,7 +391,27 @@ export class SprintScene {
   blockedAt(x: number, z: number): boolean {
     if (this.buildings.blocks.test(x, z)) return true;
     if (this.town.blocks.test(x, z)) return true;
-    return this.field.runnabilityAt(x, z) === Runnability.Impassable;
+    if (this.field.runnabilityAt(x, z) === Runnability.Impassable) return true;
+    // 301, and until now this line was the only part of the sentence above that
+    // was not actually true. The raster's water comes from ZABAGED and the
+    // river is drawn from OSM; where the two outlines disagree — about 5 300 m²
+    // of this venue — the Vltava was drawn over ground the raster called Road,
+    // and the course setter duly sited controls in it. A bridge deck is the one
+    // exception, which is the same exception `stampRaster` grants.
+    return this.surface.inWater(x, z);
+  }
+
+  /**
+   * The height of the surface the athlete stands on at (x, z), metres ASL.
+   *
+   * Not `field.heightAt`, and the difference is a bridge. The heightfield is a
+   * bare-earth DMR, so under a Vltava crossing it is the riverbed — up to 5.2 m
+   * below the deck the athlete is legitimately running along. Everything that
+   * stands on the ground in this venue reads this instead: the eye, the control
+   * flags, the finish gantry, the beginner's bearing band.
+   */
+  groundAt(x: number, z: number): number {
+    return this.surface.groundAt(x, z, this.field.heightAt(x, z));
   }
 
   /**
@@ -492,7 +534,7 @@ export class SprintScene {
     else this.freeMove(dt);
 
     if (!this.noclip) {
-      const ground = this.field.heightAt(this.camera.position.x, this.camera.position.z);
+      const ground = this.groundAt(this.camera.position.x, this.camera.position.z);
       this.camera.position.y +=
         (ground + EYE_HEIGHT - this.camera.position.y) * Math.min(1, dt * 12);
     }
@@ -599,6 +641,10 @@ export class SprintScene {
       bldTris: this.buildings.stats.triangles,
       walls: this.town.stats.walls,
       steps: this.town.stats.steps,
+      decks: this.town.stats.decks,
+      onDeck: this.surface.decks.covers(this.camera.position.x, this.camera.position.z)
+        ? 'yes'
+        : 'no',
       streetTrees: this.town.stats.trees,
       slopeTrees: this.vegetation ? this.vegetation.stats.trees : 0,
       flags: this.markers

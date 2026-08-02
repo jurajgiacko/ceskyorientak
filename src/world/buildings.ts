@@ -117,6 +117,14 @@ export interface PavedRecord {
   w: number;
   /** 0 paved (Runnability.Road) · 1 unpaved (Runnability.Path). */
   k: number;
+  /**
+   * 1 when OSM tags this way as a bridge.
+   *
+   * The one thing allowed to cross ground the raster calls impassable — see
+   * `stampRaster` in tools/terrain/townscape.mjs — and therefore the one thing
+   * that stands above the terrain rather than on it. `BridgeDecks` reads it.
+   */
+  b?: number;
 }
 
 export interface AreaRecord {

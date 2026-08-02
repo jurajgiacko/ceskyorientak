@@ -1175,3 +1175,186 @@ controls-and-length comparison called identical.
 The invariant is D-027's, unchanged, and this is the second thing that had to be
 dragged inside it: **a tier decides how the venue is drawn, never what happens
 in the race.**
+
+## D-030 — Krumlov races a Knock-Out Sprint round, and now says so
+
+Commit 47d5cfb cut Krumlov's course target from 3.4 km to 1.5 km, which fixed
+the client's real complaint — a 3.4 km course cannot be laid out inside a 500 m
+old town, so the generator ran up the Vltava and out into the meadows. The fix
+was right. The justification attached to it was not.
+
+Three places carried the line *"a real sprint is 1.5–2.0 km of straight-line
+course for a 13–15 minute winning time (IOF Competition Rules, appendix 2;
+RESEARCH-SPORT §7.2)"*. Checking it against our own research file:
+
+- §7.3 opens by stating that **the rules do not specify course length in km, nor
+  control count, for any format.** Length is derived backwards from the mandated
+  winning time. There is no appendix 2 distance to cite.
+- §7.2 gives winning times and no distances at all.
+- The measured elite sprint final is **3.5–4.3 km** at 3:30–4:20/km (Terezín
+  2021, Edinburgh 2024) — more than double the figure being cited *for* it.
+
+So the citation did not merely lack support; the source says the opposite, and
+in the opposite direction. A number invented to fit the venue had been dressed
+up as a rule, which is the failure mode that makes every other sport citation in
+this codebase worth less.
+
+**What changed is the description, not the number**, because the number turns
+out to be defensible on its own terms. §7.3's measured table gives **Knock-Out
+Sprint rounds at 1.6–2.4 km** for the mandated 6–8 minutes, against our gate
+band of 1.2–2.2 km. KO Sprint is a real IOF format and it is this venue's
+format: 1:4000, technically easy, urban, spectators along the course. Krumlov is
+not a sprint final cut short to fit — it is a different event that happens to be
+the one the terrain holds.
+
+The general rule, which is why this is a decision and not a comment fix: **when a
+figure is chosen for a venue, say so.** A venue accommodation is a perfectly good
+reason and it survives review. A venue accommodation wearing a rule's clothes
+fails review the first time someone opens the rule.
+
+### The gate stopped taking the generator's word for it
+
+Same commit, the mechanical half. `check-race.mjs` asserted length only on the
+sprint, from `SPRINT_LENGTH_M`, kept in step with `courseLengthBand` by hand —
+which is how the generator's low edge came to be 1125 m against a gate floor of
+1200. The two were never reconciled into one constant, deliberately:
+
+**the regression this gate exists to catch was a wrong target.** Krumlov aimed at
+3.4 km and faithfully produced 2.7–4.3 km. Any check derived from `specFor`
+would have passed it, because the course matched the target exactly; the target
+was the bug. So the gate keeps stating the sport's numbers independently, on the
+same footing as `MIN_START_FINISH_M` and the other four properties in that file.
+
+What ties the two sides is **containment, asserted rather than remembered**:
+`setCourse` now reports the band it shopped against as `lengthBandM`, and the
+gate checks that it sits inside the band the gate allows. A setter whose
+acceptance test is looser than the judge's is not a setter — it spends its ten
+seeds shopping for courses that will be refused downstream. Both sides stay
+independently tunable and the gate speaks up when they drift apart.
+
+Length is now checked on **every** discipline, not just the sprint. "A course of
+this format is this long" was never a sprint property; middle and long were
+simply not being looked at.
+
+---
+
+## D-031 — The start was in the river, and there were two reasons
+
+**Reported:** *"the city still starts at random places — it doesn't hold to one
+race map — and I even started in the river, wtf."*
+
+The lead we went in with was bridges, and it was half right. Measured over 40
+menu-shaped seeds before the fix, **1 seed in 40 put the start itself over
+water and 9 in 40 put some sited point there** — and only half of those were on
+a bridge. Two independent causes, either of which alone reproduces the report.
+
+**Cause 1 — a bridge deck is not the ground under it.** `stampRaster` paints
+bridge decks into the runnability raster as passable; that was D-024's fix for
+a venue in which every Vltava crossing was severed, and it was right. But the
+athlete's eye is `heightAt + EYE_HEIGHT` off a **bare-earth** DMR, and the bare
+earth under a bridge is the riverbed. Profiling all 47 bridge-tagged ways, the
+main crossings sag **4.6–5.2 m** below their own abutments. So a point on a
+deck was legal, open, paved, reachable by every check we had, and rendered at
+the waterline — and so was the athlete crossing it, for the whole crossing.
+
+**Cause 2 — drawn water was not out of bounds.** `SprintScene.blockedAt`'s own
+comment claimed ISSprOM 301, uncrossable water. It only ever enforced it
+through the raster, whose water comes from ZABAGED while the river is *drawn*
+from OSM. The two national datasets do not trace the same outline: **5 300 m²
+of the venue was drawn as Vltava and left runnable**, and the course setter
+sited controls in it — one at (289, −48), 94 m from the nearest bridge, in the
+middle of the river with `blockedAt` returning false.
+
+**The fix, in src/world/surface.ts.** One module carrying the two facts the
+terrain does not know. `BridgeDecks` derives each deck as the chord between the
+way's endpoints — those sit on the banks, on ground the survey got right —
+clamped so it can never fall below the terrain, and `Townscape` now *draws* the
+deck with a skirt down to the water. Raising the athlete without drawing it
+would have traded starting in the river for hovering over it. `WaterIndex` is
+the drawn water, and `blockedAt` now refuses it unless a bridge carries you.
+
+Two acceptance thresholds keep the deck honest: below 0.5 m of lift the way is
+on the ground and is left alone (26 of 47); above 10 m it is a viaduct, which
+in this venue is exactly the Plášťový most, and `landmarks.ts` already models
+that with its own deck and arcade.
+
+**One trap, worth naming.** Deck *lift* is measured against the heightfield,
+whose resolution is a per-tier rendering budget — so which spans are raised can
+differ between `low` and `high`. That is fine for drawing and fatal for rules,
+and `blockedAt` is rules. So `BridgeDecks` keeps two indexes: the raised set
+(heights, geometry, tier-dependent) and every bridge-tagged carriageway
+(passability, pure `townscape.json`, tier-independent). Same invariant as D-027
+and D-029 — a tier decides how the venue is drawn, never what happens in the
+race.
+
+**The gate.** `check:passable` phase 2 now asserts, of every sited point, that
+it is not over water without a bridge under it and that it stands at least
+0.5 m above the local water surface, and reports the freeboard distribution
+whether or not anything failed — because the report was a draw out of a
+distribution, not a single event. The eye check now measures against
+`groundAt`, not `field.heightAt`: the contract is unchanged, the surface got a
+name. Phase 1's offline mirror of `blockedAt` gained the same water clause.
+Cost: reachable-from-arena falls from 95.1 % to 94.3 %, all of it river.
+
+---
+
+## D-032 — A venue has one course
+
+The other half of the same report: *"it doesn't hold to one race map."*
+
+`menuScreen.ts` seeded every race with `(Date.now() / 60000) | 0`. The intent
+written next to it was "a fresh course every few minutes, and the same course
+for everyone who starts within the same minute", and the client is right that
+this is not a thing a real event does. Worse, it made a whole feature dead:
+`LocalStore` keys personal bests and ghosts by `course.id`, `course.id` is
+`venue-discipline-seed`, and the id changed before a player could ever come
+back to it. Nothing was broken in `LocalStore`; it had simply never been asked
+a question it could answer.
+
+Each venue now has one fixed seed, `COURSE_SEED` in `src/core/venues.ts`, and
+the `&race=1` deep link with no `&seed=` resolves to it — so QA and the gates
+exercise the course players actually run rather than seed 7, which nobody has
+ever seen.
+
+**The seeds were chosen, not taken.** A setter picks a course. So does
+`tools/sim/pick-course.mjs`: it loads the real build headless at several
+hundred menu-shaped candidates and scores each against the client's own
+sentence — *"always the same course, starts at the start, finishes at the
+finish, runs through the alleys"* — disqualifying anything with a point in the
+water, a start or finish on a bridge deck, a non-empty `arenaFaults`, a dropped
+control, or a seed the setter had to shop away from, then ranking the rest.
+
+The heaviest term is new and is the one the point-wise measures could not
+express: **the legs**. Each leg is routed over the game's own collision with
+the athlete's own class speeds, and scored on the fraction of that route spent
+on Road or Path. A control on a corner reached by a bearing across a meadow
+satisfies "controls near paved" and fails "runs through the alleys"; this is
+what tells them apart, and `check:passable` now enforces a floor on it.
+
+**What was chosen.** `krumlov 30521551` — 15 controls, 1558 m, 45 m climb, the
+top-scoring of 59 viable candidates out of 160. Every one of its 17 sited points
+is on Road or Path; the worst control in the course is **0.4 m** off the street
+network; 99 % of the fastest running between controls is on it; and it stays
+inside the old town instead of finishing up the hill outside it, which is what
+the runner-up does by way of a 364 m run-in.
+
+`martinkov 29658380` — 15 controls, 4367 m, 235 m climb. Fourth on score of 120,
+and chosen over the top three after looking, which is what the shortlist is for.
+The forest disqualifies almost nothing — no river to fall in, no street network
+to leave — so the ranking is decided by matters of degree. This one puts 88 % of
+its points on runnable ground with none in Green3, runs 5.4 % climb per kilometre
+rather than the 6–7 % of several rivals, and alternates 151 m and 479 m legs
+inside one compact 790 × 960 m block of the training terrain. What put it fourth
+is the start–finish term, capped at 480 m — a figure tuned for a 1 200 m town and
+close to meaningless in a 2 000 m forest, where 416 m and 488 m are the same
+answer.
+
+The rotating seed belongs to the daily challenge (ROADMAP), where it is seeded
+by the **date** so that everybody gets the same course that day and two runs
+are comparable. Building that is not this change; stopping the main entries
+from behaving like a worse version of it is.
+
+`check:passable` gained a stability phase: four separate loads of the venue's
+own URL must give the identical course id and course fingerprint. Cross-tier
+agreement was already asserted and is a different claim — it says two phones
+agree, not that two runs do.
