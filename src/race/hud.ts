@@ -80,6 +80,8 @@ export class RaceHud {
   private readonly needle: HTMLElement;
   private readonly bearing: HTMLElement;
   private readonly flash: HTMLElement;
+  private readonly flashCode: HTMLElement;
+  private readonly flashWhat: HTMLElement;
   private readonly beltEl: HTMLElement;
   private readonly beltDock: HTMLElement;
   private readonly beltToggle: HTMLButtonElement;
@@ -172,7 +174,16 @@ export class RaceHud {
         </div>
       </div>
 
-      <p class="hud__flash" data-role="flash" hidden></p>
+      <!--
+        What just happened, for someone who has never punched a control. A
+        SIAC registers touch-free: you run through, the card beeps, the station
+        lights up, and nothing was pressed. Without a line of text the player
+        has no way to connect that to the number that just changed above.
+      -->
+      <div class="hud__flash" data-role="flash" hidden aria-live="polite">
+        <b class="hud__flashCode" data-role="flashCode"></b>
+        <span class="hud__flashWhat" data-role="flashWhat"></span>
+      </div>
 
       <!-- What taking something off the belt actually did. Cost and facts. -->
       <div class="hud__take" data-role="take" hidden aria-live="polite"></div>
@@ -200,6 +211,8 @@ export class RaceHud {
     this.needle = must(this.root, 'needle');
     this.bearing = must(this.root, 'bearing');
     this.flash = must(this.root, 'flash');
+    this.flashCode = must(this.root, 'flashCode');
+    this.flashWhat = must(this.root, 'flashWhat');
     this.beltEl = must(this.root, 'belt');
     this.beltDock = must(this.root, 'beltDock');
     this.beltCount = must(this.root, 'beltCount');
@@ -492,7 +505,11 @@ export class RaceHud {
     // collapses back onto the truth, and the number is how wrong you were.
     const snap =
       correctedM >= 1 ? ` · ${t('race.relocatedBy', { m: Math.round(correctedM) })}` : '';
-    this.flash.textContent = `${code} ✓${snap}`;
+    // `lastControl` has already been advanced by `update` this frame, so the
+    // control just punched is the one before the new target.
+    const number = Math.max(1, this.lastControl);
+    this.flashCode.textContent = `${code} ✓`;
+    this.flashWhat.textContent = `${t('race.punchedControl', { n: number })}${snap}`;
     this.flash.hidden = false;
     this.root.dataset.punch = '1';
     this.flashTimer = nowMs + 2200;

@@ -61,6 +61,17 @@ export interface Asset {
 
 const NODE_RE = /^(.+?)(?:_v(\d+))?_LOD(\d+)$/;
 
+/**
+ * How a caller turns a raw glTF material into a scene-ready one.
+ *
+ * The default (`conditionAssetMaterial` below, keyed off the material name) is
+ * written for *vegetation and rock* — its fallback branch hands an untextured
+ * material the shared bark pack, which is right for a trunk and absurd for a
+ * control flag. Assets that are not made of wood pass their own conditioner
+ * rather than inheriting a guess made for spruce.
+ */
+export type MaterialConditioner = (mat: THREE.Material) => THREE.Material;
+
 function materialKind(name: string): 'bark' | 'foliage' | 'rock' | 'wood' {
   const n = name.toLowerCase();
   // Rock is tested first on purpose: `granite_lichen` is the lichen *cap on a
@@ -119,7 +130,11 @@ function loader(): GLTFLoader {
  * LOD list is packed dense, so an asset with only LOD0 and LOD2 authored still
  * yields a usable two-level ladder rather than a hole.
  */
-export async function loadAsset(url: string, name: string): Promise<Asset> {
+export async function loadAsset(
+  url: string,
+  name: string,
+  condition?: MaterialConditioner,
+): Promise<Asset> {
   const gltf = await loader().loadAsync(url);
   const byVariant = new Map<string, Map<number, LodLevel>>();
 
@@ -168,9 +183,11 @@ export async function loadAsset(url: string, name: string): Promise<Asset> {
     const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
     for (const mat of mats) {
       const isImposter = /imposter/i.test(mat.name);
-      const conditioned = isImposter
-        ? makeImposterMaterial(mat)
-        : conditionAssetMaterial(mat, materialKind(mat.name));
+      const conditioned = condition
+        ? condition(mat)
+        : isImposter
+          ? makeImposterMaterial(mat)
+          : conditionAssetMaterial(mat, materialKind(mat.name));
       level.parts.push({ geometry: geo, material: conditioned });
     }
     const idx = geo.getIndex();

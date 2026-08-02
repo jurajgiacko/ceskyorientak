@@ -25,8 +25,11 @@ import type { Course, Discipline, VenueAnchor, World2 } from '@/core/types';
 import { GROUND_FOR_RUNNABILITY } from '@/world/terrain';
 import type { TerrainField } from '@/world/terrain';
 import type { BearingAim } from '@/world/bearingBand';
+import type { ControlMarker, ControlMarkerState } from '@/world/controlMarkers';
 import { getSettings } from '@/core/settings';
 import { FieldTerrain } from './terrainAdapter';
+import { buildUrbanFeatures } from './urbanFeatures';
+import type { TownscapeData } from '@/world/buildings';
 import { buildMapData } from './mapData';
 import { RaceMap } from './raceMap';
 import { RaceHud } from './hud';
@@ -60,6 +63,13 @@ export interface RaceSceneHost {
    * not show.
    */
   setBearingAid?(aim: BearingAim | null): void;
+  /**
+   * Place the course's flags, start kite and finish gantry, or clear them with
+   * an empty list. Optional for the same reason as `setBearingAid`.
+   */
+  setCourseMarkers?(markers: readonly ControlMarker[]): void;
+  /** Which of those markers are drawn this frame, and which was just punched. */
+  setMarkerState?(state: ControlMarkerState): void;
   /** Hook called at the top of the scene's own frame, so ordering is defined. */
   beforeFrame: ((dtS: number) => void) | null;
   /** Extra out-of-bounds geometry the raster does not carry (Krumlov's walls). */
@@ -81,6 +91,15 @@ export interface RaceSetup {
   startStats: { glycogen: number; hydration: number; bloodSugar: number; focus: number };
   environment: EnvironmentId;
   touch: boolean;
+  /**
+   * The town, when there is one.
+   *
+   * Handed in rather than read off the scene so that `src/world` keeps knowing
+   * nothing about what a control is. What the course setter does with it is in
+   * `src/race/urbanFeatures.ts`: a sprint control belongs on a building corner
+   * or a stairway, and this is where those live.
+   */
+  townscape?: TownscapeData;
   onFinish: (result: RunResult, course: Course) => void;
   onQuit: () => void;
 }
@@ -122,6 +141,16 @@ export class RaceController {
   private ended = false;
   private lastPunchCode = -1;
   /**
+   * Which flags the world is allowed to draw, in course order: the start, then
+   * controls 1..n, then the finish.
+   *
+   * Rebuilt in place each frame from `nextControl`, so it is one allocation for
+   * the whole race. The rule it encodes is the important part — see `frame`.
+   */
+  private readonly markerVisible: boolean[];
+  /** Marker index punched this frame. Non-null for exactly one frame. */
+  private punchedMarker: number | null = null;
+  /**
    * Whether the beginner's bearing band is on, read once at construction so
    * that toggling it in the menu cannot change a race that is already running.
    * Defaults on — most players have never orienteered.
@@ -133,11 +162,15 @@ export class RaceController {
     this.host = host;
     this.setup = setup;
     this.beginnerAid = getSettings().beginnerAid;
+    // ISSprOM territory: 1:4000 or closer means a town, and a town's controls
+    // are corners rather than landforms.
+    const urban = setup.anchor.mapScale <= 5000;
     this.terrain = new FieldTerrain(host.field, {
       ...(host.blockedAt ? { blocked: (x: number, z: number) => host.blockedAt!(x, z) } : {}),
-      // ISSprOM territory: 1:4000 or closer means a town, and a town's controls
-      // are corners rather than landforms.
-      urban: setup.anchor.mapScale <= 5000,
+      urban,
+      ...(urban && setup.townscape
+        ? { features: buildUrbanFeatures(setup.townscape) }
+        : {}),
     });
 
     const set = setCourse(this.terrain, {
@@ -262,6 +295,12 @@ export class RaceController {
       window.removeEventListener('keydown', onKey);
       window.removeEventListener('resize', onResize);
     });
+
+    // The flags. Placed once, from the same `Course` the map draws, so the kite
+    // in the forest and the circle on the paper cannot end up in two places.
+    const markers = courseMarkers(this.course);
+    this.markerVisible = markers.map(() => false);
+    host.setCourseMarkers?.(markers);
 
     host.beforeFrame = (dt) => this.frame(dt);
     host.setExternalPose(
@@ -430,6 +469,134 @@ export class RaceController {
   }
 
   // -------------------------------------------------------------------------
+  // The escape guarantee
+  // -------------------------------------------------------------------------
+
+  /**
+   * Catch a player who is walled in, and get them out honestly.
+   *
+   * `setCourse` guarantees that no point the athlete is *placed* on can strand
+   * them, measured against the collider that actually stops them rather than
+   * against a mask. This is the other half: a player can run somewhere the
+   * course never sent them, and this venue has now produced four distinct
+   * "we're stuck" reports with four different real causes. Each one was fixed;
+   * the reports kept coming. So rather than wait for a fifth, detect the
+   * *condition* — the athlete cannot get out of where they are — and act.
+   *
+   * Three properties this deliberately has:
+   *
+   *  - **Cheap until it matters.** Flooding the neighbourhood costs a few
+   *    milliseconds, which is a visible hitch at 60 fps if it runs on a timer.
+   *    It does not: the trigger is the symptom the player would report — asking
+   *    to move, and not moving — so the flood runs approximately never, and
+   *    when it does run the player is already standing still.
+   *  - **Loud.** It logs the position, the ground and the escape area, and
+   *    records the event on `window.__trapEvents` where the gates can read it.
+   *    A silent teleport would hide the bug that produced it, and the next
+   *    report has to be actionable without a bisect.
+   *  - **Honest.** It does not pretend nothing happened. The player is moved to
+   *    the nearest ground connected to the arena and told, in one line, that
+   *    the game did it. A player stuck with no recourse is the worst outcome
+   *    available; a player nudged out with an explanation is survivable.
+   */
+  private stuckForS = 0;
+  private lastStuckCheck: World2 | null = null;
+  private trapNudges = 0;
+
+  private watchForEnclosure(dtS: number, forward: number): void {
+    const p = this.race.athlete.position;
+
+    // Asking to move and not moving. Sampled against where we were a second
+    // ago rather than against speed, because sliding along a wall keeps a
+    // non-zero speed while going nowhere.
+    if (forward < 0.5) {
+      this.stuckForS = 0;
+      this.lastStuckCheck = null;
+      return;
+    }
+    if (!this.lastStuckCheck) {
+      this.lastStuckCheck = { x: p.x, z: p.z };
+      this.stuckForS = 0;
+      return;
+    }
+    this.stuckForS += dtS;
+    if (this.stuckForS < STUCK_WINDOW_S) return;
+
+    const movedM = dist2(this.lastStuckCheck, p);
+    this.stuckForS = 0;
+    this.lastStuckCheck = { x: p.x, z: p.z };
+    if (movedM > STUCK_MOVED_M) return;
+
+    // Going nowhere. Now it is worth paying for the answer: is this a wall the
+    // player should run along, or a pocket they cannot leave?
+    const { m2, sealed } = this.terrain.escapeAreaM2(p, TRAP_M2);
+    if (!sealed) return;
+
+    this.trapNudges++;
+    // The eight octants at 3 m, as a string: `#` is out of bounds, otherwise
+    // the runnability class. "########" says walled in on every side; a single
+    // gap says the way out is there and something else is wrong.
+    let ring = '';
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2;
+      const q = this.terrain.runnabilityAt(p.x + Math.sin(a) * 3, p.z - Math.cos(a) * 3);
+      ring += q === Runnability.Impassable ? '#' : String(q);
+    }
+    const detail = {
+      x: Math.round(p.x * 10) / 10,
+      z: Math.round(p.z * 10) / 10,
+      escapeM2: Math.round(m2),
+      ground: this.terrain.runnabilityAt(p.x, p.z),
+      ring: ring.join(''),
+      control: this.race.view().nextControl,
+      seed: this.setup.seed,
+    };
+    console.error(
+      `[race] the athlete is enclosed in ${detail.escapeM2} m² at (${detail.x}, ${detail.z}) — ` +
+        `this should be impossible; see courseSetup.MIN_ESCAPE_M2`,
+      detail,
+    );
+    const w = window as unknown as { __trapEvents?: unknown[] };
+    (w.__trapEvents ??= []).push(detail);
+
+    const out = this.terrain.nearestReachable(p);
+    if (dist2(out, p) < 0.5) return;
+    p.x = out.x;
+    p.z = out.z;
+    this.showNudgeNote();
+  }
+
+  /**
+   * One line, for a few seconds, saying the game moved you.
+   *
+   * Styled inline rather than through `src/styles/race.css` on purpose: this is
+   * a rare diagnostic surface, and putting it in the stylesheet would mean
+   * touching a file the flag work is editing at the same time.
+   */
+  private showNudgeNote(): void {
+    let note = this.root.querySelector<HTMLElement>('[data-role="trapnote"]');
+    if (!note) {
+      note = document.createElement('p');
+      note.dataset.role = 'trapnote';
+      note.setAttribute('role', 'status');
+      note.style.cssText =
+        'position:absolute;left:50%;top:18%;transform:translateX(-50%);z-index:40;' +
+        'margin:0;padding:0.6rem 1rem;border-radius:0.4rem;max-width:22rem;text-align:center;' +
+        'background:rgba(12,18,14,0.88);color:#f2efe6;font-size:0.9rem;line-height:1.35;' +
+        'pointer-events:none;transition:opacity 0.4s;';
+      this.root.appendChild(note);
+    }
+    note.textContent = t('race.freedFromTrap');
+    note.style.opacity = '1';
+    window.clearTimeout(this.nudgeNoteTimer);
+    this.nudgeNoteTimer = window.setTimeout(() => {
+      if (note) note.style.opacity = '0';
+    }, 5000);
+  }
+
+  private nudgeNoteTimer = 0;
+
+  // -------------------------------------------------------------------------
   // Frame
   // -------------------------------------------------------------------------
 
@@ -450,6 +617,7 @@ export class RaceController {
       // decouples from where the camera looks.
       this.terrain.heading = intent.heading;
       this.race.step(dtS, { forward, heading: intent.heading });
+      this.watchForEnclosure(dtS, forward);
     }
 
     const v = this.race.view();
@@ -475,7 +643,32 @@ export class RaceController {
 
     if (v.justPunched && v.justPunched.code !== this.lastPunchCode) {
       this.lastPunchCode = v.justPunched.code;
+      // The beep and the light, from one branch on one frame. That is what
+      // sells a touch-free punch: there is nothing to press, so the world and
+      // the sound arriving together is the *only* thing that says it happened.
+      // `Race` has already advanced `nextControl` past the control it punched,
+      // and marker 0 is the start, so the marker just punched is `nextControl`.
       playPunch('touchfree');
+      this.punchedMarker = v.nextControl;
+    }
+
+    // Which flags may be seen.
+    //
+    // The current target and everything already punched, and nothing else. This
+    // is not primarily anti-cheat: a player who can see control 7 from control 1
+    // has no navigation problem left to solve, and navigation is the game. The
+    // start and the finish are always up — they are the arena, you can hear it
+    // from half the map.
+    if (this.host.setMarkerState) {
+      const n = this.course.controls.length;
+      this.markerVisible[0] = true;
+      for (let i = 0; i < n; i++) this.markerVisible[i + 1] = i <= v.nextControl;
+      this.markerVisible[n + 1] = true;
+      this.host.setMarkerState({
+        visible: this.markerVisible,
+        punched: this.punchedMarker,
+      });
+      this.punchedMarker = null;
     }
 
     this.hud.update(
@@ -769,6 +962,7 @@ export class RaceController {
   dispose(): void {
     this.host.beforeFrame = null;
     this.host.setBearingAid?.(null);
+    this.host.setCourseMarkers?.([]);
     for (const d of this.disposers) d();
     this.disposers.length = 0;
     this.controls.dispose();
@@ -783,6 +977,48 @@ export class RaceController {
 
 function bearingTo(a: World2, b: World2): number {
   return Math.atan2(b.x - a.x, -(b.z - a.z));
+}
+
+/**
+ * The course as scene furniture.
+ *
+ * A thin adapter and nothing else. It reads `Course` — the same object
+ * `RaceMap` draws its circles from — and emits points, facings and kinds, so
+ * the kite in the forest and the circle on the paper are two renderings of one
+ * number. Nothing in `src/sim` is touched, and the scene still has no idea what
+ * a control is.
+ *
+ * `from` orients each marker: it is the point the athlete arrives from, so the
+ * kite hangs on the side of the mast that faces the incoming leg and the finish
+ * banner is squared across it. The start is the exception and looks the other
+ * way — you stand on the triangle facing control 1 — so it is given the leg
+ * ahead instead of the leg behind.
+ */
+function courseMarkers(course: Course): ControlMarker[] {
+  const points: World2[] = [
+    course.start,
+    ...course.controls.map((c) => c.position),
+    course.finish,
+  ];
+  const out: ControlMarker[] = [
+    {
+      kind: 'start',
+      x: course.start.x,
+      z: course.start.z,
+      from: points[1] ?? course.finish,
+    },
+  ];
+  for (let i = 0; i < course.controls.length; i++) {
+    const c = course.controls[i]!;
+    out.push({ kind: 'control', x: c.position.x, z: c.position.z, from: points[i]! });
+  }
+  out.push({
+    kind: 'finish',
+    x: course.finish.x,
+    z: course.finish.z,
+    from: points[points.length - 2]!,
+  });
+  return out;
 }
 
 function esc(s: string): string {

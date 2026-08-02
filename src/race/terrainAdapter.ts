@@ -21,8 +21,10 @@
 import { Runnability } from '@/core/types';
 import type { TerrainSample } from '@/core/types';
 import type { TerrainField } from '@/world/terrain';
-import type { CourseTerrain } from '@/sim/courseGen';
+import type { ControlSite, CourseTerrain } from '@/sim/courseGen';
 import type { RaceTerrain } from '@/sim/race';
+import { columnDFor } from './urbanFeatures';
+import type { UrbanFeatureIndex } from './urbanFeatures';
 
 /** Extra out-of-bounds test the raster does not carry. */
 export type Blocker = (x: number, z: number) => boolean;
@@ -35,6 +37,35 @@ export type Blocker = (x: number, z: number) => boolean;
  * as a knoll here gets described as a knoll there.
  */
 const FEATURE_R = 14;
+
+/**
+ * How far a sprint control may sit from the feature it is described by, metres.
+ *
+ * At 1:4000 a control circle is 5 mm across, i.e. 20 m on the ground, so a flag
+ * more than about 10 m from the feature in the middle of it is not describing
+ * that feature any more. 12 m leaves room for the offset a corner site already
+ * carries without letting "building corner" mean "somewhere in this street".
+ */
+const FEATURE_REACH = 12;
+
+/**
+ * How far a sprint control may sit from a runnable way, metres.
+ *
+ * The number that decides whether this is a sprint or a cross-country run. A
+ * control the athlete reaches in a stride or two off the network keeps the leg
+ * a route-choice problem between streets; one 40 m out in a meadow turns it
+ * into a bearing across a field, which is what the client played and did not
+ * want. 18 m is about the depth of one Krumlov courtyard.
+ */
+const PAVED_REACH = 18;
+
+/** Four-connected steps, for `escapeAreaM2`. */
+const NEIGHBOUR_STEPS: readonly (readonly [number, number])[] = [
+  [1, 0],
+  [-1, 0],
+  [0, 1],
+  [0, -1],
+];
 const NEIGHBOURS: readonly (readonly [number, number])[] = [
   [0, -FEATURE_R],
   [0, FEATURE_R],
@@ -60,12 +91,25 @@ export interface FieldTerrainOptions {
    * frequently unreachable.
    */
   urban?: boolean;
+  /**
+   * The town's own feature set — building corners, stairways, gates, wall ends,
+   * bridges, passage mouths — derived from `townscape.json`.
+   *
+   * With it, `urbanScore` is answering *"is there a describable man-made
+   * feature here, and can you get to it off a runnable way?"*, which is the
+   * question a sprint course setter asks. Without it, it falls back to reading
+   * out-of-bounds cells out of the raster, which is a proxy for a corner and
+   * knows nothing about the street network. The fallback exists so that a venue
+   * with no townscape still works; Krumlov always passes the index.
+   */
+  features?: UrbanFeatureIndex;
 }
 
 export class FieldTerrain implements CourseTerrain, RaceTerrain {
   private readonly field: TerrainField;
   private readonly blocked: Blocker | null;
   private readonly urban: boolean;
+  private readonly features: UrbanFeatureIndex | null;
 
   /**
    * Direction of travel, radians.
@@ -82,6 +126,7 @@ export class FieldTerrain implements CourseTerrain, RaceTerrain {
     this.field = field;
     this.blocked = opts.blocked ?? null;
     this.urban = opts.urban ?? false;
+    this.features = opts.features ?? null;
   }
 
   // --- CourseTerrain -------------------------------------------------------
@@ -309,6 +354,58 @@ export class FieldTerrain implements CourseTerrain, RaceTerrain {
     this.maskX0 = x0;
     this.maskZ0 = z0;
     return { fraction: openN ? tail / openN : 0 };
+  }
+
+  /**
+   * How much ground the athlete can actually walk on from `p`, m², measured
+   * with the runtime's **own continuous collision** rather than with the mask.
+   *
+   * This is the enclosure guarantee, and the reason it does not simply consult
+   * `reachableAt` is the whole point of it. The mask is a 1 m grid whose edges
+   * are tested at one midpoint; the thing that stops the player is a continuous
+   * collider. The two agree closely — measured over Krumlov, 73 m² out of
+   * 103.7 ha, all of it at the clip edge of the sample box — but "closely" is
+   * not a guarantee, and a course point is exactly where the difference would
+   * hurt. So the sited points are checked against the collider itself.
+   *
+   * Cells at 0.5 m with the edges tested at their midpoints, which is what a
+   * continuous collider actually enforces: a barrier lying between two open
+   * cell centres makes the step between them impossible even though both cells
+   * look open. The flood stops as soon as the pocket is provably bigger than
+   * `capM2`, so open ground costs a fixed and small amount of work — about
+   * 12 000 cells, a couple of milliseconds. `sealed` is true only when the
+   * flood ran out of frontier, i.e. the athlete really is walled in.
+   */
+  escapeAreaM2(p: { x: number; z: number }, capM2: number): { m2: number; sealed: boolean } {
+    if (this.isBlocked(p.x, p.z)) return { m2: 0, sealed: true };
+    const step = 0.5;
+    const cellM2 = step * step;
+    const capCells = Math.ceil(capM2 / cellM2);
+    const seen = new Set<number>([0]);
+    const queue: number[] = [0, 0];
+    let head = 0;
+    while (head < queue.length) {
+      if (seen.size > capCells) return { m2: seen.size * cellM2, sealed: false };
+      const i = queue[head++] as number;
+      const j = queue[head++] as number;
+      const x = p.x + i * step;
+      const z = p.z + j * step;
+      for (const [di, dj] of NEIGHBOUR_STEPS) {
+        const ni = i + di;
+        const nj = j + dj;
+        const k = ni * 100003 + nj;
+        if (seen.has(k)) continue;
+        const nx = p.x + ni * step;
+        const nz = p.z + nj * step;
+        if (this.runnabilityAt(nx, nz) === Runnability.Impassable) continue;
+        // The edge, at its midpoint: a barrier thinner than a cell sits between
+        // two open centres and is invisible to both of them.
+        if (this.isBlocked(x + di * step * 0.5, z + dj * step * 0.5)) continue;
+        seen.add(k);
+        queue.push(ni, nj);
+      }
+    }
+    return { m2: seen.size * cellM2, sealed: true };
   }
 
   /** Is this point in the arena's connected component? True before the fill. */
@@ -557,32 +654,34 @@ export class FieldTerrain implements CourseTerrain, RaceTerrain {
   }
 
   /**
-   * A sprint control site: a corner, and one you can actually run to.
+   * A sprint control site: a man-made feature, on the street network.
    *
-   * Three terms, in weight order:
+   * This is the fix for the client's report. A sprint is a route-choice problem
+   * through a street network, and the skill is picking between two ways round a
+   * block and reading passages, steps and gates at speed. So a control belongs
+   * on an **urban feature** — a building corner, the foot of a staircase, a
+   * gate, a wall end, a passage mouth, the end of a bridge — and it belongs
+   * within a stride or two of ground you can run on.
    *
-   *  - **Edge.** How much out-of-bounds is close by. A control against a wall,
-   *    or just inside a courtyard entrance, is a real sprint control; one in
-   *    the middle of an empty square is not, because there is nothing to
-   *    describe and nothing to find.
-   *  - **Reachable.** How much of the wider ring is runnable. This is what
-   *    stops the generator siting a control inside a sealed courtyard — which
-   *    it did: every candidate on the castle rock passed the relief test and
-   *    none of them could be entered.
-   *  - **Paved.** Standing on the street network, so the leg to it has a route.
+   * Two of the three terms are therefore hard gates rather than preferences,
+   * and that is deliberate. Making them soft is what produced the course the
+   * client played: every one of its fifteen points scored respectably on
+   * "some out-of-bounds cells are nearby", and the course ran up the river bank
+   * and across the meadows south of the town.
+   *
+   *  - **Feature.** There must be a describable feature within `FEATURE_REACH`.
+   *    No feature, no control — that is IOF course-setting principle, not a
+   *    tuning knob: column D has to say something.
+   *  - **Paved.** The site must be within `PAVED_REACH` of a runnable way or a
+   *    paved square. A control 40 m out into a meadow may still be beside a
+   *    wall and is still the wrong control.
+   *  - **Reachable.** How much of the wider ring is runnable, which is what
+   *    stops the generator siting inside a sealed courtyard.
    *
    * Relief is deliberately absent. Krumlov has 130 m of it and none of it is
    * what a sprint control is described by.
    */
   private urbanScore(x: number, z: number, cls: Runnability): number {
-    let blockedRing = 0;
-    const R = 7;
-    for (let i = 0; i < 8; i++) {
-      const a = (i / 8) * Math.PI * 2;
-      if (this.runnabilityAt(x + Math.sin(a) * R, z - Math.cos(a) * R) === Runnability.Impassable) {
-        blockedRing++;
-      }
-    }
     let openNear = 0;
     const RR = 22;
     for (let i = 0; i < 12; i++) {
@@ -591,21 +690,92 @@ export class FieldTerrain implements CourseTerrain, RaceTerrain {
         openNear++;
       }
     }
-
     // Sealed in. No leg can end here, whatever else the site has going for it.
     if (openNear < 5) return 0;
-
-    // One to three blocked octants is a corner. Six is a dead end.
-    const edge =
-      blockedRing === 0
-        ? 0.15
-        : blockedRing <= 3
-          ? 1
-          : Math.max(0, 1 - (blockedRing - 3) * 0.3);
     const reachable = openNear / 12;
-    const paved = cls === Runnability.Road || cls === Runnability.Path ? 1 : 0.45;
 
+    const idx = this.features;
+    if (!idx) return this.rasterUrbanScore(x, z, cls, reachable);
+
+    const near = idx.nearest(x, z, FEATURE_REACH);
+    if (!near) return 0;
+    const paved = idx.pavedDistance(x, z, PAVED_REACH + 1);
+    if (paved > PAVED_REACH) return 0;
+
+    // Right against the feature is the control; the score falls off with the
+    // distance an orienteer would have to search over.
+    const feature = 1 - Math.min(1, Math.max(0, near.d - 2) / (FEATURE_REACH - 2));
+    // On the network, or one stride off it.
+    const street = 1 - Math.min(1, Math.max(0, paved - 3) / (PAVED_REACH - 3));
+    // A gate, a passage or a stairway is a better control than a plain corner:
+    // there are 12 000 corners in Krumlov and 47 gates.
+    const rarity =
+      near.f.kind === 'gate' || near.f.kind === 'passage'
+        ? 0.18
+        : near.f.kind === 'stair' || near.f.kind === 'bridge' || near.f.kind === 'tower'
+          ? 0.12
+          : 0;
+
+    return clamp01(feature * 0.45 + street * 0.3 + reachable * 0.15 + rarity);
+  }
+
+  /**
+   * The old proxy, kept for a venue with no townscape to read.
+   *
+   * Counts out-of-bounds cells in a ring: one to three blocked octants is a
+   * corner, six is a dead end. It is a guess at where the corners are, and the
+   * whole point of `urbanFeatures.ts` is that we do not have to guess.
+   */
+  private rasterUrbanScore(
+    x: number,
+    z: number,
+    cls: Runnability,
+    reachable: number,
+  ): number {
+    let blockedRing = 0;
+    const R = 7;
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2;
+      if (this.runnabilityAt(x + Math.sin(a) * R, z - Math.cos(a) * R) === Runnability.Impassable) {
+        blockedRing++;
+      }
+    }
+    const edge =
+      blockedRing === 0 ? 0.15 : blockedRing <= 3 ? 1 : Math.max(0, 1 - (blockedRing - 3) * 0.3);
+    const paved = cls === Runnability.Road || cls === Runnability.Path ? 1 : 0.45;
     return Math.min(1, edge * 0.55 + reachable * 0.3 + paved * 0.25);
+  }
+
+  /**
+   * What the control is actually sited on, for column D.
+   *
+   * `describeControl` in `src/sim/courseGen.ts` asks this before falling back
+   * to landform vocabulary. Returning null in the forest is correct: there is
+   * no building corner in Lachovice and a re-entrant is the right word there.
+   */
+  siteAt(x: number, z: number): ControlSite | null {
+    const idx = this.features;
+    if (!idx || !this.urban) return null;
+    const near = idx.nearest(x, z, FEATURE_REACH);
+    if (!near) return null;
+    const f = near.f;
+    const site: ControlSite = { d: columnDFor(f.kind) };
+
+    // Column G, where the geometry supports it. A stairway has a foot and a
+    // top and an orienteer needs to know which; the index carries the other end
+    // of the flight precisely so this comparison can be made here, where the
+    // terrain is.
+    if (f.kind === 'stair' && f.ox !== undefined && f.oz !== undefined) {
+      const here = this.heightAt(f.x, f.z);
+      const there = this.heightAt(f.ox, f.oz);
+      if (Math.abs(here - there) > 1) site.g = here < there ? 'foot' : 'top';
+    }
+    return site;
+  }
+
+  /** Metres to the nearest runnable paved way. `Infinity` with no index. */
+  pavedDistanceAt(x: number, z: number): number {
+    return this.features ? this.features.pavedDistance(x, z) : Infinity;
   }
 
   // --- RaceTerrain ---------------------------------------------------------

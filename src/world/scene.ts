@@ -27,6 +27,8 @@ import { SpringArm, THIRD_PITCH_MAX, THIRD_PITCH_MIN } from './thirdPerson';
 import { Viewmodel } from './viewmodel';
 import { BearingBand, aidColour } from './bearingBand';
 import type { BearingAim } from './bearingBand';
+import { ControlMarkers, loadControlAssets } from './controlMarkers';
+import type { ControlMarker, ControlMarkerAssets, ControlMarkerState } from './controlMarkers';
 
 /** First person is the original camera; third is the spring-arm chase camera. */
 export type CameraMode = 'first' | 'third';
@@ -66,6 +68,13 @@ export class ForestScene {
   /** The beginner's bearing aid. Null until the world is built. */
   private bearing: BearingBand | null = null;
   private aim: BearingAim | null = null;
+  /**
+   * The control flags, start kite and finish gantry.
+   *
+   * Null when the assets could not be fetched — the venue is still a venue
+   * without them, and the race controller's calls become no-ops.
+   */
+  private markers: ControlMarkers | null = null;
   private ground!: GroundTextures;
   /**
    * The .glb-derived geometry and materials this scene loaded.
@@ -74,6 +83,8 @@ export class ForestScene {
    * are this scene's own allocations and nothing else will ever free them.
    */
   private assets: Asset[] = [];
+  /** Held between `load` and `build`; owned by `assets` for teardown. */
+  private controlAssets: ControlMarkerAssets | null = null;
 
   private readonly tier: QualityTier;
   private readonly touch: boolean;
@@ -170,13 +181,21 @@ export class ForestScene {
     await loadDetailTextures(this.tier);
 
     step(0.55, 'models');
-    const [spruce, beech, boulder, deadwood] = await Promise.all([
+    const [spruce, beech, boulder, deadwood, controls] = await Promise.all([
       loadAsset('/models/spruce.glb', 'spruce'),
       loadAsset('/models/beech.glb', 'beech'),
       loadAsset('/models/boulder-set.glb', 'boulder'),
       loadAsset('/models/deadwood.glb', 'deadwood'),
+      // The course furniture. A failure here must not take the forest with it:
+      // an unflagged race is bad, a venue that will not load is worse.
+      loadControlAssets().catch((err: unknown) => {
+        this.warnings.push(`control markers unavailable: ${String(err)}`);
+        return null;
+      }),
     ]);
     this.assets = [spruce, beech, boulder, deadwood];
+    if (controls) this.assets.push(controls.flag, controls.stand, controls.si, controls.gantry);
+    this.controlAssets = controls;
 
     // The spruce is mid-rework. Check its proportions rather than trusting them,
     // so a bad drop-in is a named warning instead of a forest that looks off for
@@ -262,6 +281,16 @@ export class ForestScene {
     // --- the beginner's bearing aid ---
     this.bearing = new BearingBand(this.field, aidColour());
     this.scene.add(this.bearing.group);
+
+    // --- the control flags ---
+    // Empty until a race hands over a course. The scene never learns what a
+    // control is; it is given points, facings and a visibility mask.
+    if (this.controlAssets) {
+      this.markers = new ControlMarkers(this.field, this.controlAssets);
+      this.warnings.push(...this.markers.warnings);
+      for (const w of this.markers.warnings) console.warn('[controls]', w);
+      this.scene.add(this.markers.group);
+    }
 
     this.camera.position.set(
       this.spawn.x,
@@ -476,6 +505,7 @@ export class ForestScene {
     }
 
     this.bearing?.update(this.aim, dt);
+    this.markers?.update(this.camera, dt);
 
     this.terrain.update(this.camera);
     this.vegetation.update(this.camera, dt);
@@ -517,6 +547,22 @@ export class ForestScene {
    */
   setBearingAid(aim: BearingAim | null): void {
     this.aim = aim;
+  }
+
+  /**
+   * Put the course's flags on the ground. See `ControlMarkers`.
+   *
+   * Same separation as `setBearingAid`: this scene is handed points and
+   * facings. Which points, and which of them a player is allowed to see, is the
+   * race controller's business — and the answer to the second one is what keeps
+   * the game a navigation game.
+   */
+  setCourseMarkers(markers: readonly ControlMarker[]): void {
+    this.markers?.setMarkers(markers);
+  }
+
+  setMarkerState(state: ControlMarkerState): void {
+    this.markers?.setState(state);
   }
 
   private applyExternal(dt: number): void {
@@ -728,6 +774,9 @@ export class ForestScene {
       drawCalls: this.renderer.sceneCalls,
       triangles: this.renderer.sceneTriangles,
       terrainChunks: this.terrain.visibleCount,
+      flags: this.markers
+        ? `${this.markers.stats.drawn}/${this.markers.stats.markers}`
+        : 'none',
       trees: this.vegetation.stats.trees,
       imposters: this.vegetation.stats.imposters,
       boulders: this.vegetation.stats.boulders,
@@ -761,6 +810,9 @@ export class ForestScene {
 
     this.bearing?.dispose();
     this.bearing = null;
+    this.markers?.dispose();
+    this.markers = null;
+    this.controlAssets = null;
     this.viewmodel?.dispose();
     this.runner?.dispose();
     this.terrain?.dispose();

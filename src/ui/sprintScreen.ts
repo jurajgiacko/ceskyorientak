@@ -101,6 +101,21 @@ export function makeSprintScreen(opts: SprintScreenOptions): Screen {
         const { RaceController } = await import('@/race/controller');
         const setup = opts.race;
         const s = scene;
+        // The town, for the course setter.
+        //
+        // Fetched again rather than read off the scene, which keeps `src/world`
+        // ignorant of what a control is — and it costs nothing, because the
+        // scene has already loaded this exact URL and the browser serves it
+        // from cache. A course that cannot read the townscape is still a
+        // course; it just falls back to scoring sites off the raster, so this
+        // is warned about rather than thrown.
+        const { loadTownscape } = await import('@/world/buildings');
+        let townscape;
+        try {
+          townscape = await loadTownscape('krumlov');
+        } catch (err) {
+          console.warn('[sprint] townscape unavailable — siting controls off the raster', err);
+        }
         race = new RaceController(
           s,
           {
@@ -113,6 +128,7 @@ export function makeSprintScreen(opts: SprintScreenOptions): Screen {
             startStats: setup.startStats,
             environment: 'town',
             touch: caps.touch,
+            ...(townscape ? { townscape } : {}),
             onFinish: (result, course) => {
               void (async () => {
                 const { makeResultsScreen } = await import('./resultsScreen');

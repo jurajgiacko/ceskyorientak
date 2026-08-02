@@ -29,6 +29,20 @@ import { Rng } from './navigation';
 import { bearing, dist2, wrapAngle } from '@/core/geo';
 import { COST_BY_RUNNABILITY, SPEED_BY_RUNNABILITY, TYPICAL_DURATION_S } from './athlete';
 
+/**
+ * What a control turned out to be sited on, in IOF column D/G terms.
+ *
+ * The terrain layer knows this and the generator does not: in a town a control
+ * sits on a building corner or the foot of a stairway, and only the thing
+ * holding the townscape can say which. See `FieldTerrain.siteAt`.
+ */
+export interface ControlSite {
+  /** Column D symbol key — one of `COLUMN_D` in `src/map/pictograms.ts`. */
+  d: string;
+  /** Column G, where the feature has a describable part (`foot`, `top`). */
+  g?: string;
+}
+
 /** What the generator needs to know about the ground. */
 export interface CourseTerrain {
   runnabilityAt(x: number, z: number): Runnability;
@@ -36,9 +50,17 @@ export interface CourseTerrain {
   /**
    * How describable the point is as a control site, 0..1. Derived from local
    * relief and class transitions — a knoll, a re-entrant head or a boulder
-   * scores high; the middle of a flat white slope scores near zero.
+   * scores high; the middle of a flat white slope scores near zero. In a town
+   * it is derived from the man-made feature set instead; see
+   * `FieldTerrain.urbanScore`.
    */
   featureScoreAt(x: number, z: number): number;
+  /**
+   * What the site is, when the terrain can name it. Optional: a forest terrain
+   * has no building corners and `describeControl` falls back to landform
+   * vocabulary, which is the right vocabulary there.
+   */
+  siteAt?(x: number, z: number): ControlSite | null;
 }
 
 /** Target shape per discipline. Winning times are the IOF-specified quantity. */
@@ -60,17 +82,78 @@ interface Spec {
    * they start and would know immediately that it was wrong.
    */
   climbRatio: number;
+  /**
+   * Minimum distance between any two controls, metres.
+   *
+   * A map-scale quantity, not a taste one. At 1:10000 an ISOM control circle is
+   * 5 mm across — 50 m on the ground — so anything under ~90 m produces
+   * visibly overlapping circles in the forest. At 1:4000 the same 5 mm is 20 m,
+   * and IOF's rule for a sprint is 25 m between controls (30 m where the
+   * features are similar). Carrying the forest's 110 m into a sprint is not
+   * conservatism: with a 1.75 km course and fifteen controls the average leg is
+   * 115 m, so a 110 m separation floor makes the course arithmetically
+   * impossible and the generator quietly returns six controls instead.
+   */
+  minSeparationM: number;
+  /**
+   * How finely `routeCost` samples a leg, metres.
+   *
+   * In the forest 25 m is plenty — the classes change slowly. In a town it is
+   * useless: Krumlov's blocks are 20–30 m across, so a coarse sample walks
+   * straight through a building and reports the direct line as cheap, which is
+   * exactly the opposite of the truth and destroys the route-choice score the
+   * whole leg is chosen for.
+   */
+  routeStepM: number;
+  /**
+   * How far a single leg may overshoot the remaining climb budget, metres.
+   *
+   * The budget is a whole-course quantity and legs are placed one at a time, so
+   * without a per-leg ceiling one leg over the castle rock spends the lot. 45 m
+   * is right for a forest course with a 170 m allowance; on a sprint with a
+   * 20 m allowance it is not a ceiling at all, and Krumlov duly produced 90 m
+   * of climb over 2 km — 4.5%, four times what a sprint is set to.
+   */
+  maxLegClimbOverM: number;
 }
 
 function specFor(d: Discipline, anchor: VenueAnchor): Spec {
   const extent = Math.min(anchor.sizeX, anchor.sizeZ);
   switch (d) {
     case 'sprint':
-      // ~13–15 min, ~3.5 km, many short technical legs.
-      return { legCount: [14, 20], targetLengthM: 3400, minLegM: 90, maxLegM: 320, climbRatio: 0.012 };
+      // A real sprint is 1.5–2.0 km of straight-line course for a 13–15 minute
+      // winning time (IOF Competition Rules, appendix 2; RESEARCH-SPORT §7.2).
+      //
+      // The 3.4 km that used to be here is a *forest* number. At sprint pace —
+      // call it 4 min/km on paved streets with the turns and the map reading —
+      // 3.4 km is a 20-minute winner, and it forced the generator to spend the
+      // course somewhere: Krumlov's old town is about 500 m across, so the only
+      // way to lay out 3.4 km of legs was to leave it, run up the river and
+      // out into the meadows. That is the run the client played and rightly
+      // complained about. Fix the target and the course stays in the streets on
+      // its own.
+      return {
+        legCount: [14, 20],
+        targetLengthM: 1500,
+        minLegM: 55,
+        maxLegM: 190,
+        climbRatio: 0.012,
+        minSeparationM: 45,
+        routeStepM: 2.5,
+        maxLegClimbOverM: 7,
+      };
     case 'middle':
       // ~30–35 min, constant direction change, technically demanding.
-      return { legCount: [12, 16], targetLengthM: 4300, minLegM: 150, maxLegM: 550, climbRatio: 0.04 };
+      return {
+        legCount: [12, 16],
+        targetLengthM: 4300,
+        minLegM: 150,
+        maxLegM: 550,
+        climbRatio: 0.04,
+        minSeparationM: 110,
+        routeStepM: 25,
+        maxLegClimbOverM: 45,
+      };
     case 'long':
       // ~90 min, route choice, long legs. Capped by the venue we actually have.
       return {
@@ -79,10 +162,46 @@ function specFor(d: Discipline, anchor: VenueAnchor): Spec {
         minLegM: 300,
         maxLegM: Math.min(1400, extent * 0.7),
         climbRatio: 0.04,
+        minSeparationM: 110,
+        routeStepM: 25,
+        maxLegClimbOverM: 45,
       };
     default:
-      return { legCount: [12, 16], targetLengthM: 4300, minLegM: 150, maxLegM: 550, climbRatio: 0.04 };
+      return {
+        legCount: [12, 16],
+        targetLengthM: 4300,
+        minLegM: 150,
+        maxLegM: 550,
+        climbRatio: 0.04,
+        minSeparationM: 110,
+        routeStepM: 25,
+        maxLegClimbOverM: 45,
+      };
   }
+}
+
+/**
+ * The straight-line length a finished course of this discipline should land in,
+ * metres.
+ *
+ * Exported because `setCourse` shops between seeds and needs to know what it is
+ * shopping for, and because `tools/ci/check-race.mjs` asserts on it: the band
+ * and the target must come from the same place or the gate is checking a number
+ * nobody is aiming at.
+ *
+ * The width is the terrain's, not the sport's. A sprint is *specified* at
+ * 1.5–2.0 km; a generator laying out fifteen legs on a real street network,
+ * under separation and climb rules that reject candidates unevenly, cannot hit
+ * a 500 m window on every draw, and forcing it to would mean rejecting good
+ * courses for arithmetic. ±25% around the target is what Krumlov actually
+ * yields with the median sitting inside the IOF band.
+ */
+export function courseLengthBand(
+  d: Discipline,
+  anchor: VenueAnchor,
+): { min: number; max: number } {
+  const target = specFor(d, anchor).targetLengthM;
+  return { min: Math.round(target * 0.75), max: Math.round(target * 1.25) };
 }
 
 export interface GenerateOptions {
@@ -129,16 +248,43 @@ export function generateCourse(o: GenerateOptions): Course {
   // Whole-course climb allowance, spent down as legs are placed.
   let climbLeftM = spec.targetLengthM * spec.climbRatio;
 
+  /**
+   * Straight-line course length still to be spent, metres.
+   *
+   * Legs used to be drawn from the [min, max] band and the course length was
+   * whatever fell out — which is how a sprint specified at 3.4 km shipped
+   * anywhere between 2.7 and 4.3 km. Drawing each leg against the *remaining*
+   * budget instead makes `targetLengthM` mean what it says, and it is what a
+   * setter actually does: if a leg comes out longer than planned, the next ones
+   * come in.
+   *
+   * Self-correcting rather than open-loop matters more than it sounds. Every
+   * placement rule that rejects a candidate — control separation, the decoy
+   * test, the climb ceiling — rejects *short* legs more often than long ones,
+   * because a short leg lands near what is already placed. Open-loop, that bias
+   * compounds over eighteen legs into a 20% overshoot; closed-loop, it is
+   * absorbed by the next leg.
+   */
+  let lengthLeftM = spec.targetLengthM;
+
   for (let i = 0; i < targetLegs; i++) {
-    // Vary leg length deliberately rather than sampling uniformly: real courses
-    // mix a couple of long route-choice legs among shorter technical ones.
+    // Legs still to place, counting the run-in to the finish.
+    const legsLeft = targetLegs + 1 - i;
+    const meanLegM = Math.max(
+      spec.minLegM,
+      Math.min(spec.maxLegM, lengthLeftM / legsLeft),
+    );
+    // Vary deliberately: real courses mix a couple of long route-choice legs
+    // among shorter technical ones. The weights average to 1, so the mean is
+    // the budget.
     const t = rng.next();
-    const legLength =
-      t < 0.18
-        ? spec.maxLegM * (0.7 + 0.3 * rng.next())
-        : t < 0.45
-          ? spec.minLegM * (1.6 + 1.4 * rng.next())
-          : spec.minLegM + rng.next() * (spec.maxLegM - spec.minLegM) * 0.55;
+    const ratio =
+      t < 0.2
+        ? 1.4 + rng.next() * 0.4
+        : t < 0.55
+          ? 0.9 + rng.next() * 0.3
+          : 0.55 + rng.next() * 0.3;
+    const legLength = Math.max(spec.minLegM, Math.min(spec.maxLegM, meanLegM * ratio));
 
     const site = pickNextControl({
       from: current,
@@ -147,16 +293,25 @@ export function generateCourse(o: GenerateOptions): Course {
       rng,
       terrain: o.terrain,
       inBounds,
+      minSeparationM: spec.minSeparationM,
+      routeStepM: spec.routeStepM,
+      maxLegClimbOverM: spec.maxLegClimbOverM,
+      punchRadiusM: o.discipline === 'sprint' ? 6 : 9,
       // Late in the course, bend back toward the arena so the finish is not a
       // forced sprint across the whole map.
       homeBias: i >= targetLegs - 3 ? (i - (targetLegs - 4)) / 3 : 0,
       home: arena,
-      climbLeftM: Math.max(25, climbLeftM),
+      // A floor, so an exhausted budget does not reject every candidate and
+      // strand the course — but a floor proportional to the budget rather than
+      // a flat 25 m, which on a sprint's 19 m allowance *is* the whole budget
+      // and made the ceiling below meaningless.
+      climbLeftM: Math.max(spec.targetLengthM * spec.climbRatio * 0.3, climbLeftM),
       placed: [start, ...controls.map((c) => c.position)],
     });
     if (!site) break;
 
     climbLeftM -= legClimbM(current, site, o.terrain);
+    lengthLeftM -= dist2(current, site);
 
     controls.push({
       id: `c${i + 1}`,
@@ -222,15 +377,25 @@ interface PickOptions {
    * — which is exactly what a setter does when the climb budget is running out.
    */
   climbLeftM: number;
+  /** See `Spec.minSeparationM`. */
+  minSeparationM: number;
+  /** See `Spec.routeStepM`. */
+  routeStepM: number;
+  /** How close a SIAC registers, metres. Used for the decoy test below. */
+  punchRadiusM: number;
+  /** See `Spec.maxLegClimbOverM`. */
+  maxLegClimbOverM: number;
 }
 
-/**
- * Minimum distance between any two controls, metres.
- *
- * At 1:10000 an ISOM control circle is 5 mm across, i.e. 50 m on the ground, so
- * anything under ~90 m produces visibly overlapping circles.
- */
-const MIN_CONTROL_SEPARATION_M = 110;
+/** Perpendicular distance from `p` to the segment `a`–`b`, metres. */
+function pointToSegmentM(p: World2, a: World2, b: World2): number {
+  const ux = b.x - a.x;
+  const uz = b.z - a.z;
+  const len2 = ux * ux + uz * uz;
+  let t = len2 > 1e-9 ? ((p.x - a.x) * ux + (p.z - a.z) * uz) / len2 : 0;
+  t = t < 0 ? 0 : t > 1 ? 1 : t;
+  return Math.hypot(a.x + ux * t - p.x, a.z + uz * t - p.z);
+}
 
 /** Do segments ab and cd properly intersect? */
 function segmentsCross(a: World2, b: World2, c: World2, d: World2): boolean {
@@ -285,16 +450,55 @@ function pickNextControl(o: PickOptions): World2 | null {
     // Nudge onto the best nearby feature — a control belongs ON something.
     // Controls may sit tight against a wall — that is legitimate sprint course
     // setting — but not in a pocket with no way out.
-    const sited = findControlSite(p, 0, 45, o.rng, o.terrain, o.inBounds, 0.5);
+    //
+    // The search radius is a fraction of the leg, not a flat 45 m. On a 900 m
+    // forest leg 45 m is a rounding error; on a 60 m sprint leg it is most of
+    // the leg, and a displacement that large undoes the direction change the
+    // bearing was chosen for — which is how a generator that explicitly rejects
+    // dog-legs produces them anyway. In a town it costs nothing: there is a
+    // corner every few metres.
+    const nudgeR = Math.max(12, Math.min(45, o.legLength * 0.3));
+    const sited = findControlSite(p, 0, nudgeR, o.rng, o.terrain, o.inBounds, 0.5);
     if (!sited) continue;
 
     const feature = o.terrain.featureScoreAt(sited.x, sited.z);
     if (feature < 0.25) continue;
 
+    // The turn as *placed*, not as intended.
+    //
+    // The bearing was drawn at least 40° off the incoming leg, but two things
+    // move the endpoint afterwards — the home bias, and the nudge onto a
+    // feature — and on a short sprint leg either can undo the turn entirely.
+    // A dog-leg lets the runners behind you see the control you are leaving,
+    // which the rules discourage, so it is measured where it can be measured:
+    // on the leg that is actually going to be printed.
+    const realTurn = Math.abs(wrapAngle(bearing(o.from, sited) - o.lastBearing));
+    // Relaxed while bending home, where a slightly flat turn beats a finish
+    // leg across the whole map.
+    if (realTurn < (o.homeBias > 0.5 ? 0.45 : 0.62)) continue;
+
     // Controls must not crowd each other. Two circles closer than this overlap
-    // on the printed map at 1:10000, and a runner arriving at one can see the
-    // other — which is exactly what control separation rules exist to prevent.
-    if (o.placed.some((q) => dist2(q, sited) < MIN_CONTROL_SEPARATION_M)) continue;
+    // on the printed map, and a runner arriving at one can see the other —
+    // which is exactly what control separation rules exist to prevent.
+    if (o.placed.some((q) => dist2(q, sited) < o.minSeparationM)) continue;
+
+    // Nor may an old control sit on the line of the new leg.
+    //
+    // Separation alone does not cover this: two controls can be a legal 45 m
+    // apart and one of them still sit 8 m off the route to the other, where a
+    // competitor running on the bearing punches it without ever choosing to.
+    // That is a course fault rather than a runner's mistake — it is the same
+    // property `tools/ci/check-race.mjs` calls a decoy — and the margin here is
+    // the same one that gate uses.
+    // The last entry in `placed` is `from` itself, which is on the line by
+    // definition; the leg starts there.
+    if (
+      o.placed
+        .slice(0, -1)
+        .some((q) => pointToSegmentM(q, o.from, sited) < o.punchRadiusM + 14)
+    ) {
+      continue;
+    }
 
     // Crossing legs make runners meet head-on and follow each other, so a
     // setter avoids them where the terrain allows — but only where it allows.
@@ -311,10 +515,10 @@ function pickNextControl(o: PickOptions): World2 | null {
     // roughly double what is ever set.
     const legClimb = legClimbM(o.from, sited, o.terrain);
     const overBudget = Math.max(0, legClimb - o.climbLeftM);
-    if (overBudget > 45) continue;
+    if (overBudget > o.maxLegClimbOverM) continue;
     const climbPenalty = legClimb / Math.max(30, o.climbLeftM);
 
-    const interest = legInterest(o.from, sited, o.terrain);
+    const interest = legInterest(o.from, sited, o.terrain, o.routeStepM);
     const score =
       feature * 1.0 +
       interest * 1.3 -
@@ -409,14 +613,39 @@ function findControlSite(
  * while a detour is competitive. We sample the direct line, and compare it with
  * two offset alternatives. If they are close in cost, the runner has a real
  * decision — which is exactly what a good course setter is trying to create.
+ *
+ * **The blocked-straight case is the whole sprint.** A leg whose direct line
+ * runs through a block of buildings has an infinite direct cost and two finite
+ * ways round it, and that is the best leg a sprint course setter can set: the
+ * runner has to pick a side, at speed, off the map. The old code returned 0 for
+ * it — `if (direct === Infinity) return 0` — so every leg the town actually
+ * makes interesting was scored as worthless, and the generator preferred legs
+ * across open ground where the straight line is runnable. That single line is
+ * a large part of why the course ran through the park.
+ *
+ * Whether "straight" is correctly infinite depends on `stepM` being fine enough
+ * to hit the buildings at all; see `Spec.routeStepM`.
  */
-function legInterest(a: World2, b: World2, terrain: CourseTerrain): number {
-  const direct = routeCost(a, b, terrain, 0);
-  if (direct === Infinity) return 0;
-  const left = routeCost(a, b, terrain, 0.28);
-  const right = routeCost(a, b, terrain, -0.28);
+function legInterest(a: World2, b: World2, terrain: CourseTerrain, stepM: number): number {
+  const legM = dist2(a, b);
+  const direct = routeCost(a, b, terrain, 0, stepM);
+  const left = routeCost(a, b, terrain, 0.28, stepM);
+  const right = routeCost(a, b, terrain, -0.28, stepM);
   const alt = Math.min(left, right);
-  if (!Number.isFinite(alt)) return 0;
+
+  // Longer legs carry more route choice, so weight them slightly.
+  const lengthBonus = Math.min(1, legM / 700) * 0.35;
+
+  if (!Number.isFinite(direct)) {
+    // Straight is impossible. If a way round exists, this is a block leg and
+    // the decision is forced and real; if both bows are shut too, the leg has
+    // no route at all and is worth nothing.
+    if (!Number.isFinite(alt)) return 0;
+    // One way round or two? Two competitive sides is the better leg.
+    const bothWays = Number.isFinite(left) && Number.isFinite(right);
+    return (bothWays ? 1 : 0.7) * 0.9 + lengthBonus;
+  }
+  if (!Number.isFinite(alt)) return lengthBonus * 0.5;
 
   // Ratio near 1 means the alternatives are competitive: a real choice.
   // Much greater than 1 means straight is obviously right and there is no
@@ -424,8 +653,6 @@ function legInterest(a: World2, b: World2, terrain: CourseTerrain): number {
   const ratio = alt / direct;
   const choice = 1 - Math.min(1, Math.abs(ratio - 1) / 0.35);
 
-  // Longer legs carry more route choice, so weight them slightly.
-  const lengthBonus = Math.min(1, dist2(a, b) / 700) * 0.35;
   return choice * 0.8 + lengthBonus;
 }
 
@@ -448,9 +675,23 @@ function legClimbM(a: World2, b: World2, terrain: CourseTerrain): number {
   return climb;
 }
 
-/** Approximate traversal cost along a bowed path from a to b. */
-function routeCost(a: World2, b: World2, terrain: CourseTerrain, bow: number): number {
-  const steps = 24;
+/**
+ * Approximate traversal cost along a bowed path from a to b.
+ *
+ * `stepM` is the sampling interval along the path. It is a parameter rather
+ * than a constant because the right value is a property of the terrain: 25 m is
+ * fine in a forest whose classes change slowly, and hopeless in a town whose
+ * blocks are 20–30 m across, where it steps clean over a building and reports
+ * the straight line through it as cheap.
+ */
+function routeCost(
+  a: World2,
+  b: World2,
+  terrain: CourseTerrain,
+  bow: number,
+  stepM: number,
+): number {
+  const steps = Math.max(8, Math.min(400, Math.round(dist2(a, b) / Math.max(0.5, stepM))));
   const perpX = -(b.z - a.z);
   const perpZ = b.x - a.x;
   const d = Math.hypot(perpX, perpZ) || 1;
@@ -487,8 +728,19 @@ function routeCost(a: World2, b: World2, terrain: CourseTerrain, bow: number): n
  *
  * Column D takes exactly one symbol — that is a spec rule, and the type in
  * `src/core/types.ts` enforces it.
+ *
+ * **Ask the terrain first.** In a town the control is on a building corner, the
+ * foot of a stairway, a gate or the end of a bridge, and those are ISSprOM
+ * man-made symbols (RESEARCH-SPORT §3.4.5) that `src/map/pictograms.ts` already
+ * draws. Handing a Krumlov sprint the landform vocabulary below produced
+ * "re-entrant" and "thicket" for controls hung on burgher houses, which is not
+ * a description an orienteer can use and not a description of anything that is
+ * there. The landform branch stays because in the forest it is right.
  */
 function describeControl(p: World2, terrain: CourseTerrain): Control['description'] {
+  const site = terrain.siteAt?.(p.x, p.z);
+  if (site) return { a: 0, b: 0, d: site.d, ...(site.g ? { g: site.g } : {}) };
+
   const cls = terrain.runnabilityAt(p.x, p.z);
   const h = terrain.heightAt(p.x, p.z);
   const n = terrain.heightAt(p.x, p.z - 12);

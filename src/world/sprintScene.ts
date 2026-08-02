@@ -41,6 +41,8 @@ import type { Asset } from './vegetation';
 import { loadDetailTextures } from './materials';
 import { BearingBand, aidColour } from './bearingBand';
 import type { BearingAim } from './bearingBand';
+import { ControlMarkers, loadControlAssets } from './controlMarkers';
+import type { ControlMarker, ControlMarkerAssets, ControlMarkerState } from './controlMarkers';
 
 export interface SprintSceneOptions {
   canvas: HTMLCanvasElement;
@@ -80,6 +82,9 @@ export class SprintScene {
   /** The beginner's bearing aid. Null until the world is built. */
   private bearing: BearingBand | null = null;
   private aim: BearingAim | null = null;
+  /** The control flags, start kite and finish gantry. See `ForestScene`. */
+  private markers: ControlMarkers | null = null;
+  private controlAssets: ControlMarkerAssets | null = null;
   private data!: TownscapeData;
   private surfaces: SurfaceTextures[] = [];
   /** See the same field on `ForestScene` — held so `dispose` can release it. */
@@ -171,6 +176,15 @@ export class SprintScene {
       // A missing tree asset must not take the town down with it — the trees
       // are scenery here, unlike in the forest where they are the subject.
       this.warnings.push(`vegetation assets unavailable: ${String(err)}`);
+    }
+
+    step(0.7, 'controls');
+    try {
+      this.controlAssets = await loadControlAssets();
+      const c = this.controlAssets;
+      this.assets.push(c.flag, c.stand, c.si, c.gantry);
+    } catch (err) {
+      this.warnings.push(`control markers unavailable: ${String(err)}`);
     }
 
     step(0.8, 'buildings');
@@ -270,6 +284,14 @@ export class SprintScene {
     // --- the beginner's bearing aid ---------------------------------------
     this.bearing = new BearingBand(this.field, aidColour());
     this.scene.add(this.bearing.group);
+
+    // --- the control flags -------------------------------------------------
+    if (this.controlAssets) {
+      this.markers = new ControlMarkers(this.field, this.controlAssets);
+      this.warnings.push(...this.markers.warnings);
+      for (const w of this.markers.warnings) console.warn('[controls]', w);
+      this.scene.add(this.markers.group);
+    }
 
     // --- camera ----------------------------------------------------------
     this.camera.position.set(
@@ -374,6 +396,15 @@ export class SprintScene {
     this.aim = aim;
   }
 
+  /** Put the course's flags on the ground. See `ForestScene.setCourseMarkers`. */
+  setCourseMarkers(markers: readonly ControlMarker[]): void {
+    this.markers?.setMarkers(markers);
+  }
+
+  setMarkerState(state: ControlMarkerState): void {
+    this.markers?.setState(state);
+  }
+
   // -------------------------------------------------------------------------
   // Input
   // -------------------------------------------------------------------------
@@ -467,6 +498,7 @@ export class SprintScene {
     }
 
     this.bearing?.update(this.aim, dt);
+    this.markers?.update(this.camera, dt);
 
     this.terrain.update(this.camera);
     this.buildings.update(this.camera);
@@ -569,6 +601,9 @@ export class SprintScene {
       steps: this.town.stats.steps,
       streetTrees: this.town.stats.trees,
       slopeTrees: this.vegetation ? this.vegetation.stats.trees : 0,
+      flags: this.markers
+        ? `${this.markers.stats.drawn}/${this.markers.stats.markers}`
+        : 'none',
       paved: this.stampedCells,
       landmarkTris: this.landmarks.stats.triangles,
       blockedHere: this.blockedAt(this.camera.position.x, this.camera.position.z) ? 'yes' : 'no',
@@ -591,6 +626,9 @@ export class SprintScene {
 
     this.bearing?.dispose();
     this.bearing = null;
+    this.markers?.dispose();
+    this.markers = null;
+    this.controlAssets = null;
     this.terrain?.dispose();
     this.buildings?.dispose();
     this.town?.dispose();
