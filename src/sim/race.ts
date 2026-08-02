@@ -100,6 +100,16 @@ export class Race {
   splits: Split[] = [];
   nextControl = 0;
 
+  /**
+   * Punches on controls that were not the current target.
+   *
+   * Kept because a real SI card keeps them, and because the results screen
+   * should be able to say "you ran past 3 twice" — which is interesting, and is
+   * exactly the kind of thing a split analysis shows. They never affect
+   * validity.
+   */
+  private extraPunches: { code: number; atS: number }[] = [];
+
   /** Recorded for the ghost. Downsampled — see `ROUTE_SAMPLE_S`. */
   private route: RoutePoint[] = [];
   private lastRouteAt = -1;
@@ -260,22 +270,31 @@ export class Race {
     const a = this.athlete;
 
     if (this.nextControl < this.course.controls.length) {
-      const target = this.course.controls[this.nextControl]!;
-
-      // Any control within range, not only the right one — otherwise a wrong
-      // punch is impossible and the rule has no teeth.
+      // Extra punches are RECORDED AND IGNORED. This is the real rule and it
+      // took a disqualification to get right.
+      //
+      // A SportIdent card holds every punch in order, and the download checks
+      // that the required controls appear **as a subsequence**. Punching a
+      // control that is not your current target — one you already visited, or
+      // one you will need later — is simply an extra entry between the ones
+      // that matter. It is not an offence. You are disqualified for *missing* a
+      // control or taking the required ones out of order, which is a property
+      // of the whole record and can only be judged at the finish.
+      //
+      // Treating a stray punch as an instant DSQ was both wrong and brutal in a
+      // sprint: at 45 m control separation and a 6 m punch radius, Krumlov's
+      // street network forces you past controls you have not reached yet, and
+      // the client was disqualified for running down the correct street.
       for (let i = 0; i < this.course.controls.length; i++) {
         const c = this.course.controls[i]!;
         if (dist2(a.position, c.position) > c.punchRadius) continue;
 
         if (i !== this.nextControl) {
-          // Punching a control you have already visited is harmless — the SI
-          // unit records it and the sequence is still intact. Punching one
-          // ahead of you breaks the sequence.
-          if (i < this.nextControl) continue;
-          this.phase = 'mispunched';
-          this.mispunch = { expected: target.id, got: c.id };
-          return;
+          // Log it the way the card would, and carry on.
+          if (this.extraPunches[this.extraPunches.length - 1]?.code !== c.code) {
+            this.extraPunches.push({ code: c.code, atS: a.timeS });
+          }
+          continue;
         }
 
         this.punch(c);

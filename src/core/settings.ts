@@ -12,7 +12,13 @@
  * blend and the map texture binding are all still there and still work — and
  * this switch brings them back for anyone who wants them.
  *
- * `beginnerAid` defaults to **on**, which is the opposite call and the right
+ * `beginnerAid` now defaults to **off**. It was on, on the reasoning that most
+ * players are newcomers — but the map turned out to carry the job on its own
+ * once it was legible, and a translucent corridor across the ground competes
+ * with the thing the game is actually about. It stays one tap away for anyone
+ * who wants it.
+ *
+ * Historic note: `beginnerAid` defaulted to on, which was the opposite call and the right
  * one: almost nobody arriving here has orienteered, and the brief asks that a
  * non-orienteer understands the game inside a minute. What it turns on is
  * deliberately weak — a bearing band that flares, and fades out before the
@@ -34,7 +40,7 @@ export interface Settings {
 const DEFAULTS: Settings = {
   showHands: false,
   thirdPerson: false,
-  beginnerAid: true,
+  beginnerAid: false,
 };
 
 let cache: Settings | null = null;
