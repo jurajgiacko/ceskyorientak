@@ -10,7 +10,7 @@
 
 import * as THREE from 'three';
 import type { Capabilities, QualityTier } from '@/core/capabilities';
-import { exposeForHarness } from '@/core/perf';
+import { clearHarness, exposeForHarness } from '@/core/perf';
 import { getVenue } from '@/core/venues';
 import type { VenueId } from '@/core/types';
 import { TerrainField, TerrainMesh, findForestSpawn, pickHeroYaw } from './terrain';
@@ -19,7 +19,7 @@ import type { GroundTextures } from './materials';
 import { WorldRenderer, makeFog } from './renderer';
 import { GodRays, SkyRig, RACE_MORNING } from './sky';
 import type { Weather } from './sky';
-import { Vegetation, assertAssetSane, loadAsset } from './vegetation';
+import { Vegetation, assertAssetSane, disposeAsset, loadAsset } from './vegetation';
 import type { Asset } from './vegetation';
 import { RunnerCharacter } from './runner';
 import type { RunnerIntent } from './runner';
@@ -62,6 +62,13 @@ export class ForestScene {
   private sky!: SkyRig;
   private godRays: GodRays | null = null;
   private ground!: GroundTextures;
+  /**
+   * The .glb-derived geometry and materials this scene loaded.
+   *
+   * Held only so `dispose` can release them: `loadAsset` is uncached, so these
+   * are this scene's own allocations and nothing else will ever free them.
+   */
+  private assets: Asset[] = [];
 
   private readonly tier: QualityTier;
   private readonly touch: boolean;
@@ -164,6 +171,7 @@ export class ForestScene {
       loadAsset('/models/boulder-set.glb', 'boulder'),
       loadAsset('/models/deadwood.glb', 'deadwood'),
     ]);
+    this.assets = [spruce, beech, boulder, deadwood];
 
     // The spruce is mid-rework. Check its proportions rather than trusting them,
     // so a bad drop-in is a named warning instead of a forest that looks off for
@@ -303,6 +311,17 @@ export class ForestScene {
   // Input
   // -------------------------------------------------------------------------
 
+  /**
+   * Undo everything `attachInput` did.
+   *
+   * These listeners live on `window` and `document`, not on the canvas, so
+   * removing the canvas does not remove them: they outlived the screen, kept
+   * the whole scene alive through their closures, and — because a quit race
+   * leaves the next one listening twice — turned W into two scenes' worth of
+   * movement. This is the listener half of the teardown; `dispose` runs it.
+   */
+  private readonly inputDisposers: (() => void)[] = [];
+
   attachInput(target: HTMLElement): void {
     if (this.bench) return;
 
@@ -319,20 +338,33 @@ export class ForestScene {
         e.preventDefault();
       }
     };
-    window.addEventListener('keydown', (e) => onKey(e, true));
-    window.addEventListener('keyup', (e) => onKey(e, false));
-
-    target.addEventListener('click', () => {
+    const onKeyDown = (e: KeyboardEvent) => onKey(e, true);
+    const onKeyUp = (e: KeyboardEvent) => onKey(e, false);
+    const onClick = () => {
       if (!this.pointerLocked) void target.requestPointerLock();
-    });
-    document.addEventListener('pointerlockchange', () => {
+    };
+    const onPointerLock = () => {
       this.pointerLocked = document.pointerLockElement === target;
-    });
-    target.addEventListener('mousemove', (e) => {
+    };
+    const onMouseMove = (e: MouseEvent) => {
       if (!this.pointerLocked) return;
       this.yaw -= e.movementX * 0.0022;
       this.pitch = this.clampPitch(this.pitch - e.movementY * 0.0022);
       if (this.cameraMode === 'first') this.applyLook();
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('keyup', onKeyUp);
+    target.addEventListener('click', onClick);
+    document.addEventListener('pointerlockchange', onPointerLock);
+    target.addEventListener('mousemove', onMouseMove);
+
+    this.inputDisposers.push(() => {
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('keyup', onKeyUp);
+      target.removeEventListener('click', onClick);
+      document.removeEventListener('pointerlockchange', onPointerLock);
+      target.removeEventListener('mousemove', onMouseMove);
     });
   }
 
@@ -685,15 +717,44 @@ export class ForestScene {
     };
   }
 
+  /**
+   * Give everything back.
+   *
+   * Order matters in one place only — the renderer goes last, because losing
+   * its context first would make every `dispose()` above it a no-op against a
+   * dead context. Everything else is independent.
+   *
+   * The `window` hooks are not an afterthought at the end of this list. They
+   * are the reason the rest of it can take effect: while `__world` and
+   * `__perf` still pointed here, the whole graph stayed reachable and the JS
+   * side of the teardown freed nothing at all.
+   */
   dispose(): void {
     this.stop();
+    this.beforeFrame = null;
+    this.external = null;
+    for (const d of this.inputDisposers) d();
+    this.inputDisposers.length = 0;
+
     this.viewmodel?.dispose();
     this.runner?.dispose();
     this.terrain?.dispose();
     this.vegetation?.dispose();
     this.sky?.dispose();
     this.ground?.dispose();
+    for (const a of this.assets) disposeAsset(a);
+    this.assets = [];
+
+    this.camera.clear();
+    this.scene.clear();
+    this.scene.background = null;
+    this.scene.fog = null;
+
     this.renderer.dispose();
+
+    clearHarness();
+    const w = window as unknown as Record<string, unknown>;
+    if (w.__world === this) delete w.__world;
   }
 }
 

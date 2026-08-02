@@ -33,7 +33,7 @@ import { Runnability } from '@/core/types';
 import { SPEED_BY_RUNNABILITY, freshStats, speedFactor } from '@/sim/athlete';
 import { GaitBlender } from './gait';
 import type { GaitSlot } from './gait';
-import { conditionCharacterMaterial } from './materials';
+import { conditionCharacterMaterial, disposeHierarchy } from './materials';
 import type { TerrainField } from './terrain';
 import { gltfLoader } from './vegetation';
 
@@ -443,9 +443,10 @@ export class RunnerCharacter {
   dispose(): void {
     this.mixer?.stopAllAction();
     this.mixer = null;
-    this.group.traverse((obj) => {
-      if (obj instanceof THREE.Mesh) obj.geometry.dispose();
-    });
+    // Geometry alone is half the job: the athlete's glTF materials carry their
+    // own albedo, normal and roughness maps, and a texture three has not been
+    // told to release stays on the GPU whatever the garbage collector does.
+    disposeHierarchy(this.group);
     this.group.clear();
   }
 }

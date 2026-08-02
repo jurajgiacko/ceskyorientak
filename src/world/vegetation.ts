@@ -32,6 +32,7 @@ import type { TerrainField } from './terrain';
 import {
   conditionAssetMaterial,
   createUndergrowthMaterial,
+  disposeMaterial,
   makeImposterMaterial,
 } from './materials';
 
@@ -201,6 +202,35 @@ export async function loadAsset(url: string, name: string): Promise<Asset> {
 }
 
 /**
+ * Release everything `loadAsset` allocated.
+ *
+ * `loadAsset` is deliberately *not* cached — each call re-parses the .glb and
+ * produces fresh geometries and materials — so whoever asked for it owns it.
+ * Nothing owned it before this existed: `Vegetation.dispose()` disposed the
+ * `InstancedMesh`es, which releases their instance matrices and nothing else,
+ * and three frees no GPU memory on garbage collection. Every trip through a
+ * scene therefore stranded four assets' worth of geometry and textures on the
+ * GPU until the context went away.
+ *
+ * Geometries are shared between the parts of a multi-material LOD, so both
+ * loops go through a Set.
+ */
+export function disposeAsset(asset: Asset): void {
+  const geometries = new Set<THREE.BufferGeometry>();
+  const materials = new Set<THREE.Material>();
+  for (const variant of asset.variants) {
+    for (const lod of variant.lods) {
+      for (const part of lod.parts) {
+        geometries.add(part.geometry);
+        materials.add(part.material);
+      }
+    }
+  }
+  for (const g of geometries) g.dispose();
+  for (const m of materials) disposeMaterial(m);
+}
+
+/**
  * Refuse to build a forest out of an asset whose proportions are impossible.
  *
  * This exists because the spruce is mid-rework: a placeholder that is 3 m tall
@@ -339,6 +369,21 @@ class Bucket {
     return true;
   }
 
+  /**
+   * Publish the instances written since `reset`.
+   *
+   * This re-sends the whole attribute, not just the `count` instances in use,
+   * and that is a deliberate choice rather than an oversight — see the note in
+   * `docs/DECISIONS.md` D-022. Uploading only `[0, count)` through
+   * `addUpdateRange` was measured and **rejected**: it removes `bufferSubData`
+   * from the profile entirely, but a partial update forbids the driver from
+   * orphaning the buffer, so it has to synchronise against in-flight draws
+   * instead. Paired A/B on sprint.desktop had it slower in five runs out of
+   * five (median 6.0 -> 7.8 ms, p95 18.0 -> 22.4 ms).
+   *
+   * The cost is real all the same, and the real fix is a smaller buffer rather
+   * than a smaller upload. D-022 records where that stands.
+   */
   flush(): void {
     for (const m of this.meshes) {
       m.count = this.count;
@@ -1222,9 +1267,17 @@ export class Vegetation {
     if (this.undergrowthMesh) {
       this.group.remove(this.undergrowthMesh);
       this.undergrowthMesh.geometry.dispose();
+      // The tuft material is built here (`createUndergrowthMaterial`) and used
+      // nowhere else, so it is ours to release. `InstancedMesh.dispose()` frees
+      // the instance attributes only.
+      const mat = this.undergrowthMesh.material;
+      for (const m of Array.isArray(mat) ? mat : [mat]) disposeMaterial(m);
       this.undergrowthMesh.dispose();
+      this.undergrowthMesh = null;
     }
+    this.group.clear();
     this.cache.clear();
+    this.scatterCache.clear();
     this.undergrowthCache.clear();
   }
 }

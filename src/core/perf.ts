@@ -141,3 +141,16 @@ export function exposeForHarness(monitor: PerfMonitor): void {
     reset: () => monitor.reset(),
   };
 }
+
+/**
+ * Take the harness hook down again when the scene that published it goes.
+ *
+ * Two closures over a `PerfMonitor` are nothing on their own. The reason this
+ * exists is that they were the *only* strong reference keeping a disposed
+ * renderer — and through it the whole scene graph — reachable from `window`
+ * after a race was quit, so none of the teardown above could actually be
+ * collected.
+ */
+export function clearHarness(): void {
+  delete (window as unknown as Record<string, unknown>).__perf;
+}

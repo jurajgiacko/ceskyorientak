@@ -317,6 +317,12 @@ export class SkyRig {
   dispose(): void {
     this.sky.geometry.dispose();
     this.sky.material.dispose();
+    // The shadow map is a render target the *light* owns, allocated lazily by
+    // the renderer on the first shadow pass. Nothing above ever sees it, so it
+    // was surviving every teardown: at the medium tier that is a 1536² depth
+    // target left resident per scene visited.
+    this.sun.shadow.dispose();
+    this.group.clear();
   }
 }
 

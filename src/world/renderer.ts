@@ -323,12 +323,25 @@ export class WorldRenderer {
 
   dispose(): void {
     for (const e of this.effects) e.dispose();
+    this.effects.length = 0;
     this.rt?.dispose();
     this.rt?.depthTexture?.dispose();
     this.composite?.geometry.dispose();
     this.compositeMat?.dispose();
     this.blackTexture.dispose();
     this.renderer.dispose();
+    // `dispose()` releases three's own bookkeeping; it does **not** release the
+    // WebGL context, which keeps every buffer and texture still bound to it
+    // resident until the canvas is collected — and a canvas the DOM has thrown
+    // away can sit uncollected for a long time. Losing the context deliberately
+    // hands the driver its memory back at teardown instead of at some GC in the
+    // middle of the next race. The canvas is discarded with the screen, so
+    // nothing will ever draw into this context again.
+    try {
+      this.renderer.forceContextLoss();
+    } catch {
+      /* no WEBGL_lose_context (or already lost) — nothing to give back */
+    }
   }
 }
 

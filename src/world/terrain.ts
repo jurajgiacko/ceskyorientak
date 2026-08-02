@@ -651,6 +651,11 @@ export class TerrainMesh {
       chunk.mesh.geometry.dispose();
     }
     this.chunks.clear();
+    // The splat material is built per scene by `createTerrainMaterial` and is
+    // held by nothing else. Its ground textures belong to `GroundTextures`,
+    // which the scene disposes separately, so this releases the program and the
+    // uniforms rather than the arrays.
+    this.material.dispose();
   }
 }
 

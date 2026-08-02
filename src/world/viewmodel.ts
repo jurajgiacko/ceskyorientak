@@ -46,7 +46,7 @@
 import * as THREE from 'three';
 import type { GLTF } from 'three/addons/loaders/GLTFLoader.js';
 import { GaitBlender } from './gait';
-import { conditionCharacterMaterial } from './materials';
+import { conditionCharacterMaterial, disposeHierarchy } from './materials';
 import { gltfLoader } from './vegetation';
 
 /** Material name in the .glb whose albedo is replaced by the live map canvas. */
@@ -463,9 +463,9 @@ export class Viewmodel {
     this.gaitBlender?.dispose();
     this.mixer = null;
     this.mapTexture.dispose();
-    this.group.traverse((obj) => {
-      if (obj instanceof THREE.Mesh) obj.geometry.dispose();
-    });
+    // See `RunnerCharacter.dispose` — the hands and the map sheet carry their
+    // own maps, and geometry-only teardown leaves all of them resident.
+    disposeHierarchy(this.group);
     this.group.clear();
   }
 }

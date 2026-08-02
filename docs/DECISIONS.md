@@ -603,7 +603,17 @@ keeps medium textures and shadows; only the amount of geometry generated per
 frame drops. Visual quality and generation cost are different axes and had been
 conflated.
 
-**What is still open, and why it is not rebaselined away.** Running the full
+**CORRECTION — the hypothesis in this section was wrong.** It claimed later
+scenes inherit state from earlier ones. They do not: `budget.mjs` opens a new
+tab per scene and closes it, which was verified by counting CDP page targets.
+Measured directly, `sprint` run four times back-to-back with no other scene
+degrades on its own (p95 10.4 → 25.4 ms), and `forest` with no menu at all
+still spikes to 108 ms. **Position in the run matters; the predecessor does
+not.** See D-022 for what it actually is. The paragraph below is left in place
+rather than deleted, because a wrong diagnosis that reads plausibly is worth
+keeping visible.
+
+**What was still open, on the wrong hypothesis.** Running the full
 gate — menu, then forest, then sprint, in one browser — still produces spikes
 (133 ms) that the same scenes do not show when measured alone (31 ms). Later
 scenes inherit something from earlier ones; the likely candidate is incomplete
@@ -614,3 +624,168 @@ flow (race → menu → race), and a p95 gate that gets relaxed whenever it fire
 stops being a gate. **The hard budgets stay as they are and the gate stays red
 on this one metric until the leak is found.** A red gate telling the truth is
 more useful than a green one that has been tuned into agreement.
+
+---
+
+## D-022 — The teardown leak was real; it was not what the gate was measuring
+
+D-021 left one thing open: the full perf run spiked where a single scene did
+not, and named incomplete teardown as the likely cause. Both halves of that turn
+out to be answerable, and they have different answers.
+
+### The leak is real, and it is fixed
+
+Driven through the actual player flow — menu → forest race → quit → sprint race
+→ quit, twice round — and reading the scene's own `renderer.info` **through**
+the teardown (stash the live `info` object before quitting, read the same object
+after):
+
+| after teardown | before | after |
+|---|---|---|
+| `memory.geometries` | **101** | **0** |
+| `memory.textures` | **15** | **6** |
+| `programs` | 13–16 | 1–5 |
+| `window.__world` | still the disposed scene | released |
+
+The residual six textures are the shared bark and granite packs, which are a
+process-wide cache and must survive — see `SHARED_TEXTURES` in `materials.ts`.
+JS heap at the menu was already flat before this work (≈6–9 MB), so the leak was
+GPU-side, which is exactly the class three.js will not collect for you.
+
+What was actually leaking, in rough order of size:
+
+1. **`loadAsset` output.** Uncached, so every scene load re-parsed four .glb
+   files, and nothing ever disposed the result. `Vegetation.dispose()` disposed
+   the `InstancedMesh`es, which frees instance matrices and nothing else.
+2. **The detail texture pack.** `loadDetailTextures` overwrote a module-level
+   `detail` on every call, stranding the previous pack. It is a real cache now.
+3. **`window.__world` and `window.__perf`.** Strong references from `window` to
+   the disposed scene, which kept the whole graph reachable.
+4. **The sun's shadow map**, a 1536² depth target the light allocates lazily and
+   nobody could see to release.
+5. **Terrain material, undergrowth material, character and viewmodel materials
+   and their maps** — all geometry-only teardown before.
+6. **`window`/`document` input listeners** in both scenes' `attachInput`, which
+   also meant a second race listened twice.
+
+The renderer now also calls `forceContextLoss()` after `dispose()`, so the
+driver gets its memory back at teardown rather than whenever the orphaned canvas
+happens to be collected.
+
+### The gate failure is *not* teardown, and D-021's hypothesis was wrong
+
+`tools/perf/budget.mjs` opens a **new tab per scene and closes it** — verified
+by listing CDP page targets around each step, which return to one. Nothing can
+be inherited from an earlier scene because no earlier scene is still loaded.
+
+Measured directly, with the same scene repeated in one browser:
+
+- `sprint` ×4 back to back: p95 10.4 → 15.3 → 24.0 → 25.4 ms. Monotonic, with
+  no other scene involved.
+- `forest, forest.mobile` with **no menu at all**: p95 108 and 74 ms — i.e. the
+  same failure D-021 attributed to running after the menu.
+
+So position in the run matters and the *predecessor* does not. A fixed
+CPU-work canary run between steps slowed from ~670 ms to ~1360 ms across a
+single run, and `photoanalysisd`/`mediaanalysisd` plus the benchmark itself put
+this machine at a load average above 100 for much of the investigation.
+
+### What the spike is made of
+
+Profiled under the gate's own conditions (`forest`, mobile viewport, 4× CPU
+throttle), sampling at 200 µs:
+
+```
+3537 ms  42.1%  bufferSubData
+ 637 ms   7.6%  (program)
+ 448 ms   5.3%  (idle)
+```
+
+**`bufferSubData` is 42 % of all CPU time.** `Vegetation.rebucket` runs four
+times a second and flushes every bucket with a bare `needsUpdate = true`, which
+three reads as "re-send the whole attribute": the tree buckets are 2000
+instances each and the undergrowth mesh is 34 000 (2.2 MB), against ring
+occupancies typically in the tens. It is a synchronous upload the driver blocks
+on, and the shape it produces — a healthy median with three or four ~200 ms
+stalls a second, no JavaScript in them, no heap drop, so neither work nor GC —
+is exactly the p95 this gate keeps failing on.
+
+### The obvious fix was measured and rejected
+
+Uploading only `[0, count)` via `addUpdateRange` removes `bufferSubData` from
+the profile completely and triples the profiler's sample rate, so it does what
+it says. It is still not shipped, because a partial update forbids buffer
+orphaning: the driver can no longer discard the old contents and must
+synchronise against in-flight draws. Paired, interleaved A/B in one browser:
+
+| | median | p95 |
+|---|---|---|
+| sprint.desktop, full-buffer | 6.0 ms | 18.0 ms |
+| sprint.desktop, update-range | 7.8 ms | 22.4 ms |
+
+Worse in **five pairs out of five**. On forest.mobile under vsync it was the
+better of the two (p95 66 ms and tightly clustered, against 33–99 ms), and
+unthrottled the two runs contradicted each other outright. A change that is
+better on one scene, worse on another and unresolvable on a third is not a fix,
+and shipping it on the strength of the profile alone would be trading a measured
+regression for an unmeasured improvement.
+
+**The cost is in the buffer size, not in the upload call.** The fix that gets
+both properties is to stop allocating 2000- and 34 000-instance buffers for
+rings that hold tens — grow them to fit instead — which keeps the orphan-friendly
+full-buffer upload and makes it small. That is the open item, and it wants a
+machine that is not swinging by 3× between repeats of the same measurement.
+
+`HARD_BUDGET` and `baseline.json` are untouched. The gate stays red.
+
+### Where the gate actually stands
+
+On a quiet machine (1-minute load average under 5) the **full run passes**, and
+does so repeatably:
+
+```
+forest.desktop  median 0.40 ms · p95 12.00 ms
+forest.mobile   median 1.50 ms · p95  4.00 ms      (budget 33.3 / 50)
+sprint.desktop  median 0.90 ms · p95  5.70 ms      (budget 16.7 / 25)
+sprint.mobile   median 6.60 ms · p95 16.90 ms
+✓ perf budget OK
+```
+
+Run the identical build again immediately afterwards, with the box still warm
+from the first run, and `forest.mobile` goes to a p95 of 77.5 ms. Same build,
+same command, minutes apart.
+
+So the honest reading is: **this gate is sound and the build meets it, but the
+measurement needs a quiet machine and does not currently say so.** Anyone
+running `npm run perf` on a laptop that is also indexing photos will get a red
+gate and no indication why. That is the same failure mode as D-019 — a check
+that cannot tell "could not measure" from "measured and bad" — and it is worth
+fixing at the harness, by having `budget.mjs` sample its own CPU canary and
+refuse to gate (rather than fail) when the host is too loaded to measure. Not
+done here, because doing it as part of a leak fix would bury it.
+
+---
+
+## D-023 — The perf gate now checks whether it could measure at all
+
+**Decision.** `tools/perf/budget.mjs` times a fixed CPU workload before and
+after every scene. If it slows by more than 1.6×, the scene's numbers are
+reported as **unmeasurable** and excluded, rather than being compared to a
+budget.
+
+**Why.** During the D-022 investigation a single gate run drove this machine's
+load average from 6 to 117 — the benchmark loads the box it is measuring — and
+the same build measured a p95 of 4.5 ms and 77.5 ms minutes apart. A gate in
+that state is not reporting on the renderer.
+
+This is D-019 again, in a different costume. There the fault was that a *skip*
+was indistinguishable from a *pass*; here it is that *could not measure* was
+indistinguishable from *measured, and bad*. Both make the absence of a signal
+look like a signal. The rule stands: **a check must always be able to say which
+of the three it is — good, bad, or unknown.**
+
+**Cost, stated honestly.** On a permanently busy machine every scene could
+report unmeasurable and nothing would be gated. That is a real failure mode, but
+it is a *loud* one — it prints per scene and says why — where the previous
+behaviour was a confident red or green built on noise. If it starts happening
+routinely, the fix is a quieter CI runner, not a looser tolerance.

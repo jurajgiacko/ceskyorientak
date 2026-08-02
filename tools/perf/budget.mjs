@@ -200,6 +200,32 @@ async function withChrome(fn) {
   }
 }
 
+/**
+ * Fixed CPU work, timed. The harness's own honesty check.
+ *
+ * A perf gate that cannot tell "the host was too loaded to measure" from
+ * "measured, and it is bad" reports noise as failure — the same defect as
+ * D-019, where a skip was being counted as a pass. During this investigation a
+ * single gate run drove this machine's load average from 6 to 117, and the
+ * same build measured p95 4.5 ms and 77.5 ms minutes apart.
+ *
+ * So we time a fixed workload before and after each scene. If it slows by more
+ * than the tolerance, the host was busy and the numbers from that scene are not
+ * evidence about the renderer — we say so and skip, rather than failing the
+ * build on someone else's Spotlight indexing.
+ */
+function canaryMs() {
+  const t0 = performance.now();
+  let acc = 0;
+  for (let i = 0; i < 6e6; i++) acc += Math.sqrt(i % 1024);
+  // Consume the result so the loop cannot be optimised away.
+  if (acc < 0) console.log('');
+  return performance.now() - t0;
+}
+
+/** How much slower the canary may get before we distrust the measurement. */
+const CANARY_TOLERANCE = 1.6;
+
 /** Open a page, run it, and pull the perf sample out of the game itself. */
 async function measureScene(cdpPort, base, scene, mobile) {
   const res = await fetch(`http://127.0.0.1:${cdpPort}/json/new?${encodeURIComponent(
@@ -316,7 +342,10 @@ async function main() {
       for (const mobile of [false, true]) {
         const key = `${scene.id}.${mobile ? 'mobile' : 'desktop'}`;
         process.stdout.write(`▶ ${key} … `);
+        const canaryBefore = canaryMs();
         const r = await measureScene(cdpPort, base, scene, mobile);
+        const canaryAfter = canaryMs();
+        const canaryRatio = canaryAfter / Math.max(1, canaryBefore);
         if (r.broken) {
           console.log(`✗ BROKEN\n     ${r.reason}`);
           failed = true;
@@ -324,6 +353,13 @@ async function main() {
         }
         if (r.skipped) {
           console.log(`skip (${r.reason})`);
+          continue;
+        }
+        if (canaryRatio > CANARY_TOLERANCE) {
+          console.log(
+            `unmeasurable — host load rose ${canaryRatio.toFixed(1)}x during the run ` +
+              `(${r.medianMs.toFixed(2)} ms median seen, not trusted)`,
+          );
           continue;
         }
         results[key] = { medianMs: r.medianMs, p95Ms: r.p95Ms, fps: r.fps, frames: r.frames };

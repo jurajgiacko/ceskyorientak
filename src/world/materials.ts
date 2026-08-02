@@ -810,7 +810,67 @@ const BARK_BAKE_GAIN = new THREE.Color(0.84, 0.84, 0.85);
 
 let detail: DetailTextures | null = null;
 
+/**
+ * Textures that outlive any one scene, and must therefore survive its teardown.
+ *
+ * `loadDetailTextures` is a process-wide cache — the bark and granite packs are
+ * loaded once and handed to every asset material in both venues. That makes
+ * them exactly the wrong thing for a scene to dispose on the way out: the
+ * *next* scene gets the same objects back from the cache, three sees
+ * `Texture.version` on a source it has already released, and the boulders come
+ * back untextured. There is no error; the rock is simply grey.
+ *
+ * So disposal is opt-out rather than opt-in, and this set is the opt-out.
+ * Registering here is the one place that decides it, next to the cache that
+ * creates the sharing.
+ */
+const SHARED_TEXTURES = new Set<THREE.Texture>();
+
+/**
+ * Release a material and the textures it owns.
+ *
+ * three.js frees **no** GPU memory on garbage collection: an undisposed texture
+ * or geometry stays resident until the context is lost. `Material.dispose()`
+ * also deliberately leaves its textures alone, because materials share them —
+ * so a caller that only disposes materials leaks every map on them. This walks
+ * the maps and releases the ones nobody else is holding.
+ *
+ * Idempotent, and safe to call twice on a material two meshes share.
+ */
+export function disposeMaterial(mat: THREE.Material): void {
+  for (const value of Object.values(mat as unknown as Record<string, unknown>)) {
+    if (value instanceof THREE.Texture && !SHARED_TEXTURES.has(value)) value.dispose();
+  }
+  mat.dispose();
+}
+
+/** Every material and geometry under `root`, released. See `disposeMaterial`. */
+export function disposeHierarchy(root: THREE.Object3D): void {
+  const geometries = new Set<THREE.BufferGeometry>();
+  const materials = new Set<THREE.Material>();
+  root.traverse((obj) => {
+    const mesh = obj as Partial<THREE.Mesh>;
+    if (mesh.geometry) geometries.add(mesh.geometry);
+    if (mesh.material) {
+      for (const m of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) {
+        materials.add(m);
+      }
+    }
+  });
+  for (const g of geometries) g.dispose();
+  for (const m of materials) disposeMaterial(m);
+}
+
+/** Tier the cached `detail` pack was built for. See `loadDetailTextures`. */
+let detailTier: QualityTier | null = null;
+
 export async function loadDetailTextures(tier: QualityTier): Promise<DetailTextures> {
+  // Genuinely a cache now, not just a last-one-wins global. It was neither
+  // before: every scene load re-decoded and re-uploaded the same six maps and
+  // overwrote `detail`, so the previous pack became unreachable *and*
+  // undisposed. Two scenes in one session therefore leaked a full detail pack,
+  // and the forest → menu → sprint path leaks two.
+  if (detail && detailTier === tier) return detail;
   const size = textureSize(tier);
   const loader = new THREE.TextureLoader();
   // Repeat is per-pack. The Blender UVs are roughly 1 unit per metre, and at
@@ -852,6 +912,10 @@ export async function loadDetailTextures(tier: QualityTier): Promise<DetailTextu
     bark,
     barkTrunk: bark.map(atRepeat1),
   };
+  detailTier = tier;
+  for (const t of [...detail.granite, ...detail.bark, ...detail.barkTrunk]) {
+    SHARED_TEXTURES.add(t);
+  }
   return detail;
 }
 

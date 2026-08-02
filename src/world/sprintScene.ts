@@ -23,7 +23,7 @@
 
 import * as THREE from 'three';
 import type { Capabilities, QualityTier } from '@/core/capabilities';
-import { exposeForHarness } from '@/core/perf';
+import { clearHarness, exposeForHarness } from '@/core/perf';
 import { getVenue } from '@/core/venues';
 import { Runnability } from '@/core/types';
 import { TerrainField, TerrainMesh, TOWN_SPLAT } from './terrain';
@@ -36,7 +36,7 @@ import { Buildings, loadSurface, loadTownscape } from './buildings';
 import type { SurfaceTextures, TownscapeData } from './buildings';
 import { Townscape } from './townscape';
 import { Landmarks, KRUMLOV_LANDMARKS, KRUMLOV_OVERRIDES, KRUMLOV_SKIP } from './landmarks';
-import { Vegetation, loadAsset } from './vegetation';
+import { Vegetation, disposeAsset, loadAsset } from './vegetation';
 import type { Asset } from './vegetation';
 import { loadDetailTextures } from './materials';
 
@@ -77,6 +77,10 @@ export class SprintScene {
   private landmarks!: Landmarks;
   private data!: TownscapeData;
   private surfaces: SurfaceTextures[] = [];
+  /** See the same field on `ForestScene` — held so `dispose` can release it. */
+  private assets: Asset[] = [];
+  /** See `ForestScene.inputDisposers`. */
+  private readonly inputDisposers: (() => void)[] = [];
 
   private readonly tier: QualityTier;
   private readonly bench: boolean;
@@ -157,6 +161,7 @@ export class SprintScene {
         loadAsset('/models/deadwood.glb', 'deadwood'),
       ]);
       assets = { spruce, beech, boulder, deadwood };
+      this.assets = [spruce, beech, boulder, deadwood];
     } catch (err) {
       // A missing tree asset must not take the town down with it — the trees
       // are scenery here, unlike in the forest where they are the subject.
@@ -559,20 +564,33 @@ export class SprintScene {
         e.preventDefault();
       }
     };
-    window.addEventListener('keydown', (e) => onKey(e, true));
-    window.addEventListener('keyup', (e) => onKey(e, false));
-
-    target.addEventListener('click', () => {
+    const onKeyDown = (e: KeyboardEvent) => onKey(e, true);
+    const onKeyUp = (e: KeyboardEvent) => onKey(e, false);
+    const onClick = () => {
       if (!this.pointerLocked) void target.requestPointerLock();
-    });
-    document.addEventListener('pointerlockchange', () => {
+    };
+    const onPointerLock = () => {
       this.pointerLocked = document.pointerLockElement === target;
-    });
-    target.addEventListener('mousemove', (e) => {
+    };
+    const onMouseMove = (e: MouseEvent) => {
       if (!this.pointerLocked) return;
       this.yaw -= e.movementX * 0.0022;
       this.pitch = THREE.MathUtils.clamp(this.pitch - e.movementY * 0.0022, -1.2, 1.2);
       this.applyLook();
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('keyup', onKeyUp);
+    target.addEventListener('click', onClick);
+    document.addEventListener('pointerlockchange', onPointerLock);
+    target.addEventListener('mousemove', onMouseMove);
+
+    this.inputDisposers.push(() => {
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('keyup', onKeyUp);
+      target.removeEventListener('click', onClick);
+      document.removeEventListener('pointerlockchange', onPointerLock);
+      target.removeEventListener('mousemove', onMouseMove);
     });
   }
 
@@ -735,8 +753,14 @@ export class SprintScene {
     };
   }
 
+  /** See `ForestScene.dispose` — same contract, same ordering reason. */
   dispose(): void {
     this.stop();
+    this.beforeFrame = null;
+    this.external = null;
+    for (const d of this.inputDisposers) d();
+    this.inputDisposers.length = 0;
+
     this.terrain?.dispose();
     this.buildings?.dispose();
     this.town?.dispose();
@@ -745,7 +769,22 @@ export class SprintScene {
     this.sky?.dispose();
     this.ground?.dispose();
     for (const s of this.surfaces) s.dispose();
+    this.surfaces = [];
+    // The street trees on Latrán are instanced from the same `beech` asset the
+    // slope scatter uses, so this must run after both `town` and `vegetation`
+    // have let go of it. `disposeAsset` is idempotent regardless.
+    for (const a of this.assets) disposeAsset(a);
+    this.assets = [];
+
+    this.scene.clear();
+    this.scene.background = null;
+    this.scene.fog = null;
+
     this.renderer.dispose();
+
+    clearHarness();
+    const w = window as unknown as Record<string, unknown>;
+    if (w.__world === this) delete w.__world;
   }
 }
 
