@@ -6,20 +6,46 @@
  * left-thumb stick with a generous dead zone and a right-half look area, and
  * the keyboard path exists so the thing can be developed and QA'd.
  *
- * One deliberate omission: there is no strafe. An orienteer runs forwards and
- * turns; A/D turn rather than sidestep, which also frees the left thumb from
- * having to do two jobs at once.
+ * Controls follow **standard first-person convention**, because that is what
+ * every player's hands already know: W/S move, **A/D strafe**, the mouse turns.
+ *
+ * An earlier version made A/D *turn* instead, reasoning that an orienteer runs
+ * forwards and turns rather than sidestepping. That is true of the sport and
+ * wrong for the game: it is tank control, and it made the whole thing feel
+ * clumsy and unlearnable to anyone who has played anything since 1998. Realism
+ * about the athlete is not worth spending the player's first thirty seconds on
+ * fighting the keys.
+ *
+ * Movement direction and facing are therefore decoupled: the WASD vector is
+ * rotated into world space by the camera yaw, and the resulting *movement*
+ * heading is what goes to the physics. `Race` still takes a single heading, so
+ * the simulation is untouched by this.
  */
 
 export interface MoveIntent {
-  /** 0..1 throttle along the current heading. */
+  /** 0..1 throttle along `heading`. */
   forward: number;
-  /** Turn rate in radians per second, from keys or the stick. */
-  turn: number;
+  /**
+   * World-space direction of travel, radians, 0 = north.
+   *
+   * Not the same as where the camera looks: strafing left while facing north
+   * gives a heading of west. Decoupling the two is the whole point of
+   * conventional FPS movement.
+   */
+  heading: number;
 }
 
-const KEY_TURN_RATE = 1.9;
-const STICK_TURN_RATE = 2.4;
+/**
+ * How fast the intended direction swings toward the keys, per second.
+ *
+ * Instant direction changes read as twitchy and make the runner feel weightless;
+ * a person carrying momentum takes a moment to redirect. This is a *feel*
+ * constant and is deliberately not derived from anything physical.
+ */
+const HEADING_RESPONSE = 9.5;
+/** How fast the throttle ramps. Slower to start than to stop, as legs are. */
+const ACCEL_UP = 4.2;
+const ACCEL_DOWN = 7.0;
 /** Radius of the stick well in CSS pixels, and the dead zone inside it. */
 const STICK_R = 62;
 const STICK_DEAD = 0.16;
@@ -195,36 +221,77 @@ export class RaceControls {
       // Reading the map does not stop the athlete — `Race` keeps them moving at
       // 55%. It stops them *steering*, which is exactly what happens when your
       // eyes are on the sheet.
-      return { forward: this.lastForward, turn: 0 };
+      return { forward: this.lastForward, heading: this.moveHeading ?? -this.yaw };
     }
 
-    let forward = 0;
-    let turn = 0;
+    // Local movement vector: +ax is right (strafe), +az is forward.
+    let ax = 0;
+    let az = 0;
 
-    if (this.keys.has('KeyW') || this.keys.has('ArrowUp')) forward += 1;
-    if (this.keys.has('KeyS') || this.keys.has('ArrowDown')) forward -= 0.55;
-    if (this.keys.has('KeyA') || this.keys.has('ArrowLeft') || this.keys.has('KeyQ')) {
-      turn -= KEY_TURN_RATE;
-    }
-    if (this.keys.has('KeyD') || this.keys.has('ArrowRight') || this.keys.has('KeyE')) {
-      turn += KEY_TURN_RATE;
-    }
+    if (this.keys.has('KeyW') || this.keys.has('ArrowUp')) az += 1;
+    if (this.keys.has('KeyS') || this.keys.has('ArrowDown')) az -= 1;
+    if (this.keys.has('KeyA') || this.keys.has('ArrowLeft')) ax -= 1;
+    if (this.keys.has('KeyD') || this.keys.has('ArrowRight')) ax += 1;
 
     if (this.stickId !== null) {
       const { x, y } = this.stickVec;
-      const mag = Math.hypot(x, y);
-      if (mag > STICK_DEAD) {
-        forward += clamp(-y / (1 - STICK_DEAD), -0.55, 1);
-        turn += x * STICK_TURN_RATE;
+      if (Math.hypot(x, y) > STICK_DEAD) {
+        ax += x;
+        az += -y;
       }
     }
 
-    this.yaw += turn * dtS;
-    this.lastForward = clamp(forward, -0.55, 1);
-    return { forward: this.lastForward, turn };
+    const mag = Math.hypot(ax, az);
+    if (mag > 0.001) {
+      // Normalise so diagonals are not faster than the cardinals — the oldest
+      // bug in first-person movement, and instantly felt even when unnoticed.
+      const nx = ax / mag;
+      const nz = az / mag;
+
+      // Rotate the local vector into the world.
+      //
+      // `yaw` drives the camera as Euler(pitch, yaw, 0, 'YXZ'), and three's Y
+      // rotation is counter-clockwise, so the camera's forward vector is
+      // (-sin yaw, -cos yaw) in (x, z). Our bearings are clockwise from north
+      // (core/geo.ts), which makes the look bearing exactly **-yaw**.
+      //
+      // This was measured, not derived: assuming yaw was already a bearing put
+      // movement 65 degrees off from where the camera pointed. Two opposite
+      // angle conventions meeting in one file is worth stating plainly rather
+      // than leaving to whoever reads it next.
+      const look = -this.yaw;
+      const wx = nz * Math.sin(look) + nx * Math.cos(look);
+      const wz = -nz * Math.cos(look) + nx * Math.sin(look);
+      const want = Math.atan2(wx, -wz);
+
+      // Ease the heading rather than snapping, so a direction change carries a
+      // little momentum instead of pivoting on the spot.
+      if (this.moveHeading === null) this.moveHeading = want;
+      const delta = wrap(want - this.moveHeading);
+      this.moveHeading = wrap(
+        this.moveHeading + delta * Math.min(1, HEADING_RESPONSE * dtS),
+      );
+
+      // Backwards and sideways are slower than forwards, as they are in life.
+      const throttle = Math.min(1, mag) * (az < -0.3 ? 0.55 : ax !== 0 && az === 0 ? 0.78 : 1);
+      const rate = throttle > this.lastForward ? ACCEL_UP : ACCEL_DOWN;
+      this.lastForward += (throttle - this.lastForward) * Math.min(1, rate * dtS);
+    } else {
+      this.lastForward += (0 - this.lastForward) * Math.min(1, ACCEL_DOWN * dtS);
+    }
+
+    if (this.lastForward < 0.002) this.lastForward = 0;
+    return { forward: this.lastForward, heading: this.moveHeading ?? -this.yaw };
   }
 
   private lastForward = 0;
+  /**
+   * Smoothed world-space direction of travel.
+   *
+   * `null` until the first input, so the first step snaps to where the player
+   * is looking instead of easing there from due north.
+   */
+  private moveHeading: number | null = null;
 
   dispose(): void {
     this.releasePointer();
@@ -236,4 +303,12 @@ export class RaceControls {
 
 function clamp(v: number, lo: number, hi: number): number {
   return v < lo ? lo : v > hi ? hi : v;
+}
+
+/** Normalise an angle to (-PI, PI], so easing takes the short way round. */
+function wrap(rad: number): number {
+  let r = rad % (Math.PI * 2);
+  if (r > Math.PI) r -= Math.PI * 2;
+  if (r <= -Math.PI) r += Math.PI * 2;
+  return r;
 }

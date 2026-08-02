@@ -300,8 +300,10 @@ export class RaceController {
         this.takePenaltyS = Math.max(0, this.takePenaltyS - dtS);
         forward *= 0.35;
       }
-      this.terrain.heading = this.controls.yaw;
-      this.race.step(dtS, { forward, heading: this.controls.yaw });
+      // The athlete travels along the movement heading, which strafing
+      // decouples from where the camera looks.
+      this.terrain.heading = intent.heading;
+      this.race.step(dtS, { forward, heading: intent.heading });
     }
 
     const v = this.race.view();
