@@ -154,7 +154,7 @@
         "hydration": -0.05,
         "focus": 0.0
       },
-      "gameNote": "The classic fast gel: sharp blood-sugar rise, modest glycogen. Negative hydration is deliberate — a concentrated gel taken without water pulls water into the gut. That is the mechanic that teaches 'always wash a gel down'. OPEN DESIGN QUESTION (2026-08-02): now that the caffeine assumption is corrected to 20 mg, this SKU is mechanically IDENTICAL to gel-raspberry-caffeine — same carbs, sodium, caffeine, volume and gameStat, differing only in flavour. Both are in src/ui/beforeScreen.ts BELT_CHOICES, whose doc comment still assumes this gel is the caffeine-free counterpart, so the belt now offers a redundant slot rather than a 0/20/100 mg dose decision. Resolving that is a design call: either drop one of the two, or swap this slot for a genuinely caffeine-free gel — gel-cola is the candidate already in this map."
+      "gameNote": "The classic fast gel: sharp blood-sugar rise, modest glycogen. Negative hydration is deliberate — a concentrated gel taken without water pulls water into the gut. That is the mechanic that teaches 'always wash a gel down'. RESOLVED 2026-08-02: correcting the caffeine assumption to 20 mg made this SKU mechanically IDENTICAL to gel-raspberry-caffeine — same carbs, sodium, caffeine, volume and gameStat, differing only in flavour — which left src/ui/beforeScreen.ts BELT_CHOICES with a redundant slot and no caffeine-free gel. It was dropped from that list in favour of gel-cola, restoring the 0/20/100 mg dose decision. This SKU stays in the map: it is a real product and a legitimate loadout option, it is simply not the one that earns a belt slot when Raspberry is already there."
     },
     {
       "id": "gel-raspberry-caffeine",

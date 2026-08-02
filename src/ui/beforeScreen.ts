@@ -67,16 +67,17 @@ const BEFORE_CHOICES = [
  * `caffeineFocus()` stops paying, so the choice is a choice rather than a
  * bigger-is-better ramp.
  *
- * STALE, needs a design call. This list was built when `gel-citrus` was the
- * caffeine-free counterpart to `gel-raspberry-caffeine`. That was an unverified
- * assumption in the SKU map and it was wrong — Enervit sells Citrus only as a
- * caffeinated variant, at the same 20 mg as Raspberry (see the SKU map's
- * sourceNote). The two are now identical on every field the game reads, so this
- * list offers a redundant slot and has no caffeine-free gel at all. Either drop
- * one, or swap it for `gel-cola`, which the range lists as caffeine-free.
+ * `gel-cola` is the caffeine-free gel and exists here to carry that contrast.
+ * It replaced `gel-citrus`, which had been picked for this slot on the SKU
+ * map's own explicitly unverified guess that Citrus is caffeine-free. Enervit
+ * sells Citrus only as a 20 mg variant, which made it a duplicate of
+ * `gel-raspberry-caffeine` on every field the game reads. Note its
+ * `caffeineMg` is null rather than 0 — that panel was never read either — but
+ * every consumer coerces null to 0, so it doses as caffeine-free and renders
+ * no caffeine line.
  */
 const BELT_CHOICES = [
-  'gel-citrus',
+  'gel-cola',
   'gel-raspberry-caffeine',
   'carbo-gel-cola-caffeine',
   'liquid-gel-orange',
