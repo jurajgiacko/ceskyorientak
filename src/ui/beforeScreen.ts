@@ -61,14 +61,23 @@ const BEFORE_CHOICES = [
  * in CZ/SK, and offering a product that cannot be bought is worse than
  * offering one fewer. Replaced by the C2:1 Carbo Bar, which is current.
  *
- * The two caffeinated gels are here because in the default build caffeine is
+ * The caffeinated gels are here because in the default build caffeine is
  * modelled (D-020) and a modelled effect no player can reach is not a mechanic.
- * They also carry the range's only real dose decision: 20 mg and 100 mg sit
- * either side of the point where `caffeineFocus()` stops paying, so the choice
- * between them is a choice rather than a bigger-is-better ramp.
+ * The dose decision is the point: 20 mg and 100 mg sit either side of where
+ * `caffeineFocus()` stops paying, so the choice is a choice rather than a
+ * bigger-is-better ramp.
+ *
+ * `gel-cola` is the caffeine-free gel and exists here to carry that contrast.
+ * It replaced `gel-citrus`, which had been picked for this slot on the SKU
+ * map's own explicitly unverified guess that Citrus is caffeine-free. Enervit
+ * sells Citrus only as a 20 mg variant, which made it a duplicate of
+ * `gel-raspberry-caffeine` on every field the game reads. Note its
+ * `caffeineMg` is null rather than 0 — that panel was never read either — but
+ * every consumer coerces null to 0, so it doses as caffeine-free and renders
+ * no caffeine line.
  */
 const BELT_CHOICES = [
-  'gel-citrus',
+  'gel-cola',
   'gel-raspberry-caffeine',
   'carbo-gel-cola-caffeine',
   'liquid-gel-orange',
@@ -167,10 +176,10 @@ export function makeBeforeScreen(req: RaceRequest): Screen {
         const facts: string[] = [];
         if (s.carbsG !== null) facts.push(t('nutrition.carbs', { g: s.carbsG }));
         if (s.sodiumMg !== null) facts.push(t('nutrition.sodium', { mg: s.sodiumMg }));
-        // Load-bearing, not decoration: two SKUs in the belt list share the
-        // Czech pack name "ENERVIT Gel" and differ only by flavour and
-        // caffeine, so without this line the player is choosing between two
-        // identical cards. Composition, stated as composition.
+        // No longer load-bearing for telling cards apart — every SKU now has a
+        // unique Czech pack name including its flavour. Kept because the dose
+        // is the whole point of choosing a caffeinated gel, and because it is
+        // composition, stated as composition.
         if (s.caffeineMg) facts.push(t('nutrition.caffeine', { mg: s.caffeineMg }));
         if (s.volumeMl !== null) facts.push(`${s.volumeMl} ml`);
         return `

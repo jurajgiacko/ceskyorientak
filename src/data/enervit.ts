@@ -139,13 +139,13 @@ export const SKUS: readonly Sku[] = [
   {
     "id": "gel-citrus",
     "nameEn": "Enervit Gel Citrus",
-    "nameCz": "ENERVIT Gel",
+    "nameCz": "ENERVIT Gel s kofeinem – citrus",
     "range": "SPORT",
     "phase": "during",
     "alsoPhase": null,
     "carbsG": 20,
     "sodiumMg": 10,
-    "caffeineMg": 0,
+    "caffeineMg": 20,
     "proteinG": 0,
     "volumeMl": 25,
     "verified": false,
@@ -159,7 +159,7 @@ export const SKUS: readonly Sku[] = [
   {
     "id": "gel-raspberry-caffeine",
     "nameEn": "Enervit Gel Raspberry with caffeine",
-    "nameCz": "ENERVIT Gel",
+    "nameCz": "ENERVIT Gel s kofeinem – malina",
     "range": "SPORT",
     "phase": "during",
     "alsoPhase": null,
@@ -179,7 +179,7 @@ export const SKUS: readonly Sku[] = [
   {
     "id": "gel-cola",
     "nameEn": "Enervit Gel Cola",
-    "nameCz": "ENERVIT Gel",
+    "nameCz": "ENERVIT Gel – cola",
     "range": "SPORT",
     "phase": "during",
     "alsoPhase": null,
@@ -299,7 +299,7 @@ export const SKUS: readonly Sku[] = [
   {
     "id": "carbo-gel-orange",
     "nameEn": "Carbo Gel Orange C2:1 PRO",
-    "nameCz": "ENERVIT Carbo Gel C2:1",
+    "nameCz": "ENERVIT Carbo Gel C2:1 – pomeranč",
     "range": "C2_1",
     "phase": "during",
     "alsoPhase": null,
@@ -339,7 +339,7 @@ export const SKUS: readonly Sku[] = [
   {
     "id": "carbo-gel-lemon-sodium",
     "nameEn": "Carbo Gel Lemon Sodium C2:1 PRO",
-    "nameCz": "ENERVIT Carbo Gel C2:1 – se sodíkem",
+    "nameCz": "ENERVIT Carbo Gel C2:1 – citron+sodík",
     "range": "C2_1",
     "phase": "during",
     "alsoPhase": null,
@@ -379,7 +379,7 @@ export const SKUS: readonly Sku[] = [
   {
     "id": "carbo-gel-mango",
     "nameEn": "Carbo Gel Mango C2:1 PRO",
-    "nameCz": "ENERVIT Carbo Gel C2:1",
+    "nameCz": "ENERVIT Carbo Gel C2:1 – mango",
     "range": "C2_1",
     "phase": "during",
     "alsoPhase": null,
@@ -439,7 +439,7 @@ export const SKUS: readonly Sku[] = [
   {
     "id": "carbo-bar-peanut",
     "nameEn": "Carbo Bar Salty Peanut Butter C2:1 PRO",
-    "nameCz": null,
+    "nameCz": "ENERVIT Carbo Bar C2:1 – arašída se sodíkem",
     "range": "C2_1",
     "phase": "during",
     "alsoPhase": null,

@@ -366,9 +366,9 @@ export class RaceHud {
         const facts: string[] = [];
         if (s.carbsG !== null) facts.push(t('nutrition.carbs', { g: s.carbsG }));
         if (s.sodiumMg !== null) facts.push(t('nutrition.sodium', { mg: s.sodiumMg }));
-        // Two belt SKUs share the Czech pack name; this is what tells them
-        // apart mid-race, when there is no time to remember which slot was
-        // which.
+        // Belt SKUs no longer share a Czech pack name, so this is not what
+        // tells them apart any more — but mid-race the dose is worth seeing
+        // without opening anything.
         if (s.caffeineMg) facts.push(t('nutrition.caffeine', { mg: s.caffeineMg }));
         return `<button class="hud__beltItem" data-act="belt" data-index="${i}"
                   ${on ? '' : 'disabled'} title="${esc(name)}">
