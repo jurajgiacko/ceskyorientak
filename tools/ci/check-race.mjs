@@ -84,6 +84,30 @@ const CASES = [
  */
 const SIM_BUDGET_S = 4 * 3600;
 
+/**
+ * How close a wrong control has to sit to the leg the athlete is running for a
+ * mispunch to be the *course's* fault, metres, measured from the straight line
+ * between the two right controls.
+ *
+ * This exists because the mispunch assertion was the one place the rule stated
+ * two paragraphs down — the autopilot is blind, so its steering may not gate
+ * the build — was not being applied, and it started firing. Reproduced on
+ * `menu-seed`: the bot left a start at (-140, -176) bound for a control 138 m
+ * away at (-20, -108), wandered on its escape behaviour, and punched control 10
+ * standing at (211, -457). It was **450 m off its own leg**. The course was
+ * fine: the closest two controls on it are 120.8 m apart and nothing sits
+ * within 40 m of the line to the first one.
+ *
+ * So the question the gate should ask is not "did it mispunch" but "could a
+ * competitor reading the map have mispunched here" — which is a property of the
+ * course and is exactly this: a wrong control sitting inside punching distance
+ * of the route to the right one. Anything further out is the robot being lost,
+ * and is printed rather than enforced, like every other thing the robot does.
+ * A real decoy still fails, and so does any mispunch in the forest, where the
+ * autopilot is expected to finish.
+ */
+const MISPUNCH_DECOY_M = 12;
+
 async function main() {
   if (!existsSync(DIST)) {
     console.error('✗ dist/ not found. Run `npm run build` first.');
@@ -128,9 +152,41 @@ async function main() {
           ? sited.filter((p) => world.blockedAt(p.x, p.z)).length
           : 0;
         const v = r.autopilot(${SIM_BUDGET_S * 10}, 0.1);
+
+        // If it mispunched, was that a course a player could mispunch on, or a
+        // blind robot 450 m from where it should have been? Two numbers decide
+        // it, and they are measured rather than argued: \`decoy\` is how close
+        // the control it hit sits to the straight line of the leg it was on —
+        // a control inside the punch radius of that line is genuinely
+        // confusable and is a course fault — and \`stray\` is how far off that
+        // line the bot itself had wandered. See MISPUNCH_DECOY_M.
+        let decoy = -1;
+        let stray = -1;
+        if (v.phase === 'mispunched') {
+          const ks = r.course.controls;
+          const want = v.splits.length;
+          const got = ks.findIndex((k) => k.id === (r.race.mispunch && r.race.mispunch.got));
+          const from = want > 0 ? ks[want - 1].position : r.course.start;
+          const to = ks[want] && ks[want].position;
+          if (to && got >= 0) {
+            const seg = (p) => {
+              const ux = to.x - from.x, uz = to.z - from.z;
+              const l2 = ux * ux + uz * uz;
+              let t = l2 > 1e-9 ? ((p.x - from.x) * ux + (p.z - from.z) * uz) / l2 : 0;
+              t = t < 0 ? 0 : t > 1 ? 1 : t;
+              return Math.hypot(from.x + ux * t - p.x, from.z + uz * t - p.z);
+            };
+            decoy = Math.round(seg(ks[got].position));
+            stray = Math.round(seg(v.truePosition));
+          }
+        }
+
         return JSON.stringify({
           onBarrier,
           phase: v.phase,
+          mispunchDecoyM: decoy,
+          mispunchStrayM: stray,
+          punchRadiusM: r.course.controls[0] ? r.course.controls[0].punchRadius : 0,
           punched: v.splits.length,
           controls: r.course.controls.length,
           lengthM: r.course.lengthM,
@@ -157,12 +213,21 @@ async function main() {
       // test robot rather than on the quality of the game. So: every control
       // must be punched in order, every leg must be routable, nothing may
       // fail to render. Whether the bot got home is reported, not enforced.
+      // A mispunch counts against the *course* only when the control the bot
+      // hit was one a competitor on that leg could have hit — see
+      // MISPUNCH_DECOY_M. Where the autopilot is expected to finish at all, any
+      // mispunch is still a failure.
+      const decoyed =
+        r.phase === 'mispunched' &&
+        (c.autopilotMustPunch ||
+          (r.mispunchDecoyM >= 0 && r.mispunchDecoyM <= r.punchRadiusM + MISPUNCH_DECOY_M));
+
       const ok =
         (c.autopilotMustPunch ? r.punched === r.controls : true) &&
         r.controls > 0 &&
         r.brokenLegs.length === 0 &&
         r.onBarrier === 0 &&
-        r.phase !== 'mispunched' &&
+        !decoyed &&
         r.renderErrors.length === 0;
 
       console.log(
@@ -172,8 +237,20 @@ async function main() {
           (r.dropped ? ` · ${r.dropped} dropped` : '') +
           (r.seedsTried > 1 ? ` · ${r.seedsTried} seeds` : ''),
       );
+      if (r.phase === 'mispunched' && !decoyed) {
+        console.log(
+          `     the blind autopilot mispunched ${r.mispunchStrayM} m off its own leg, on a control` +
+            ` ${r.mispunchDecoyM} m from it — the robot got lost, the course is not a trap`,
+        );
+      }
       if (!ok) {
         failed = true;
+        if (decoyed) {
+          console.log(
+            `     a wrong control sits ${r.mispunchDecoyM} m from the line of the leg — inside punching` +
+              ` distance of the route to the right one, so a competitor reading the map can mispunch here`,
+          );
+        }
         if (r.onBarrier) console.log(`     ${r.onBarrier} sited point(s) inside a barrier`);
         if (r.brokenLegs.length) console.log(`     legs with no route: ${r.brokenLegs.join(', ')}`);
         if (r.renderErrors.length) console.log(`     renderErrors ${JSON.stringify(r.renderErrors)}`);

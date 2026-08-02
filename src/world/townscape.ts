@@ -235,6 +235,33 @@ export interface TownscapeOptions {
   beech?: Asset;
 }
 
+/**
+ * Tallest a barrier may be drawn when nothing stops the athlete at it, metres.
+ *
+ * Must match `CROSSABLE_MAX_H` in tools/terrain/townscape.mjs, and the data
+ * carries the number it was built with (`TownscapeData.crossableMaxH`) so the
+ * two cannot drift apart silently.
+ *
+ * This is the fix for the report that reads "I go through some brown walls, and
+ * then I'm stuck again", and it is worth being exact about what went wrong,
+ * because the diagnosis that looked obvious was not the one. Nothing here is in
+ * the wrong coordinate frame: walls, footprints and the water all come from OSM
+ * lon/lat through the same tangent-plane transform `src/core/geo.ts` defines,
+ * the ZABAGED overlay goes through the same `geoToWorld`, and only the *height*
+ * rasters are resampled out of S-JTSK (D-017). Measured against the shipped
+ * raster, 100 % of uncrossable barrier length is stamped and the impassable
+ * cells with nothing visible on them are 1.2 % of the playable ground, a metre
+ * from something drawn, with no preferred bearing. There is no rotation.
+ *
+ * What there was: 44 % of the barrier length in Krumlov was drawn as a solid
+ * 1.5 m slab and registered no collider at all, because the extractor invented
+ * that 1.5 m for every untagged fence and then decided crossability from it.
+ * So the athlete ran through the visible barrier into the strip behind it and
+ * jammed against the uncrossable wall on its far side — one event, both halves
+ * of the sentence.
+ */
+export const CROSSABLE_MAX_H = 0.9;
+
 const WALL_SPEC: Record<number, { thick: number; mat: 'stone' | 'metal' | 'hedge' }> = {
   0: { thick: 0.45, mat: 'stone' },
   1: { thick: 1.15, mat: 'stone' },
@@ -342,6 +369,11 @@ export class Townscape {
     const n = w.p.length / 2;
     if (n < 2) return;
     const half = thick * 0.5;
+    // Draw only what the collider below will actually enforce. With current
+    // data this clamp never bites — the extractor already derives `u` from the
+    // same number — but it is what makes a stale townscape.json degrade into a
+    // low fence rather than back into a wall you can walk through.
+    const height = w.u ? w.h : Math.min(w.h, CROSSABLE_MAX_H);
 
     for (let i = 0; i < n - 1; i++) {
       const ax = w.p[i * 2] as number;
@@ -359,12 +391,12 @@ export class Townscape {
       // at one end and bury itself at the other.
       const ag = field.heightAt(ax, az) - 0.35;
       const bg = field.heightAt(bx, bz) - 0.35;
-      const at = field.heightAt(ax, az) + w.h;
-      const bt = field.heightAt(bx, bz) + w.h;
+      const at = field.heightAt(ax, az) + height;
+      const bt = field.heightAt(bx, bz) + height;
 
       const v = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
       const uMax = len;
-      const vMax = w.h;
+      const vMax = height;
 
       // Two faces and a cap. No end caps: walls in the data are long runs and
       // the ends are almost always against a building or another wall.
@@ -372,9 +404,10 @@ export class Townscape {
       quad(b, v(bx - px, bg, bz - pz), v(ax - px, ag, az - pz), v(ax - px, at, az - pz), v(bx - px, bt, bz - pz), uMax, vMax);
       quad(b, v(ax - px, at, az - pz), v(bx - px, bt, bz - pz), v(bx + px, bt, bz + pz), v(ax + px, at, az + pz), uMax, thick);
 
-      // ISSprOM 515/518 and 411: over 1.5 m it is legally uncrossable, so it
-      // blocks. Under it, 513.1 passable wall — costs time, does not stop you,
-      // and that cost belongs to the athlete model, not to a hard collider.
+      // ISSprOM 515/518 and 411 — a legal boundary under Rule 17.2, so it
+      // blocks. Below `CROSSABLE_MAX_H` it is 513.1/516 crossable and does not,
+      // which is only defensible because the quad above is now drawn at a
+      // height a runner is obviously stepping over.
       if (w.u) this.blocks.add(ax, az, bx, bz, half + 0.25);
     }
   }

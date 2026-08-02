@@ -55,6 +55,9 @@ const IMPASSABLE = 10;
 /** The arena, from `START` in src/world/sprintScene.ts. */
 const ARENA = { x: 1, z: 24 };
 
+/** Half-extent of the playable area, metres. Per `VENUES.krumlov` in townscape.mjs. */
+const PLAYABLE_R = 600;
+
 /** `EYE_HEIGHT` in src/world/sprintScene.ts. */
 const EYE_HEIGHT = 1.62;
 
@@ -84,6 +87,45 @@ const LIMITS = {
   maxPocketM2: 30_000,
   /** Fraction of uncrossable barrier length that must appear in the raster. */
   minBarrierDrawn: 0.995,
+  /**
+   * Fraction of building interior that must come back impassable, sampled a
+   * metre inside the footprint wall. Measured: 1.000.
+   */
+  minFootprintDrawn: 0.995,
+  /**
+   * Metres of barrier that may be drawn taller than `crossableMaxH` while
+   * nothing stops the athlete at it. Zero, and it has to be zero: this is the
+   * exact defect the client reported, and there is no tolerance band in which
+   * "you can see it but you run through it" is acceptable.
+   */
+  maxDrawnLooseM: 0,
+  /**
+   * How much of the playable ground the raster may call impassable with nothing
+   * drawn on it, as a fraction. Measured: 0.012.
+   *
+   * Not zero, and it cannot be. The runnability raster carries ZABAGED's
+   * buildings and water bodies (build.mjs, layers 99 and 132) while the town is
+   * *drawn* from OSM, and two national datasets do not trace the same outline
+   * to the centimetre. At 1 m cells the residual is a one-cell rind round every
+   * building and along both banks of the Vltava. 2 % leaves room for that and
+   * none for a systematic displacement, which is a different shape of number
+   * entirely — see `trend` and `directional` below.
+   */
+  maxGhostFraction: 0.02,
+  /**
+   * The rotation test, and the reason this gate exists in this shape.
+   *
+   * If a layer were left in the S-JTSK grid frame the disagreement would grow
+   * with distance from the origin at tan(7.95°) ≈ 0.14 m per metre and every
+   * offset would point the same way. `maxTrend` is metres of disagreement per
+   * metre of radius; `maxDirectional` is the resultant length of the offset
+   * bearings, which a real rotation drives towards 1. Krumlov measures ≈0 for
+   * both. These are set an order of magnitude below the rotation signature and
+   * an order above the noise, so they catch a frame error on the day it is
+   * introduced and never fire on dataset drift.
+   */
+  maxTrend: 0.01,
+  maxDirectional: 0.35,
   /**
    * How far the eye may sit from `terrain + EYE_HEIGHT`, metres.
    *
@@ -302,6 +344,243 @@ class Colliders {
 }
 
 // ---------------------------------------------------------------------------
+// Phase 0 — does the world the player sees agree with the world that stops them
+// ---------------------------------------------------------------------------
+
+/**
+ * Sample the drawn town against the raster, in both directions.
+ *
+ * Written for a report that read "I go through some brown walls, and then I'm
+ * stuck again" — two symptoms of one disease, a barrier that exists in one
+ * representation and not the other. It answers three questions the flood-fill
+ * cannot, because a venue can be perfectly connected and still lie to the
+ * player about where its walls are.
+ *
+ *  1. **Is anything drawn that does not stop you?** Every barrier taller than
+ *     `crossableMaxH` must carry a collider. Below it, the athlete steps over
+ *     and the geometry is drawn low enough to say so. There is no third case,
+ *     and the one that shipped — 13 849 m drawn at 1.5 m with no collider —
+ *     was 44 % of the barrier length in the venue.
+ *  2. **Is anything enforced that is not drawn?** Uncrossable barriers and
+ *     building footprints are sampled along their length and must come back
+ *     `Impassable` from the raster, which is what the map draws.
+ *  3. **Is the raster impassable where nothing is drawn at all?** These are the
+ *     invisible walls. Reported as area, as the worst distance from the nearest
+ *     visible feature, and — because a misregistered frame is the obvious
+ *     suspect — with the two statistics that would prove it.
+ *
+ * **On the rotation hypothesis.** D-017 records that S-JTSK grid north is 7.95°
+ * off true north here and that the rasters are resampled into the world frame,
+ * so a passability layer left in the wrong frame would displace every barrier
+ * by an amount growing with distance from the origin and in a consistent
+ * direction. That is exactly the symptom, so this measures it directly: `trend`
+ * is the least-squares slope of disagreement against radius (a rotation gives
+ * ~0.14 m/m at 7.95°) and `concentration` is the resultant length of the offset
+ * bearings, 1 for "all the same way" and 0 for scatter. Krumlov measures a
+ * slope of about zero and a concentration near zero: the disagreement is
+ * quantisation and ZABAGED-versus-OSM outline drift, not a frame error. The
+ * numbers are printed every run so the next person does not have to take that
+ * on trust.
+ */
+function agreement(venue, bin) {
+  const { rMeta, r, town } = loadVenue(venue, bin);
+  const capH = town.crossableMaxH ?? Infinity;
+
+  const rasterAt = (x, z) => {
+    const i = Math.round((x - rMeta.originX) / rMeta.resM);
+    const j = Math.round((z - rMeta.originZ) / rMeta.resM);
+    if (i < 0 || j < 0 || i >= rMeta.width || j >= rMeta.height) return IMPASSABLE;
+    return r[j * rMeta.width + i];
+  };
+
+  // --- 1. drawn taller than the athlete can step over, and not enforced ----
+  let drawnLoose = 0;
+  let drawnLooseWays = 0;
+  let worstLoose = 0;
+  for (const w of town.walls) {
+    if (w.u || w.h <= capH) continue;
+    drawnLooseWays++;
+    if (w.h > worstLoose) worstLoose = w.h;
+    for (let i = 0; i + 3 < w.p.length; i += 2) {
+      drawnLoose += Math.hypot(w.p[i + 2] - w.p[i], w.p[i + 3] - w.p[i + 1]);
+    }
+  }
+
+  // --- what the player can see, and be legitimately stopped by -------------
+  const col = new Colliders(town);
+  const water = new Colliders({ buildings: [], walls: [] });
+  for (const w of town.water) {
+    if (w.p && w.p.length >= 6) water.addRing(w.p);
+    else if (w.l && w.w) {
+      for (let i = 0; i + 3 < w.l.length; i += 2) {
+        water.addSeg(w.l[i], w.l[i + 1], w.l[i + 2], w.l[i + 3], w.w * 0.5);
+      }
+    }
+  }
+  const visible = (x, z) =>
+    col.inBuilding(x, z) || col.inBarrier(x, z) || water.inBuilding(x, z) || water.inBarrier(x, z);
+
+  // --- 2. enforced but not drawn on the map -------------------------------
+  const missOf = (pts) => {
+    let n = 0;
+    let miss = 0;
+    for (const [x, z] of pts) {
+      if (Math.abs(x) > PLAYABLE_R || Math.abs(z) > PLAYABLE_R) continue;
+      n++;
+      if (rasterAt(x, z) !== IMPASSABLE) miss++;
+    }
+    return { n, miss };
+  };
+
+  const barrierPts = [];
+  for (const [ax, az, bx, bz] of col.segData) {
+    const len = Math.hypot(bx - ax, bz - az);
+    const steps = Math.max(2, Math.ceil(len / 0.5));
+    for (let i = 0; i <= steps; i++) {
+      const t = i / steps;
+      barrierPts.push([ax + (bx - ax) * t, az + (bz - az) * t]);
+    }
+  }
+  const barrier = missOf(barrierPts);
+
+  // Footprints are sampled a metre inside the wall rather than on it: a point
+  // on the outline rounds to whichever cell centre is nearest, which is as
+  // often outside the building as in, and that is the grid talking rather than
+  // the data. A metre in is inside the smallest footprint here and is where the
+  // athlete would actually be standing.
+  const insidePts = [];
+  for (const p of col.ringData) {
+    const n = p.length / 2;
+    for (let i = 0; i < n; i++) {
+      const ax = p[i * 2];
+      const az = p[i * 2 + 1];
+      const bx = p[((i + 1) % n) * 2];
+      const bz = p[((i + 1) % n) * 2 + 1];
+      const len = Math.hypot(bx - ax, bz - az);
+      const steps = Math.max(1, Math.ceil(len / 1.5));
+      for (let s = 0; s < steps; s++) {
+        const t = (s + 0.5) / steps;
+        const mx = ax + (bx - ax) * t;
+        const mz = az + (bz - az) * t;
+        const nx = -(bz - az) / (len || 1);
+        const nz = (bx - ax) / (len || 1);
+        for (const sign of [1, -1]) {
+          const px = mx + nx * sign;
+          const pz = mz + nz * sign;
+          if (pointInFlatRing(p, px, pz)) {
+            insidePts.push([px, pz]);
+            break;
+          }
+        }
+      }
+    }
+  }
+  const footprint = missOf(insidePts);
+
+  // --- 3. impassable where nothing is drawn -------------------------------
+  const ghosts = [];
+  let cells = 0;
+  let impassable = 0;
+  for (let j = 0; j < rMeta.height; j++) {
+    const z = rMeta.originZ + j * rMeta.resM;
+    if (Math.abs(z) > PLAYABLE_R) continue;
+    for (let i = 0; i < rMeta.width; i++) {
+      const x = rMeta.originX + i * rMeta.resM;
+      if (Math.abs(x) > PLAYABLE_R) continue;
+      cells++;
+      if (r[j * rMeta.width + i] !== IMPASSABLE) continue;
+      impassable++;
+      if (!visible(x, z)) ghosts.push([x, z]);
+    }
+  }
+  const cellM2 = rMeta.resM * rMeta.resM;
+
+  // Distance and bearing from each ghost cell to the nearest thing that is
+  // drawn. Sub-sampled: the answer is a distribution, and 3 000 draws pin it
+  // down far more cheaply than 18 000 do.
+  const stride = Math.max(1, Math.floor(ghosts.length / 3000));
+  const MAX_R = 16;
+  let worstD = 0;
+  let worstAt = null;
+  let worstBrg = 0;
+  let unexplained = 0;
+  let sumR = 0;
+  let sumD = 0;
+  let sumRD = 0;
+  let sumRR = 0;
+  let n = 0;
+  let sinSum = 0;
+  let cosSum = 0;
+  const dists = [];
+  for (let k = 0; k < ghosts.length; k += stride) {
+    const [x, z] = ghosts[k];
+    let d = Infinity;
+    let bx = 0;
+    let bz = 0;
+    for (let rad = 0.5; rad <= MAX_R; rad += 0.5) {
+      const steps = Math.max(8, Math.ceil((2 * Math.PI * rad) / 0.5));
+      for (let a = 0; a < steps; a++) {
+        const th = (a / steps) * 2 * Math.PI;
+        const px = x + Math.cos(th) * rad;
+        const pz = z + Math.sin(th) * rad;
+        if (visible(px, pz)) {
+          d = rad;
+          bx = px;
+          bz = pz;
+          break;
+        }
+      }
+      if (d < Infinity) break;
+    }
+    n++;
+    if (d === Infinity) {
+      unexplained++;
+      dists.push(MAX_R);
+      continue;
+    }
+    dists.push(d);
+    const radius = Math.hypot(x, z);
+    sumR += radius;
+    sumD += d;
+    sumRD += radius * d;
+    sumRR += radius * radius;
+    if (d >= 1.5) {
+      const brg = Math.atan2(bx - x, -(bz - z));
+      sinSum += Math.sin(brg);
+      cosSum += Math.cos(brg);
+      if (d > worstD) {
+        worstD = d;
+        worstAt = [x, z];
+        worstBrg = ((brg * 180) / Math.PI + 360) % 360;
+      }
+    }
+  }
+  dists.sort((a, b) => a - b);
+  const trend = n > 1 ? (n * sumRD - sumR * sumD) / Math.max(1e-9, n * sumRR - sumR * sumR) : 0;
+  const directional = Math.hypot(sinSum, cosSum) / Math.max(1, n);
+
+  return {
+    resM: rMeta.resM,
+    crossableMaxH: town.crossableMaxH,
+    drawnLoose,
+    drawnLooseWays,
+    worstLoose,
+    barrierDrawn: 1 - barrier.miss / Math.max(1, barrier.n),
+    footprintDrawn: 1 - footprint.miss / Math.max(1, footprint.n),
+    ghostM2: ghosts.length * cellM2,
+    ghostFraction: ghosts.length / Math.max(1, cells),
+    impassableFraction: impassable / Math.max(1, cells),
+    ghostP99: dists.length ? dists[Math.min(dists.length - 1, Math.floor(dists.length * 0.99))] : 0,
+    worstD,
+    worstAt,
+    worstBrg,
+    unexplained: unexplained / Math.max(1, n),
+    trend,
+    directional,
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Phase 1 — flood-fill one raster
 // ---------------------------------------------------------------------------
 
@@ -320,8 +599,7 @@ function floodFill(venue, bin, step) {
   const blocked = (x, z) =>
     col.inBuilding(x, z) || col.inBarrier(x, z) || rasterAt(x, z) === IMPASSABLE;
 
-  // The playable extent, ±600 m, per VENUES.krumlov in townscape.mjs.
-  const R = 600;
+  const R = PLAYABLE_R;
   const w = Math.floor((2 * R) / step) + 1;
   const h = w;
   const x0 = -R;
@@ -698,6 +976,74 @@ async function main() {
   }
 
   let bad = false;
+
+  // --- phase 0 -------------------------------------------------------------
+  for (const { bin, tiers } of tierRasters(venue)) {
+    if (!existsSync(join(dir, bin))) continue;
+    const a = agreement(venue, bin);
+    console.log(`· ${venue} geometry ↔ raster · ${bin} (tiers: ${tiers.join(', ')})`);
+    if (a.crossableMaxH === undefined) {
+      console.error(
+        `✗ ${bin}: townscape.json predates the crossable-height invariant — re-run tools/terrain/townscape.mjs`,
+      );
+      bad = true;
+    }
+    console.log(
+      `  drawn above ${a.crossableMaxH ?? '?'} m with nothing to stop you: ` +
+        `${a.drawnLoose.toFixed(0)} m over ${a.drawnLooseWays} barrier(s)` +
+        (a.drawnLoose > 0 ? `, tallest ${a.worstLoose} m` : ''),
+    );
+    console.log(
+      `  uncrossable barrier on the map ${(a.barrierDrawn * 100).toFixed(1)} % · ` +
+        `building interior ${(a.footprintDrawn * 100).toFixed(1)} %`,
+    );
+    console.log(
+      `  impassable with nothing drawn on it: ${(a.ghostM2 / 1e4).toFixed(2)} ha, ` +
+        `${(a.ghostFraction * 100).toFixed(1)} % of the playable ground ` +
+        `(${(a.impassableFraction * 100).toFixed(1)} % is impassable in all)`,
+    );
+    console.log(
+      `  worst disagreement ${a.worstD.toFixed(1)} m` +
+        (a.worstAt ? ` at (${a.worstAt[0]}, ${a.worstAt[1]}), bearing ${a.worstBrg.toFixed(0)}°` : '') +
+        ` · p99 ${a.ghostP99.toFixed(1)} m`,
+    );
+    console.log(
+      `  rotation test: ${a.trend >= 0 ? '+' : ''}${a.trend.toFixed(4)} m per metre of radius, ` +
+        `bearings ${(a.directional * 100).toFixed(0)} % aligned ` +
+        `(a 7.95° frame error would read ≈0.14 and ≈100)`,
+    );
+
+    if (a.drawnLoose > LIMITS.maxDrawnLooseM) {
+      console.error(
+        `✗ ${bin}: ${a.drawnLoose.toFixed(0)} m of barrier is drawn up to ${a.worstLoose} m tall and does not stop the athlete.\n` +
+          `  This is "I go through some brown walls": the geometry and the collider are the same\n` +
+          `  feature and must agree. Either give it a collider or draw it no taller than\n` +
+          `  ${a.crossableMaxH} m — see CROSSABLE_MAX_H in tools/terrain/townscape.mjs.`,
+      );
+      bad = true;
+    }
+    if (a.footprintDrawn < LIMITS.minFootprintDrawn) {
+      console.error(
+        `✗ ${bin}: ${(100 - a.footprintDrawn * 100).toFixed(1)} % of building interior is passable in the raster the map draws (ISSprOM 521)`,
+      );
+      bad = true;
+    }
+    if (a.ghostFraction > LIMITS.maxGhostFraction) {
+      console.error(
+        `✗ ${bin}: ${(a.ghostFraction * 100).toFixed(1)} % of the playable ground is out of bounds with nothing drawn on it — an invisible wall is where a player gets stuck`,
+      );
+      bad = true;
+    }
+    if (Math.abs(a.trend) > LIMITS.maxTrend || a.directional > LIMITS.maxDirectional) {
+      console.error(
+        `✗ ${bin}: the disagreement grows with radius (${a.trend.toFixed(3)} m/m) and points ${(a.directional * 100).toFixed(0)} % one way.\n` +
+          `  That is the signature of a layer left in the wrong frame. S-JTSK grid north is 7.95° off\n` +
+          `  true north here and the rasters are resampled into the world frame — see D-017.`,
+      );
+      bad = true;
+    }
+    console.log('');
+  }
 
   // --- phase 1 -------------------------------------------------------------
   for (const { bin, tiers } of tierRasters(venue)) {

@@ -540,9 +540,12 @@ function main() {
         p: flatten(line),
         h: round1(h),
         k: spec.k,
-        // ISSprOM 515/518: over 1.5 m is uncrossable, and Rule 17.2 makes that
-        // legal rather than advisory. Under it, 513.1 passable wall.
-        u: h > 1.5 ? 1 : 0,
+        // ISSprOM 515/518 uncrossable wall/fence, Rule 17.2 — a legal boundary
+        // rather than an advisory one. Under `CROSSABLE_MAX_H` it is 513.1/516
+        // crossable, which here means drawn low enough to be read as something
+        // you step over. See CROSSABLE_MAX_H for why the line is there and not
+        // at ISSprOM's 1.5 m.
+        u: h > CROSSABLE_MAX_H ? 1 : 0,
       });
       continue;
     }
@@ -690,6 +693,12 @@ function main() {
      * it, so map, course setting and collision cannot disagree — see D-024.
      */
     rasterStamped: true,
+    /**
+     * The height at or below which a barrier is crossable, metres. Carried in
+     * the file rather than duplicated as a third constant, so the renderer and
+     * the CI gate check the number this data was actually built with.
+     */
+    crossableMaxH: CROSSABLE_MAX_H,
     buildings,
     walls,
     steps,
@@ -1280,14 +1289,51 @@ function simplifyLine(pts, tol) {
   return out;
 }
 
+/**
+ * Modelled height per barrier tag, metres. **Only 9 of Krumlov's 701 barrier
+ * ways carry a `height` tag**, so for 98.7 % of them this table is the height,
+ * and — through `CROSSABLE_MAX_H` — it is also what decides whether the athlete
+ * is stopped by it. That is a lot of weight on a default, so each one is chosen
+ * to be unambiguous rather than average.
+ *
+ * `fence` used to be 1.5, which was the worst possible number: `u` was
+ * `h > 1.5`, so every untagged fence — 210 ways, **13 849 m, 44 % of all the
+ * barrier length in the venue** — landed exactly on the threshold and fell to
+ * the crossable side, while still being *drawn* as a 1.5 m opaque slab. The
+ * athlete ran straight through fourteen kilometres of visible barrier, which is
+ * precisely the report this table now answers.
+ *
+ * The other way out — call an untagged fence uncrossable — was measured and is
+ * worse. Flood-filled from Náměstí Svornosti it takes the reachable venue from
+ * 95.1 % to 85.6 %, walling off 10.9 ha including 2.5 ha of *paved street*:
+ * OSM does not map the gates, so a fenced plot with a drive in it becomes a
+ * sealed pocket. Opening the fence where a paved way crosses it recovers only
+ * 3.4 points. So the fence stays crossable and is drawn as what it is.
+ */
 const BARRIER = {
   wall: { h: 2.4, k: 0 },
   city_wall: { h: 6.5, k: 1 },
   retaining_wall: { h: 2.2, k: 2 },
-  fence: { h: 1.5, k: 3 },
+  fence: { h: 0.9, k: 3 },
   hedge: { h: 1.7, k: 4 },
   guard_rail: { h: 0.9, k: 3 },
 };
+
+/**
+ * The invariant that ties the geometry to the collider, metres.
+ *
+ * **A barrier is crossable if and only if it is drawn no taller than this.**
+ * Not "1.5 m, because ISSprOM 515/518 say so" — that is the right *cartographic*
+ * line and the wrong *game* one, because between 0.9 m and 1.5 m sits a band of
+ * barriers that look solid from a 1.62 m eye and were not solid. Whatever the
+ * player can see standing in front of them has to behave the way it looks:
+ * step over it, or be stopped by it, with nothing in between.
+ *
+ * `Townscape.buildWall` in src/world/townscape.ts clamps to the same number, so
+ * a stale townscape.json cannot put a wall back that is drawn tall and does not
+ * block, and `tools/ci/check-passable.mjs` fails the build if one appears.
+ */
+const CROSSABLE_MAX_H = 0.9;
 
 function polyline(geom, frame, inReach) {
   const out = [];

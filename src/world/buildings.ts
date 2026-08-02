@@ -84,7 +84,11 @@ export interface WallRecord {
   h: number;
   /** 0 wall · 1 city wall · 2 retaining wall · 3 fence/railing · 4 hedge. */
   k: number;
-  /** 1 when ISSprOM 515/518 applies — over 1.5 m, and therefore forbidden. */
+  /**
+   * 1 when ISSprOM 515/518 applies — taller than `TownscapeData.crossableMaxH`,
+   * and therefore a legal boundary under Rule 17.2. 0 means the athlete runs
+   * over it, and `Townscape.buildWall` will not draw it above that height.
+   */
   u: number;
 }
 
@@ -132,6 +136,12 @@ export interface TownscapeData {
    * See `SprintScene.stampPaved` and D-024.
    */
   rasterStamped?: boolean;
+  /**
+   * The height at or below which a barrier is crossable, metres, as the
+   * extractor that wrote this file understood it. `Townscape` checks it against
+   * its own `CROSSABLE_MAX_H`; absent, the file predates the invariant.
+   */
+  crossableMaxH?: number;
   buildings: BuildingRecord[];
   walls: WallRecord[];
   steps: StepRecord[];

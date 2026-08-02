@@ -115,17 +115,30 @@ export function makeMenuScreen(): Screen {
           </nav>
         </div>
 
+        <!--
+          These are switches, not buttons, and they used to be indistinguishable
+          from buttons: the only thing separating on from off was a lime outline
+          against a grey one. Clicking "Beginner hints" once, to read them, turned
+          them off — and the thing it turns off is a pale band on the ground that
+          a first-time player has never seen and so cannot miss. The state is now
+          written out. -->
         <footer class="menu__foot">
           <button class="menu__toggle${getSettings().beginnerAid ? ' is-on' : ''}"
                   data-toggle="beginnerAid"
                   aria-pressed="${getSettings().beginnerAid ? 'true' : 'false'}"
                   title="${t('settings.beginnerAidHelp')}">
             ${t('settings.beginnerAid')}
+            <span class="menu__toggleState" data-role="state">${
+              getSettings().beginnerAid ? t('settings.on') : t('settings.off')
+            }</span>
           </button>
           <button class="menu__toggle${getSettings().showHands ? ' is-on' : ''}"
                   data-toggle="showHands"
                   aria-pressed="${getSettings().showHands ? 'true' : 'false'}">
             ${t('settings.showHands')}
+            <span class="menu__toggleState" data-role="state">${
+              getSettings().showHands ? t('settings.on') : t('settings.off')
+            }</span>
           </button>
           <div class="menu__locales" role="group" aria-label="${t('menu.language')}">
             ${LOCALES.map(
@@ -156,13 +169,19 @@ export function makeMenuScreen(): Screen {
           return;
         }
 
+        const markToggle = (el: HTMLElement, on: boolean): void => {
+          el.classList.toggle('is-on', on);
+          el.setAttribute('aria-pressed', on ? 'true' : 'false');
+          const state = el.querySelector('[data-role="state"]');
+          if (state) state.textContent = on ? t('settings.on') : t('settings.off');
+        };
+
         // The beginner aid. On by default; this is how an orienteer turns the
         // training wheels off. See src/world/bearingBand.ts.
         if (target.dataset.toggle === 'beginnerAid') {
           const next = !getSettings().beginnerAid;
           setSetting('beginnerAid', next);
-          target.classList.toggle('is-on', next);
-          target.setAttribute('aria-pressed', next ? 'true' : 'false');
+          markToggle(target, next);
           return;
         }
 
@@ -172,8 +191,7 @@ export function makeMenuScreen(): Screen {
           const next = !getSettings().showHands;
           setSetting('showHands', next);
           setSetting('thirdPerson', next);
-          target.classList.toggle('is-on', next);
-          target.setAttribute('aria-pressed', next ? 'true' : 'false');
+          markToggle(target, next);
           return;
         }
 

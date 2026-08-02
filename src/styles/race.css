@@ -1090,6 +1090,47 @@
   cursor: pointer;
 }
 
+/* --- "really quit?" -------------------------------------------------------
+ *
+ * Sits above the prestart card rather than replacing it, so quitting from the
+ * prestart and changing your mind leaves the race exactly where it was.
+ *
+ * The two answers are the same 64 px target as START — this is reachable with a
+ * thumb, mid-race, on a phone — and they are deliberately not symmetrical.
+ * Carrying on is the full-width event orange the player already knows means
+ * "go"; quitting is a quiet outlined button underneath it. The destructive one
+ * being the plain one is the whole point: the eye lands on the way back into
+ * the race first. */
+
+.racepanel--ask {
+  z-index: 6;
+  background: rgba(4, 9, 6, 0.82);
+}
+
+.racepanel__card--ask {
+  border-top-color: var(--c-warn);
+}
+
+.racepanel__asks {
+  display: grid;
+  gap: 0.5rem;
+  margin-top: 0.4rem;
+}
+
+.racepanel__go--quit {
+  background: transparent;
+  border: 1px solid var(--c-line);
+  color: var(--c-paper-dim);
+  min-height: 52px;
+  font-size: 0.9rem;
+}
+
+.racepanel__go--quit:hover,
+.racepanel__go--quit:focus-visible {
+  border-color: var(--c-warn);
+  color: var(--c-warn);
+}
+
 /* --- BEFORE screen -------------------------------------------------------- */
 
 .before {
@@ -1462,6 +1503,9 @@
 
 .menu__toggle {
   appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
   border: 1px solid var(--c-line);
   background: transparent;
   color: var(--c-paper-dim);
@@ -1478,6 +1522,23 @@
 .menu__toggle.is-on {
   color: var(--c-lime);
   border-color: var(--c-lime);
+}
+
+/* The word, not just the colour. A switch whose only state is a border tint
+   reads as a button, and the one thing this particular switch turns off is a
+   faint band on the ground that a beginner has never seen and so cannot miss. */
+.menu__toggleState {
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  padding: 0.15rem 0.4rem;
+  border-radius: var(--r-sm);
+  border: 1px solid currentColor;
+  opacity: 0.75;
+}
+
+.menu__toggle.is-on .menu__toggleState {
+  opacity: 1;
+  background: color-mix(in srgb, var(--c-lime) 16%, transparent);
 }
 
 .menu__foot {

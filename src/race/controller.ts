@@ -100,6 +100,10 @@ export class RaceController {
   private readonly hud: RaceHud;
   private readonly controls: RaceControls;
   private readonly panel: HTMLElement;
+  /** "Really quit?" — see `askQuit`. Its own layer, above `panel`. */
+  private readonly quitAsk: HTMLElement;
+  /** Whether the controls were already suspended when the question went up. */
+  private quitAskWasSuspended = false;
 
   private beltLeft: boolean[];
   /**
@@ -187,13 +191,24 @@ export class RaceController {
       belt: setup.belt,
       touch: setup.touch,
       onToggleMap: () => this.map.toggle(),
-      onQuit: () => setup.onQuit(),
+      onQuit: () => this.askQuit(),
       onTakeBelt: (i) => this.takeBelt(i),
     });
 
     this.panel = document.createElement('div');
     this.panel.className = 'racepanel';
-    this.root.append(this.controls.root, this.hud.root, this.map.root, this.panel);
+    // Its own layer rather than a second state of `panel`: the prestart card
+    // lives there, and quitting from the prestart must not destroy it.
+    this.quitAsk = document.createElement('div');
+    this.quitAsk.className = 'racepanel racepanel--ask';
+    this.quitAsk.hidden = true;
+    this.root.append(
+      this.controls.root,
+      this.hud.root,
+      this.map.root,
+      this.panel,
+      this.quitAsk,
+    );
 
     this.controls.attachKeyboard();
     this.controls.attachMouse(canvas);
@@ -209,6 +224,16 @@ export class RaceController {
 
     const onKey = (e: KeyboardEvent) => {
       if (e.repeat) return;
+      // While the question is up it is the only thing on screen that listens.
+      // Enter answers it, Escape dismisses it (below); the map, the belt and
+      // the start key are all deaf until it is gone.
+      if (!this.quitAsk.hidden && e.code !== 'Escape') {
+        if (e.code === 'Enter' || e.code === 'NumpadEnter') {
+          e.preventDefault();
+          setup.onQuit();
+        }
+        return;
+      }
       // `code` is the right thing to test — it is layout-independent, so M is
       // the same physical key on QWERTZ, which this game's audience mostly
       // uses. `key` is the fallback for synthetic events that carry only it.
@@ -216,11 +241,13 @@ export class RaceController {
         e.preventDefault();
         this.map.toggle();
       } else if (e.code === 'Escape') {
-        // Escape closes the map if it is open, otherwise leaves the race.
-        // Without the second branch there was no keyboard way out at all, and
-        // the only exit was a small corner glyph most players never found.
-        if (this.map.isOpen) this.map.setOpen(false);
-        else setup.onQuit();
+        // Escape unwinds one layer at a time, innermost first: the question,
+        // then the map, then the race. It never *answers* the question — an
+        // Escape that quits is the same accident the question exists to stop.
+        e.preventDefault();
+        if (!this.quitAsk.hidden) this.closeQuitAsk();
+        else if (this.map.isOpen) this.map.setOpen(false);
+        else this.askQuit();
       } else if (e.code === 'Space' && !this.started) {
         e.preventDefault();
         this.begin();
@@ -315,6 +342,70 @@ export class RaceController {
         </ul>
         <p class="racepanel__coachAid">${esc(t('race.aidHint'))}</p>
       </details>`;
+  }
+
+  /**
+   * "Really quit?" — the one question this game asks before throwing work away.
+   *
+   * Quitting mid-race discards the run: the time, the punches, the splits, and
+   * whatever navigation the player has done since the start triangle. Both ways
+   * out — the ✕ in the corner of the HUD and the Escape key — used to do that
+   * on a single press, and Escape is a key people hit reflexively to get their
+   * mouse cursor back out of pointer lock.
+   *
+   * It is deliberately *not* asked once the race is over. After the finish or a
+   * mispunch there is nothing left to lose, `onFinish` has already carried the
+   * result to the results screen, and a confirmation there would only be a
+   * second click between the player and the door.
+   */
+  private askQuit(): void {
+    if (this.ended) {
+      this.setup.onQuit();
+      return;
+    }
+    if (!this.quitAsk.hidden) return;
+
+    // Hand the mouse back. The question is a pointer target, and a race that
+    // has swallowed the cursor cannot be answered with one. The previous state
+    // is remembered rather than assumed: reading the map suspends the controls
+    // too, and answering "keep running" must not cancel that.
+    this.quitAskWasSuspended = this.controls.suspended;
+    this.controls.releasePointer();
+    this.controls.suspended = true;
+
+    this.quitAsk.innerHTML = `
+      <div class="racepanel__card racepanel__card--ask" role="alertdialog" aria-modal="true"
+           aria-labelledby="quitask-title" aria-describedby="quitask-body">
+        <h2 class="racepanel__title" id="quitask-title">${esc(t('race.quitTitle'))}</h2>
+        <p class="racepanel__note" id="quitask-body">${esc(t('race.quitBody'))}</p>
+        <div class="racepanel__asks">
+          <button class="racepanel__go racepanel__go--stay" data-act="stay">${esc(
+            t('race.quitStay'),
+          )}</button>
+          <button class="racepanel__go racepanel__go--quit" data-act="quit">${esc(
+            t('race.quitConfirm'),
+          )}</button>
+        </div>
+      </div>`;
+    this.quitAsk.hidden = false;
+    // Carrying on is the safe answer, so it is the one that already has focus:
+    // Enter is bound to quitting on purpose (a player who opened this meant to
+    // leave), and Space — which is also "start" — must not be able to reach a
+    // focused destructive button.
+    this.quitAsk.querySelector<HTMLElement>('[data-act="stay"]')?.focus();
+    this.quitAsk.querySelector('[data-act="stay"]')?.addEventListener('click', () => {
+      this.closeQuitAsk();
+    });
+    this.quitAsk.querySelector('[data-act="quit"]')?.addEventListener('click', () => {
+      this.setup.onQuit();
+    });
+  }
+
+  private closeQuitAsk(): void {
+    if (this.quitAsk.hidden) return;
+    this.quitAsk.hidden = true;
+    this.quitAsk.innerHTML = '';
+    this.controls.suspended = this.quitAskWasSuspended;
   }
 
   begin(): void {
