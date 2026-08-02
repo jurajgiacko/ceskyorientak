@@ -128,29 +128,67 @@ function makePaintedMaterial(): THREE.MeshStandardMaterial {
           float ang = atan( vPaintPos.z, vPaintPos.x );
           float y = vPaintPos.y;
 
-          // Cornice bands every 6 m, plus a stronger one at the storey breaks.
-          float band = abs( fract( y / 6.0 ) - 0.5 ) * 2.0;
-          float cornice = 1.0 - smoothstep( 0.86, 0.97, band );
+          // Cornice bands every 5.5 m, and they are *drawn*, not suggested.
+          //
+          // The first pass mixed a 0.6-weight shadow line over a 6 m period and
+          // from the square — 190 m away and about eighty pixels of shaft — the
+          // whole thing averaged to plain cream. The real Zámecká věž is one of
+          // the boldest pieces of Renaissance illusionism in Bohemia: strong
+          // dark-red and ochre horizontals, a register of painted pilasters,
+          // faux ashlar at the foot. At this distance the only thing that
+          // survives is contrast, so the contrast is what is painted.
+          float band = abs( fract( y / 5.5 ) - 0.5 ) * 2.0;
+          float cornice = 1.0 - smoothstep( 0.72, 0.90, band );
+          // A thin white fillet immediately under each dark band, which is what
+          // makes the horizontal read as a moulding rather than as a stain.
+          float fillet = ( 1.0 - smoothstep( 0.60, 0.70, band ) )
+                       - ( 1.0 - smoothstep( 0.70, 0.74, band ) );
 
-          // Painted pilasters: sixteen round the shaft, in a warm ochre.
-          float bay = abs( fract( ang * 16.0 / 6.28318 ) - 0.5 ) * 2.0;
-          float pilaster = smoothstep( 0.62, 0.80, bay );
+          // Painted pilasters: sixteen round the shaft, ochre with a shadowed
+          // edge, so the shaft reads as modelled from any angle.
+          float bayF = fract( ang * 16.0 / 6.28318 );
+          float bay = abs( bayF - 0.5 ) * 2.0;
+          float pilaster = smoothstep( 0.50, 0.72, bay );
+          float edge = ( 1.0 - smoothstep( 0.40, 0.52, bay ) );
 
           // Faux ashlar in the lower register only, as on the real tower.
-          float ashlar = ( 1.0 - smoothstep( 8.0, 11.0, y ) )
-                       * step( 0.9, abs( fract( y * 1.4 ) - 0.5 ) * 2.0 );
+          float ashlar = ( 1.0 - smoothstep( 8.0, 11.5, y ) )
+                       * step( 0.86, abs( fract( y * 1.2 ) - 0.5 ) * 2.0 );
 
-          vec3 ochre = vec3( 0.84, 0.66, 0.44 );
-          vec3 shadowLine = vec3( 0.52, 0.40, 0.33 );
-          diffuseColor.rgb = mix( diffuseColor.rgb, ochre, pilaster * 0.55 );
-          diffuseColor.rgb = mix( diffuseColor.rgb, shadowLine, cornice * 0.6 );
-          diffuseColor.rgb *= 1.0 - ashlar * 0.18;
+          vec3 ochre  = vec3( 0.72, 0.47, 0.24 );
+          vec3 oxblood = vec3( 0.40, 0.16, 0.13 );
+          vec3 lime   = vec3( 0.93, 0.90, 0.83 );
+          diffuseColor.rgb = mix( diffuseColor.rgb, ochre, pilaster * 0.80 );
+          diffuseColor.rgb = mix( diffuseColor.rgb, oxblood, max( edge * 0.45, cornice * 0.85 ) );
+          diffuseColor.rgb = mix( diffuseColor.rgb, lime, fillet * 0.7 );
+          diffuseColor.rgb *= 1.0 - ashlar * 0.26;
         }
         `,
       );
   };
   mat.customProgramCacheKey = () => 'krumlov-painted';
   return mat;
+}
+
+/**
+ * Re-tile a shared surface map for geometry with unit UVs.
+ *
+ * `loadSurface` sets `repeat = 1/physicalSize` because everything that uses it
+ * authors UVs in world metres. Lathes, cylinders and boxes do not — their UVs
+ * run 0..1 across a face — so the shared texture came out magnified by the
+ * physical tile size: the Marian column's plinth showed a *third* of a 3 m
+ * granite tile stretched over 3 m of stone, which at the foot of the arena, in
+ * the middle of the frame the sprint starts on, was a boulder with a column on
+ * it. Cloning shares the image and costs only the sampler state.
+ */
+function retile(t: THREE.Texture | undefined, repeat: number): THREE.Texture | null {
+  if (!t) return null;
+  const c = t.clone();
+  c.wrapS = THREE.RepeatWrapping;
+  c.wrapT = THREE.RepeatWrapping;
+  c.repeat.set(repeat, repeat);
+  c.needsUpdate = true;
+  return c;
 }
 
 function makePalette(stone?: SurfaceTextures): Palette {
@@ -162,9 +200,9 @@ function makePalette(stone?: SurfaceTextures): Palette {
     // thing it must not look like.
     stone: new THREE.MeshStandardMaterial({
       color: stone ? 0xb4aa9c : 0x9d968a,
-      map: stone?.albedo ?? null,
-      normalMap: stone?.normal ?? null,
-      roughnessMap: stone?.roughness ?? null,
+      map: retile(stone?.albedo, 2.5),
+      normalMap: retile(stone?.normal, 2.5),
+      roughnessMap: retile(stone?.roughness, 2.5),
       roughness: 0.95,
       metalness: 0,
     }),
@@ -374,9 +412,15 @@ function buildCloakBridge(group: THREE.Group, field: TerrainField, p: Palette): 
   }
 
   // --- three tiers of arches between the piers ---
-  // Torus half-rings, one per bay per tier. This is the whole silhouette.
+  // Torus half-rings, one per bay per tier. This is the whole silhouette, and
+  // it is what the bridge is recognised by, so it is worth resolving properly:
+  // at 5 radial by 10 tubular segments a half-ring seen edge-on — which is how
+  // it is seen from every street in Latrán — is a five-sided prism bent through
+  // ten steps, i.e. a slab with corners. 8 × 20 costs 220 extra triangles per
+  // arch over fifteen arches and is the difference between an arcade and a
+  // concrete viaduct.
   const span = len / bays;
-  const archGeo = new THREE.TorusGeometry(span * 0.42, 0.5, 5, 10, Math.PI);
+  const archGeo = new THREE.TorusGeometry(span * 0.42, 0.5, 8, 20, Math.PI);
   for (let tier = 0; tier < 3; tier++) {
     for (let i = 0; i < bays; i++) {
       const q = local((i + 0.5) / bays);
@@ -386,7 +430,7 @@ function buildCloakBridge(group: THREE.Group, field: TerrainField, p: Palette): 
       const arch = new THREE.Mesh(archGeo, p.stone);
       arch.position.set(q.x, y, q.z);
       arch.rotation.set(0, yaw + Math.PI / 2, 0);
-      push(arch, 100);
+      push(arch, 320);
       // Spandrel wall above the arch, so the tier reads as masonry not as a
       // floating ring.
       const wall = new THREE.Mesh(pierGeo, p.stone);
@@ -562,12 +606,14 @@ function buildSquare(group: THREE.Group, field: TerrainField, p: Palette): numbe
   group.add(mesh(new THREE.CylinderGeometry(0.16, 0.34, 2.1, 6), p.gold, C.x, y + 1.55, C.z));
   tris += 24;
 
-  // Fountain: an octagonal basin, low, with a small central jet pillar.
+  // Fountain: an octagonal basin, low, with a small central jet pillar. The
+  // pillar was a six-sided prism, which at 1.1 m across is a hexagonal post you
+  // stand next to at the start of every race in this venue.
   const fBase = field.heightAt(F.x, F.z);
   group.add(mesh(new THREE.CylinderGeometry(3.1, 3.1, 0.85, 8), p.stone, F.x, fBase + 0.4, F.z));
   tris += 32;
-  group.add(mesh(new THREE.CylinderGeometry(0.4, 0.55, 1.9, 6), p.stone, F.x, fBase + 1.4, F.z));
-  tris += 24;
+  group.add(mesh(new THREE.CylinderGeometry(0.4, 0.55, 1.9, 12), p.stone, F.x, fBase + 1.4, F.z));
+  tris += 48;
 
   return tris;
 }
@@ -599,6 +645,16 @@ export class Landmarks {
     this.group.traverse((o) => {
       if (o instanceof THREE.Mesh) o.geometry.dispose();
     });
+    // The stone material's maps are *clones* of the shared surface pack (see
+    // `retile`), so they own GPU sampler state the pack will never release.
+    // D-022 is the whole argument for being careful about this.
+    for (const t of [
+      this.palette.stone.map,
+      this.palette.stone.normalMap,
+      this.palette.stone.roughnessMap,
+    ]) {
+      t?.dispose();
+    }
     for (const m of Object.values(this.palette)) m.dispose();
     this.group.clear();
   }

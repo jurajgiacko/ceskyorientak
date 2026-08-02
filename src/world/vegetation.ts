@@ -489,6 +489,18 @@ export interface VegetationOptions {
   farRadius?: number;
   /** Undergrowth radius. */
   groundRadius?: number;
+  /**
+   * Suppress the forest floor's litter — granite boulders and fallen timber.
+   *
+   * On in the town. `MIX` is written for Šumava forest, where a boulder field
+   * is a mapped feature and a windthrown spruce is what the ground looks like;
+   * on the wooded scarp above Latrán the same table dropped 5 m granite blocks
+   * and 7 m logs onto lawns, garden slopes and the floor of the castle ravine.
+   * On the `Rock` class it is defensible — the castle rock genuinely is bare
+   * crag — and everywhere else in a town it reads as forest scenery that has
+   * wandered in.
+   */
+  townFloor?: boolean;
 }
 
 const VEG_CHUNK_M = 40;
@@ -530,6 +542,7 @@ export class Vegetation {
   private readonly farRadius: number;
   private readonly groundRadius: number;
   private readonly densityScale: number;
+  private readonly townFloor: boolean;
 
   private readonly cache = new Map<string, Placement[]>();
   private readonly scatterCache = new Map<string, { boulders: Placement[]; deadwood: Placement[] }>();
@@ -584,6 +597,7 @@ export class Vegetation {
     // cover. Beyond the ring the mosaic in the terrain material carries it.
     this.groundRadius = opts.groundRadius ?? (tight ? 15 : 22);
     this.densityScale = tight ? 0.45 : tier === 'medium' ? 0.75 : 1;
+    this.townFloor = opts.townFloor ?? false;
 
     const capacity = tight ? 2000 : 6000;
 
@@ -870,6 +884,15 @@ export class Vegetation {
 
     const run = f.runnabilityAt(x0 + VEG_CHUNK_M / 2, z0 + VEG_CHUNK_M / 2);
     const mix = MIX[run];
+    // In the town, boulders survive only on bare rock — the castle crag and the
+    // scarp under the Hrádek, where they are the landform — and dead timber not
+    // at all. See `VegetationOptions.townFloor`.
+    if (this.townFloor) {
+      if (run === Runnability.Rock) {
+        tryPlace(boulders, this.boulder.variants.length, mix.boulders * 0.55);
+      }
+      return { boulders, deadwood };
+    }
     tryPlace(boulders, this.boulder.variants.length, mix.boulders);
     tryPlace(deadwood, this.deadwood.variants.length, mix.deadwood);
     return { boulders, deadwood };

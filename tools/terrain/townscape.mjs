@@ -338,6 +338,33 @@ function parseColour(v, fallback) {
   return NAMED[s] ?? fallback;
 }
 
+/**
+ * A roof may be dark. It may not be a hole.
+ *
+ * Twenty-one footprints here carry a surveyed `roof:colour=black`, which the
+ * name table renders as `#3a3733` — a linear luminance of **0.038**, darker
+ * than fresh asphalt. Multiplied through a tile albedo map and lit at 08:00 by
+ * a sun that is not on that slope, it comes out as a void in the roofscape:
+ * from across the meander those twelve buildings read as missing roofs rather
+ * than as dark ones. A slate or bitumen roof in daylight is charcoal, not
+ * black, so the luminance is floored at 0.075 linear — about `#4d4a46` — and
+ * the hue is kept by scaling rather than by lightening toward white.
+ */
+function liftRoof(hex) {
+  const toLin = (v) => (v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4));
+  const r = ((hex >> 16) & 255) / 255;
+  const g = ((hex >> 8) & 255) / 255;
+  const b = (hex & 255) / 255;
+  const lum = 0.2126 * toLin(r) + 0.7152 * toLin(g) + 0.0722 * toLin(b);
+  const FLOOR = 0.075;
+  if (lum >= FLOOR || lum <= 0) return hex;
+  // sRGB is close enough to a 2.2 power that scaling the encoded value by the
+  // 1/2.2 root of the luminance ratio lands within a percent of the target.
+  const k = Math.pow(FLOOR / lum, 1 / 2.2);
+  const ch = (v) => Math.max(0, Math.min(255, Math.round(v * 255 * k)));
+  return (ch(r) << 16) | (ch(g) << 8) | ch(b);
+}
+
 /** Deterministic per-feature jitter so a terrace is not one flat colour. */
 function hashId(id) {
   let h = id >>> 0;
@@ -534,7 +561,12 @@ function main() {
       const line = polyline(el.geometry, frame, inReach);
       if (line.length >= 2) {
         const w = Number(tags.width) || (Number(tags.lanes) ? Number(tags.lanes) * 3 : spec.w);
-        paved.push({ l: flatten(simplifyLine(line, 1.2)), w: round1(w), k: spec.k });
+        const rec = { l: flatten(simplifyLine(line, 1.2)), w: round1(w), k: spec.k };
+        // A bridge deck is the one thing allowed to cross ground the raster
+        // calls impassable. Without this flag every crossing of the Vltava is
+        // severed — see `stampRaster`.
+        if (tags.bridge && tags.bridge !== 'no') rec.b = 1;
+        paved.push(rec);
       }
       if (tags.highway !== 'steps') continue;
     }
@@ -623,6 +655,9 @@ function main() {
     }
   }
 
+  const turned = faceGablesToStreet(buildings, paved);
+  const stamp = stampRasters(dataDir, { paved, buildings, walls });
+
   // Landmark footprints are carried through by OSM id so the scene can
   // recognise them and replace the generic extrusion with a real model.
   const out = {
@@ -645,7 +680,16 @@ function main() {
       trees: trees.length,
       areas: areas.length,
       paved: paved.length,
+      gablesToStreet: turned.turned,
+      gableBays: turned.bays,
+      ...stamp.stats,
     },
+    /**
+     * The runnability rasters in this directory carry the OSM network,
+     * footprints and barriers. `SprintScene` reads it rather than re-deriving
+     * it, so map, course setting and collision cannot disagree — see D-024.
+     */
+    rasterStamped: true,
     buildings,
     walls,
     steps,
@@ -666,7 +710,539 @@ function main() {
   console.log(`  buildings ${buildings.length}  (LiDAR ${chmUsed}, levels fallback ${levelsUsed})`);
   console.log(`  paved ways ${paved.length}`);
   console.log(`  walls ${walls.length}  steps ${steps.length}  water ${water.length}  trees ${trees.length}  areas ${areas.length}  bridges ${bridges.length}`);
+  console.log(`  gables turned to the street ${turned.turned}  (${turned.bays} gable bays in total)`);
+  console.log(
+    `  raster stamped: network ${stamp.stats.stampedNetwork}, bridge deck ${stamp.stats.stampedBridgeDeck}, squares ${stamp.stats.stampedSquares}, buildings ${stamp.stats.stampedBuildings}, barriers ${stamp.stats.stampedBarriers} cells`,
+  );
   console.log(`  ${(json.length / 1024).toFixed(0)} kB  (gzip ${(gz / 1024).toFixed(0)} kB)`);
+}
+
+// ---------------------------------------------------------------------------
+// One raster, and everything that decides passability burnt into it
+// ---------------------------------------------------------------------------
+
+/** Runnability codes — must match `Runnability` in src/core/types.ts. */
+const R = {
+  Road: 0,
+  Path: 1,
+  OpenFast: 2,
+  OpenRough: 3,
+  ForestOpen: 4,
+  Green1: 5,
+  Green2: 6,
+  Green3: 7,
+  Marsh: 8,
+  Rock: 9,
+  Impassable: 10,
+};
+
+/** Wall thickness by kind — must match `WALL_SPEC` in src/world/townscape.ts. */
+const WALL_THICK = { 0: 0.45, 1: 1.15, 2: 0.6, 3: 0.1, 4: 0.95 };
+
+/**
+ * Burn the OSM network, footprints and barriers into the runnability rasters.
+ *
+ * **D-002 says the map, the physics and the course generator read one raster.**
+ * They did not. The network and the footprints were stamped at scene load, and
+ * the *barriers* were nowhere — 619 walls, city walls and railings that stop
+ * the athlete under ISSprOM 515/518 existed only as collision volumes. Measured
+ * before this change, **90.6 % of uncrossable barrier length blocked the player
+ * without appearing in the raster the map draws**, which is precisely the
+ * unfairness those symbols exist to prevent.
+ *
+ * And one omission was worse than unfair. `stampPaved` refused to paint over
+ * `Impassable` — a guard written so that a footpath crossing the Vltava polygon
+ * could not turn the river into a road. It also severed **every bridge in the
+ * venue**: the Vltava is an unbroken impassable ribbon round the old town, and
+ * with no deck to cross it the arena's connected component was the meander and
+ * nothing else. Flood-filled from Náměstí Svornosti with the runtime's own
+ * collision, **29.8 % of the open ground in the venue was reachable**, and the
+ * largest thing the player could see and not get to was 54 hectares. That is
+ * the "stuck on a little square and can't get out" the client reported: the map
+ * draws bridges, and the bridges do not work.
+ *
+ * So the guard is kept and given the one exception it always needed: a way OSM
+ * tags as `bridge` may cross impassable ground, and nothing else may.
+ *
+ * Order matters and is the order below: network, then bridges, then the
+ * enclosed-square fill, then footprints, then barriers. Buildings and barriers
+ * come last because they are the two things that must win.
+ *
+ * Barriers are stamped **without dilation**, cell centre in the collision band
+ * and no wider. That is not caution, it is the lesson written into
+ * `stampBuildings`: growing footprints by a single cell once took this venue
+ * from 30 % connected to 1 %, because Krumlov's alleys are 2–3 m wide.
+ */
+function stampRasters(dataDir, { paved, buildings, walls }) {
+  const stats = {};
+  for (const suffix of ['', '-low']) {
+    const metaPath = join(dataDir, `runnability${suffix}.json`);
+    const binPath = join(dataDir, `runnability${suffix}.bin`);
+    if (!existsSync(metaPath) || !existsSync(binPath)) continue;
+    const meta = JSON.parse(readFileSync(metaPath, 'utf8'));
+    const r = new Uint8Array(readFileSync(binPath));
+    const s = stampOne(r, meta, { paved, buildings, walls });
+    writeFileSync(binPath, Buffer.from(r.buffer, r.byteOffset, r.length));
+    if (!suffix) Object.assign(stats, s);
+  }
+  return { stats };
+}
+
+function stampOne(r, m, { paved, buildings, walls }) {
+  const paintable = (v) =>
+    v === R.OpenFast ||
+    v === R.OpenRough ||
+    v === R.ForestOpen ||
+    v === R.Green1 ||
+    v === R.Green2 ||
+    v === R.Green3 ||
+    v === R.Path;
+
+  /** Walk the cells within `half` of a polyline, calling `fn(index)`. */
+  const alongLine = (line, half, fn) => {
+    const n = line.length / 2;
+    for (let i = 0; i < n - 1; i++) {
+      const ax = line[i * 2];
+      const az = line[i * 2 + 1];
+      const bx = line[i * 2 + 2];
+      const bz = line[i * 2 + 3];
+      const dx = bx - ax;
+      const dz = bz - az;
+      const len2 = dx * dx + dz * dz;
+      const i0 = Math.max(0, Math.floor((Math.min(ax, bx) - half - m.originX) / m.resM));
+      const i1 = Math.min(m.width - 1, Math.ceil((Math.max(ax, bx) + half - m.originX) / m.resM));
+      const j0 = Math.max(0, Math.floor((Math.min(az, bz) - half - m.originZ) / m.resM));
+      const j1 = Math.min(m.height - 1, Math.ceil((Math.max(az, bz) + half - m.originZ) / m.resM));
+      for (let j = j0; j <= j1; j++) {
+        const wz = m.originZ + j * m.resM;
+        for (let i2 = i0; i2 <= i1; i2++) {
+          const wx = m.originX + i2 * m.resM;
+          let t = len2 > 1e-9 ? ((wx - ax) * dx + (wz - az) * dz) / len2 : 0;
+          t = t < 0 ? 0 : t > 1 ? 1 : t;
+          const px = ax + dx * t - wx;
+          const pz = az + dz * t - wz;
+          if (px * px + pz * pz > half * half) continue;
+          fn(j * m.width + i2);
+        }
+      }
+    }
+  };
+
+  // --- 1. the paved network, over the classes that can legitimately be paved.
+  let network = 0;
+  for (const way of paved) {
+    const cls = way.k === 1 ? R.Path : R.Road;
+    alongLine(way.l, Math.max(0.8, way.w * 0.5), (k) => {
+      if (!paintable(r[k])) return;
+      r[k] = cls;
+      network++;
+    });
+  }
+
+  // --- 2. bridge decks, which are the one thing allowed through Impassable.
+  //
+  // Narrower than the carriageway on purpose: half the tagged width, floored at
+  // 1.4 m. A bridge is a crossing point, and widening it eats the river bank
+  // either side of the abutment for no gain.
+  let decks = 0;
+  for (const way of paved) {
+    if (!way.b) continue;
+    const cls = way.k === 1 ? R.Path : R.Road;
+    alongLine(way.l, Math.max(1.4, way.w * 0.5), (k) => {
+      if (r[k] !== R.Impassable && !paintable(r[k])) return;
+      if (r[k] === cls) return;
+      r[k] = cls;
+      decks++;
+    });
+  }
+
+  // --- 3. squares. A square is not a road and OSM maps it as lines round and
+  // across it, so the middle of Náměstí Svornosti comes through as open land,
+  // i.e. mown grass. Anything enclosed by paving and small enough to be a yard
+  // rather than a garden becomes paved.
+  const filled = fillEnclosed(r, m);
+
+  // --- 4. footprints. ISSprOM 521: every building is out of bounds.
+  let inside = 0;
+  for (const b of buildings) {
+    const p = b.p;
+    const n = p.length / 2;
+    if (n < 3) continue;
+    let minX = Infinity;
+    let maxX = -Infinity;
+    let minZ = Infinity;
+    let maxZ = -Infinity;
+    for (let i = 0; i < n; i++) {
+      if (p[i * 2] < minX) minX = p[i * 2];
+      if (p[i * 2] > maxX) maxX = p[i * 2];
+      if (p[i * 2 + 1] < minZ) minZ = p[i * 2 + 1];
+      if (p[i * 2 + 1] > maxZ) maxZ = p[i * 2 + 1];
+    }
+    const i0 = Math.max(0, Math.floor((minX - m.originX) / m.resM));
+    const i1 = Math.min(m.width - 1, Math.ceil((maxX - m.originX) / m.resM));
+    const j0 = Math.max(0, Math.floor((minZ - m.originZ) / m.resM));
+    const j1 = Math.min(m.height - 1, Math.ceil((maxZ - m.originZ) / m.resM));
+    for (let j = j0; j <= j1; j++) {
+      const wz = m.originZ + j * m.resM;
+      for (let i = i0; i <= i1; i++) {
+        const wx = m.originX + i * m.resM;
+        if (!pointInRing2(p, wx, wz)) continue;
+        const k = j * m.width + i;
+        if (r[k] === R.Impassable) continue;
+        r[k] = R.Impassable;
+        inside++;
+      }
+    }
+  }
+
+  // --- 5. barriers over 1.5 m. ISSprOM 411/515/518 plus IOF Rule 17.2: these
+  // are a legal boundary, and the map has to draw the same line the athlete
+  // runs into.
+  let barrier = 0;
+  for (const w of walls) {
+    if (!w.u) continue;
+    const thick = WALL_THICK[w.k];
+    if (thick === undefined) continue;
+    // The runtime's own band: half the thickness plus the 0.25 m margin
+    // `Townscape.buildWall` adds. Stamping exactly this and not a centimetre
+    // more is what keeps the raster and the collider saying the same thing.
+    const mark = (k) => {
+      if (r[k] === R.Impassable) return;
+      r[k] = R.Impassable;
+      barrier++;
+    };
+    alongLine(w.p, thick * 0.5 + 0.25, mark);
+    // Plus every cell the centreline itself passes through. A 10 cm railing has
+    // a band 60 cm wide, which on a 1 m grid can slip clean between two cell
+    // centres — so the athlete meets a barrier the map draws with holes in it.
+    // ISSprOM 515/518 exist to stop exactly that. This adds no width the
+    // barrier does not already occupy; it only closes the line.
+    traceLine(w.p, m, mark);
+  }
+
+  return {
+    stampedNetwork: network,
+    stampedBridgeDeck: decks,
+    stampedSquares: filled,
+    stampedBuildings: inside,
+    stampedBarriers: barrier,
+  };
+}
+
+/**
+ * Pave the enclosed unpaved pockets the network leaves behind.
+ *
+ * Flood-fills the unpaved, non-building cells inward from the border; anything
+ * the fill cannot reach is enclosed by paving. Under 4 000 m² that is a square
+ * or a yard and becomes paved; larger is a garden — the castle's Jelení zahrada
+ * is exactly that — and paving it would be worse than the bug.
+ */
+function fillEnclosed(r, m) {
+  const w = m.width;
+  const h = m.height;
+  const n = w * h;
+  const open = (k) => r[k] !== R.Road && r[k] !== R.Path && r[k] !== R.Impassable;
+  const seen = new Uint8Array(n);
+  const stack = [];
+  const push = (k) => {
+    if (!seen[k] && open(k)) {
+      seen[k] = 1;
+      stack.push(k);
+    }
+  };
+  for (let i = 0; i < w; i++) {
+    push(i);
+    push((h - 1) * w + i);
+  }
+  for (let j = 0; j < h; j++) {
+    push(j * w);
+    push(j * w + w - 1);
+  }
+  const spread = (k) => {
+    const x = k % w;
+    const y = (k / w) | 0;
+    if (x > 0) push(k - 1);
+    if (x < w - 1) push(k + 1);
+    if (y > 0) push(k - w);
+    if (y < h - 1) push(k + w);
+  };
+  while (stack.length) spread(stack.pop());
+
+  let filled = 0;
+  const comp = [];
+  for (let k0 = 0; k0 < n; k0++) {
+    if (seen[k0] || !open(k0)) continue;
+    comp.length = 0;
+    seen[k0] = 1;
+    stack.push(k0);
+    while (stack.length) {
+      const k = stack.pop();
+      comp.push(k);
+      spread(k);
+    }
+    if (comp.length * m.resM * m.resM > 4000) continue;
+    for (const k of comp) {
+      if (r[k] !== R.OpenFast && r[k] !== R.OpenRough) continue;
+      r[k] = R.Road;
+      filled++;
+    }
+  }
+  return filled;
+}
+
+/**
+ * Every cell a polyline passes through, sampled densely enough that a 1 m grid
+ * cannot be skipped. Supercover rather than Bresenham, because a line that is
+ * eight-connected still leaks diagonally on a four-connected flood fill.
+ */
+function traceLine(line, m, fn) {
+  const n = line.length / 2;
+  const step = m.resM * 0.25;
+  for (let i = 0; i < n - 1; i++) {
+    const ax = line[i * 2];
+    const az = line[i * 2 + 1];
+    const bx = line[i * 2 + 2];
+    const bz = line[i * 2 + 3];
+    const len = Math.hypot(bx - ax, bz - az);
+    if (len < 1e-6 || len > 120) continue;
+    const steps = Math.ceil(len / step);
+    let pi = -1;
+    let pj = -1;
+    for (let s = 0; s <= steps; s++) {
+      const t = s / steps;
+      const i2 = Math.round((ax + (bx - ax) * t - m.originX) / m.resM);
+      const j2 = Math.round((az + (bz - az) * t - m.originZ) / m.resM);
+      if (i2 < 0 || j2 < 0 || i2 >= m.width || j2 >= m.height) continue;
+      if (i2 === pi && j2 === pj) continue;
+      // A diagonal hop leaves a four-connected gap; close it on both sides.
+      if (pi >= 0 && i2 !== pi && j2 !== pj) {
+        fn(pj * m.width + i2);
+        fn(j2 * m.width + pi);
+      }
+      fn(j2 * m.width + i2);
+      pi = i2;
+      pj = j2;
+    }
+  }
+}
+
+/** Point in a flat [x0,z0,x1,z1,…] ring. */
+function pointInRing2(p, x, z) {
+  let inside = false;
+  const n = p.length / 2;
+  for (let i = 0, j = n - 1; i < n; j = i++) {
+    const xi = p[i * 2];
+    const zi = p[i * 2 + 1];
+    const xj = p[j * 2];
+    const zj = p[j * 2 + 1];
+    if (zi > z !== zj > z && x < ((xj - xi) * (z - zi)) / (zj - zi) + xi) inside = !inside;
+  }
+  return inside;
+}
+
+// ---------------------------------------------------------------------------
+// Which way the ridge runs
+// ---------------------------------------------------------------------------
+
+/**
+ * Turn the ridge so the gable faces the street, and say how many gables.
+ *
+ * The minimum-area rectangle is the right default for a building standing on
+ * its own and the wrong one for a medieval town, because it knows nothing about
+ * the street. Measured on the finished data, **164 of the 347** gabled
+ * footprints in the core carried a ridge running *along* the street — the roof
+ * then slopes away behind the façade and from the pavement there is nothing
+ * above the eave at all. That is the "flat-topped slab" the client saw, and it
+ * is the half of the town where the min-area rectangle happens to be widest
+ * along the frontage.
+ *
+ * Krumlov's plots are the other way round: narrow to the street, deep behind
+ * it, ridge running back, **gable to the street** — which is the single thing
+ * that makes the town read as itself at eye level. So where the fitted ridge
+ * runs along the street, it is turned 90°, and where the footprint is wider
+ * than one plot the roof becomes a *comb* of that many gables. That is not a
+ * stylisation: a 30 m OSM polygon on Náměstí Svornosti is three or four
+ * medieval houses that were merged by a later owner and mapped as one, and each
+ * of them still has its own gable on the square.
+ *
+ * The bay width is 8.5 m, which is the median frontage of the footprints in the
+ * core that already stand gable-on. The town measures its own plot width.
+ */
+function faceGablesToStreet(buildings, paved) {
+  const grid = new SegGrid(paved);
+  let turned = 0;
+  let bays = 0;
+
+  for (const b of buildings) {
+    if (b.s !== ROOF.GABLED && b.s !== ROOF.HALF_HIPPED) continue;
+    // Burgher houses only. A church, a castle wing or a tower is not a plot on
+    // a street: it is a single designed mass with one long unified roof, and
+    // combing it produced a row of 60° spikes across the castle terrace that
+    // read as shark teeth from Latrán. `k` is 0 ordinary, 4 outbuilding.
+    if (b.k !== 0 && b.k !== 4) continue;
+    const n = b.p.length / 2;
+    if (n < 3) continue;
+    let cx = 0;
+    let cz = 0;
+    for (let i = 0; i < n; i++) {
+      cx += b.p[i * 2];
+      cz += b.p[i * 2 + 1];
+    }
+    cx /= n;
+    cz /= n;
+    // The historic core plus Latrán. Outside it the settlement is nineteenth
+    // and twentieth century, where a ridge along the street is simply correct.
+    if (Math.hypot(cx, cz) > 340) continue;
+
+    const st = grid.nearest(cx, cz);
+    if (!st || st.d > 26) continue;
+    const sl = Math.hypot(st.dx, st.dz);
+    if (sl < 1e-6) continue;
+    const ux = st.dx / sl;
+    const uz = st.dz / sl;
+
+    // Frontage and depth in the street's own frame.
+    let u0 = Infinity;
+    let u1 = -Infinity;
+    let v0 = Infinity;
+    let v1 = -Infinity;
+    for (let i = 0; i < n; i++) {
+      const x = b.p[i * 2];
+      const z = b.p[i * 2 + 1];
+      const u = x * ux + z * uz;
+      const v = -x * uz + z * ux;
+      if (u < u0) u0 = u;
+      if (u > u1) u1 = u;
+      if (v < v0) v0 = v;
+      if (v > v1) v1 = v;
+    }
+    const frontage = u1 - u0;
+    const depth = v1 - v0;
+    // A ridge needs something to run along. Under about 4.5 m of depth the
+    // building is a wall with a lid and turning the roof only makes a very
+    // steep, very short tent.
+    if (depth < 4.5 || frontage < 3.5) continue;
+
+    const az = (b.a * Math.PI) / 180;
+    const cosA = Math.abs(Math.sin(az) * ux + -Math.cos(az) * uz);
+    // Already gable-on: leave the azimuth alone, but mark it authoritative so
+    // the renderer's long-axis guard does not undo it.
+    // The comb always divides the frontage, because with the ridge running back
+    // from the street it is the frontage that the tents span.
+    const combBays = (width) => {
+      let k = Math.max(1, Math.min(6, Math.round(width / 8.5)));
+      while (k > 1 && width / k < 5.5) k--;
+      return k;
+    };
+
+    /**
+     * Keep the measured ridge and move the eave to keep the pitch sane.
+     *
+     * The eave came out of a tent fit across the *minimum-area rectangle's*
+     * short axis. Turning the ridge changes what the roof spans, and the rise
+     * that was a 45° roof over an 11 m span is a 62° spike over an 8.5 m bay.
+     * The ridge is the one measured quantity here — it is the p94 of the LiDAR
+     * and it is the skyline — so the ridge is what is kept, and the eave, which
+     * was always derived, moves. Bohemian tile lives between about 39° and 52°;
+     * outside that the wall gets taller or shorter and the silhouette does not
+     * change at all.
+     */
+    const refit = () => {
+      const halfSpan = frontage / b.n / 2;
+      const rise = b.r - b.e;
+      const want = Math.min(Math.max(rise, halfSpan * 0.8), halfSpan * 1.3);
+      b.e = round1(Math.min(b.r - 0.5, Math.max(b.b + 2.2, b.r - want)));
+    };
+
+    if (cosA <= Math.cos((35 * Math.PI) / 180)) {
+      b.n = combBays(frontage);
+      if (b.n > 1) refit();
+      bays += b.n;
+      continue;
+    }
+
+    // Turn it. The new ridge runs perpendicular to the street, i.e. back into
+    // the plot; azimuth 0 is north (−z) and positive is clockwise.
+    const nx = -uz;
+    const nz = ux;
+    b.a = Math.round((Math.atan2(nx, -nz) * 180) / Math.PI);
+    b.n = combBays(frontage);
+    refit();
+    turned++;
+    bays += b.n;
+  }
+  return { turned, bays };
+}
+
+/** Uniform grid over the paved centrelines, for a nearest-street query. */
+class SegGrid {
+  constructor(paved) {
+    this.cell = 24;
+    this.cells = new Map();
+    this.seg = [];
+    for (const w of paved) {
+      const n = w.l.length / 2;
+      for (let i = 0; i < n - 1; i++) {
+        const ax = w.l[i * 2];
+        const az = w.l[i * 2 + 1];
+        const bx = w.l[i * 2 + 2];
+        const bz = w.l[i * 2 + 3];
+        if (Math.hypot(bx - ax, bz - az) < 1.5) continue;
+        const idx = this.seg.length;
+        this.seg.push([ax, az, bx, bz]);
+        const i0 = Math.floor(Math.min(ax, bx) / this.cell);
+        const i1 = Math.floor(Math.max(ax, bx) / this.cell);
+        const j0 = Math.floor(Math.min(az, bz) / this.cell);
+        const j1 = Math.floor(Math.max(az, bz) / this.cell);
+        for (let j = j0; j <= j1; j++) {
+          for (let i2 = i0; i2 <= i1; i2++) {
+            const key = i2 * 100003 + j;
+            let list = this.cells.get(key);
+            if (!list) {
+              list = [];
+              this.cells.set(key, list);
+            }
+            list.push(idx);
+          }
+        }
+      }
+    }
+  }
+
+  nearest(x, z) {
+    let best = null;
+    let bd = Infinity;
+    const ci = Math.floor(x / this.cell);
+    const cj = Math.floor(z / this.cell);
+    // Two cells out covers the 26 m acceptance radius at a 24 m cell. Swept in
+    // full rather than stopping at the first hit: the nearest segment is not
+    // necessarily in the nearest cell.
+    {
+      const r = 2;
+      for (let j = cj - r; j <= cj + r; j++) {
+        for (let i = ci - r; i <= ci + r; i++) {
+          const list = this.cells.get(i * 100003 + j);
+          if (!list) continue;
+          for (const k of list) {
+            const s = this.seg[k];
+            const dx = s[2] - s[0];
+            const dz = s[3] - s[1];
+            const l2 = dx * dx + dz * dz;
+            let t = l2 > 1e-9 ? ((x - s[0]) * dx + (z - s[1]) * dz) / l2 : 0;
+            t = t < 0 ? 0 : t > 1 ? 1 : t;
+            const px = s[0] + dx * t - x;
+            const pz = s[1] + dz * t - z;
+            const dd = px * px + pz * pz;
+            if (dd < bd) {
+              bd = dd;
+              best = { d: Math.sqrt(dd), dx, dz };
+            }
+          }
+        }
+      }
+    }
+    return best;
+  }
 }
 
 /**
@@ -1034,7 +1610,7 @@ function makeBuilding(el, tags, geom, frame, groundAt, chmAt, inReach, nested) {
   const roofDefault = weathered
     ? TILE_WEATHERED[Math.floor(hashId(el.id * 3 + 7) * TILE_WEATHERED.length)]
     : TILE[Math.floor(hashId(el.id * 5 + 11) * TILE.length)];
-  const roofColour = parseColour(tags['roof:colour'], roofDefault);
+  const roofColour = liftRoof(parseColour(tags['roof:colour'], roofDefault));
 
   const b = {
     p: flatten(ring.map((p) => [round1(p[0]), round1(p[1])])),

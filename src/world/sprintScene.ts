@@ -253,6 +253,7 @@ export class SprintScene {
         nearRadius: this.tier === 'low' ? 40 : 75,
         farRadius: this.tier === 'low' ? 130 : 240,
         groundRadius: this.tier === 'low' ? 8 : 13,
+        townFloor: true,
       });
       this.scene.add(this.vegetation.group);
     }
@@ -285,236 +286,40 @@ export class SprintScene {
   private stampedCells = 0;
 
   /**
-   * Burn the OSM paved network into the runnability raster.
+   * Check that the shipped raster already carries what decides passability.
    *
-   * The raster was built from ZABAGED's `street` polygon layer, which stops at
-   * the carriageway. That left Náměstí Svornosti, the alleys off Latrán and the
-   * whole castle ramp classified as *open land* — i.e. grass, in the one town
-   * whose entire surface is sett paving, and grass is what the first build
-   * rendered on the main square.
+   * It used to be *derived here*, at scene load: the OSM paved network, the
+   * enclosed-square fill and the 1739 footprints were stamped into
+   * `field.runnability` every time the venue opened. The barriers were never
+   * stamped anywhere — 619 walls, city walls and railings existed only as
+   * collision volumes — and the network stamp refused to paint over
+   * `Impassable`, which severed **every bridge over the Vltava**.
    *
-   * OSM has the full network (1654 ways carried through against ZABAGED's 643
-   * street features), so it is stamped in here, at load, over the classes that
-   * can legitimately be paved. The guard list matters: a footpath crossing a
-   * river polygon must not turn the Vltava into a road, and a bridge over the
-   * ravine must not fill the ravine in.
+   * Both are now done once, offline, by `tools/terrain/townscape.mjs`, and this
+   * is the only thing left: a check that it happened. That is D-002 taken
+   * seriously — the map, the course generator and the collider read one raster,
+   * and it is a build product rather than something three consumers each
+   * reconstruct. `tools/ci/check-passable.mjs` gates it, and flood-fills the
+   * venue with the runtime's own collision to prove the arena can reach it.
    *
-   * This belongs in `tools/terrain/build.mjs` eventually, so that the 2D map
-   * renderer sees the same surface the runner does — D-002 is explicit that map
-   * and physics share one enum, and doing it at scene load means only the 3D
-   * world currently knows. Recorded rather than hidden.
+   * The warning matters because the failure is silent and asymmetric:
+   * `tools/terrain/build.mjs` writes a pristine raster, so regenerating the
+   * terrain without re-running the townscape extractor puts the bridges back in
+   * the river.
    */
   private stampPaved(): void {
-    const m = this.field.rMeta;
-    const r = this.field.runnability;
-    let stamped = 0;
-
-    const paintable = (v: number): boolean =>
-      v === Runnability.OpenFast ||
-      v === Runnability.OpenRough ||
-      v === Runnability.ForestOpen ||
-      v === Runnability.Green1 ||
-      v === Runnability.Green2 ||
-      v === Runnability.Green3 ||
-      v === Runnability.Path;
-
-    for (const way of this.data.paved ?? []) {
-      const cls = way.k === 1 ? Runnability.Path : Runnability.Road;
-      const half = Math.max(0.8, way.w * 0.5);
-      const n = way.l.length / 2;
-      for (let i = 0; i < n - 1; i++) {
-        const ax = way.l[i * 2] as number;
-        const az = way.l[i * 2 + 1] as number;
-        const bx = way.l[i * 2 + 2] as number;
-        const bz = way.l[i * 2 + 3] as number;
-        const minX = Math.min(ax, bx) - half;
-        const maxX = Math.max(ax, bx) + half;
-        const minZ = Math.min(az, bz) - half;
-        const maxZ = Math.max(az, bz) + half;
-        const i0 = Math.max(0, Math.floor((minX - m.originX) / m.resM));
-        const i1 = Math.min(m.width - 1, Math.ceil((maxX - m.originX) / m.resM));
-        const j0 = Math.max(0, Math.floor((minZ - m.originZ) / m.resM));
-        const j1 = Math.min(m.height - 1, Math.ceil((maxZ - m.originZ) / m.resM));
-        const dx = bx - ax;
-        const dz = bz - az;
-        const len2 = dx * dx + dz * dz;
-        for (let j = j0; j <= j1; j++) {
-          const wz = m.originZ + j * m.resM;
-          for (let i = i0; i <= i1; i++) {
-            const wx = m.originX + i * m.resM;
-            let t = len2 > 1e-9 ? ((wx - ax) * dx + (wz - az) * dz) / len2 : 0;
-            t = t < 0 ? 0 : t > 1 ? 1 : t;
-            const px = ax + dx * t - wx;
-            const pz = az + dz * t - wz;
-            if (px * px + pz * pz > half * half) continue;
-            const k = j * m.width + i;
-            if (!paintable(r[k] as number)) continue;
-            r[k] = cls;
-            stamped++;
-          }
-        }
-      }
+    const stamped = this.data.stats?.stampedBuildings ?? 0;
+    if (!this.data.rasterStamped) {
+      this.warnings.push(
+        'townscape.json predates raster stamping — run tools/terrain/townscape.mjs; ' +
+          'walls will not be on the map and bridges will not cross',
+      );
     }
-    this.stampedCells = stamped + this.fillPavedHoles() + this.stampBuildings();
-  }
-
-  /**
-   * Stamp the OSM footprints into the raster as `Impassable`.
-   *
-   * Two jobs, one pass. It makes the raster agree with ISSprOM 521 — every
-   * building is out of bounds, so no cell inside one should ever be classified
-   * runnable — and it stops the vegetation scatter from planting spruce inside
-   * courtyards and through walls, because `MIX[Impassable].density` is zero.
-   * That second effect is not a side benefit, it is why this exists: the first
-   * build had a mature spruce growing out of a house on Latrán.
-   *
-   * ZABAGED already had 1549 building polygons here; OSM has 1739 and they are
-   * more current. Dilated by one cell so a trunk cannot end up flush against
-   * plaster.
-   */
-  private stampBuildings(): number {
-    const m = this.field.rMeta;
-    const r = this.field.runnability;
-    const marked: number[] = [];
-
-    for (const b of this.data.buildings) {
-      const p = b.p;
-      const n = p.length / 2;
-      if (n < 3) continue;
-      let minX = Infinity;
-      let maxX = -Infinity;
-      let minZ = Infinity;
-      let maxZ = -Infinity;
-      for (let i = 0; i < n; i++) {
-        const x = p[i * 2] as number;
-        const z = p[i * 2 + 1] as number;
-        if (x < minX) minX = x;
-        if (x > maxX) maxX = x;
-        if (z < minZ) minZ = z;
-        if (z > maxZ) maxZ = z;
-      }
-      const i0 = Math.max(0, Math.floor((minX - m.originX) / m.resM));
-      const i1 = Math.min(m.width - 1, Math.ceil((maxX - m.originX) / m.resM));
-      const j0 = Math.max(0, Math.floor((minZ - m.originZ) / m.resM));
-      const j1 = Math.min(m.height - 1, Math.ceil((maxZ - m.originZ) / m.resM));
-      for (let j = j0; j <= j1; j++) {
-        const wz = m.originZ + j * m.resM;
-        for (let i = i0; i <= i1; i++) {
-          const wx = m.originX + i * m.resM;
-          let inside = false;
-          for (let a = 0, b2 = n - 1; a < n; b2 = a++) {
-            const xi = p[a * 2] as number;
-            const zi = p[a * 2 + 1] as number;
-            const xj = p[b2 * 2] as number;
-            const zj = p[b2 * 2 + 1] as number;
-            if (zi > wz !== zj > wz && wx < ((xj - xi) * (wz - zi)) / (zj - zi) + xi) {
-              inside = !inside;
-            }
-          }
-          if (!inside) continue;
-          const k = j * m.width + i;
-          if ((r[k] as number) === Runnability.Impassable) continue;
-          marked.push(k);
-        }
-      }
-    }
-
-    for (const k of marked) r[k] = Runnability.Impassable;
-
-    // There used to be a one-cell dilation here, "so the scatter keeps a metre
-    // off the walls". It has been removed, and the reason matters.
-    //
-    // The raster is 1 m and Krumlov's alleys are 2–3 m wide. Growing every one
-    // of 1739 footprints by a metre on each side takes a 3 m alley down to 1 m
-    // and a 2 m alley to nothing. Measured on the finished raster, only **30%
-    // of the runnable cells in this AOI were connected to Náměstí Svornosti**,
-    // and requiring so much as a metre of running room in each direction cut
-    // that to 1%: the old town was, navigationally, a hairline maze. Course
-    // setting then produced sprints with an unreachable finish.
-    //
-    // What the dilation bought was cosmetic — a spruce standing flush against
-    // plaster. What it cost was the venue. The footprints themselves are still
-    // stamped, so the scatter still never plants *inside* a building, and
-    // `blockedAt` still tests the real footprint polygons for collision, so
-    // nobody runs through a wall either.
-    return marked.length;
-  }
-
-  /**
-   * Fill the enclosed holes the stamped network leaves behind.
-   *
-   * A square is not a road, and OSM does not map it as an area — Náměstí
-   * Svornosti is six `highway=pedestrian` *lines* running round and across it.
-   * Stamping those paves the edges and leaves a 26 × 20 m island of ZABAGED
-   * "open land" in the middle, which the splat renders as mown grass. On the
-   * main square of a town whose entire surface is sett paving.
-   *
-   * So: flood-fill the unpaved, non-building cells inward from the AOI border,
-   * and anything the fill cannot reach is enclosed by paving or by walls.
-   * Enclosed components under 4 000 m² become paved; larger ones are left
-   * alone, because a big enclosed green space is a garden (the castle's Jelení
-   * zahrada is exactly that) and paving it would be worse than the bug.
-   *
-   * Runs once, at load, over 2.56 M cells.
-   */
-  private fillPavedHoles(): number {
-    const m = this.field.rMeta;
-    const r = this.field.runnability;
-    const w = m.width;
-    const h = m.height;
-    const n = w * h;
-
-    const open = (k: number): boolean => {
-      const v = r[k] as number;
-      return v !== Runnability.Road && v !== Runnability.Path && v !== Runnability.Impassable;
-    };
-
-    const seen = new Uint8Array(n);
-    const stack: number[] = [];
-    for (let i = 0; i < w; i++) {
-      for (const k of [i, (h - 1) * w + i]) if (open(k) && !seen[k]) { seen[k] = 1; stack.push(k); }
-    }
-    for (let j = 0; j < h; j++) {
-      for (const k of [j * w, j * w + w - 1]) if (open(k) && !seen[k]) { seen[k] = 1; stack.push(k); }
-    }
-    while (stack.length) {
-      const k = stack.pop() as number;
-      const x = k % w;
-      const y = (k / w) | 0;
-      if (x > 0 && open(k - 1) && !seen[k - 1]) { seen[k - 1] = 1; stack.push(k - 1); }
-      if (x < w - 1 && open(k + 1) && !seen[k + 1]) { seen[k + 1] = 1; stack.push(k + 1); }
-      if (y > 0 && open(k - w) && !seen[k - w]) { seen[k - w] = 1; stack.push(k - w); }
-      if (y < h - 1 && open(k + w) && !seen[k + w]) { seen[k + w] = 1; stack.push(k + w); }
-    }
-
-    // Second pass: label each enclosed component and pave the small ones.
-    let filled = 0;
-    const comp: number[] = [];
-    for (let k0 = 0; k0 < n; k0++) {
-      if (seen[k0] || !open(k0)) continue;
-      comp.length = 0;
-      seen[k0] = 1;
-      stack.push(k0);
-      while (stack.length) {
-        const k = stack.pop() as number;
-        comp.push(k);
-        const x = k % w;
-        const y = (k / w) | 0;
-        if (x > 0 && open(k - 1) && !seen[k - 1]) { seen[k - 1] = 1; stack.push(k - 1); }
-        if (x < w - 1 && open(k + 1) && !seen[k + 1]) { seen[k + 1] = 1; stack.push(k + 1); }
-        if (y > 0 && open(k - w) && !seen[k - w]) { seen[k - w] = 1; stack.push(k - w); }
-        if (y < h - 1 && open(k + w) && !seen[k + w]) { seen[k + w] = 1; stack.push(k + w); }
-      }
-      const areaM2 = comp.length * m.resM * m.resM;
-      if (areaM2 > 4000) continue;
-      for (const k of comp) {
-        const v = r[k] as number;
-        if (v !== Runnability.OpenFast && v !== Runnability.OpenRough) continue;
-        r[k] = Runnability.Road;
-        filled++;
-      }
-    }
-    return filled;
+    this.stampedCells =
+      (this.data.stats?.stampedNetwork ?? 0) +
+      (this.data.stats?.stampedSquares ?? 0) +
+      (this.data.stats?.stampedBarriers ?? 0) +
+      stamped;
   }
 
   // -------------------------------------------------------------------------

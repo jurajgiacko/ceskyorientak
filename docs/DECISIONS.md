@@ -789,3 +789,189 @@ report unmeasurable and nothing would be gated. That is a real failure mode, but
 it is a *loud* one — it prints per scene and says why — where the previous
 behaviour was a confident red or green built on noise. If it starts happening
 routinely, the fix is a quieter CI runner, not a looser tolerance.
+
+---
+
+## D-024 — One runnability raster, built offline, with the bridges in it
+
+**The bug.** *"When I try to cross the map or run in the city, I'm stuck on some
+little square and can't get out of it."*
+
+**What it actually was.** `SprintScene.stampPaved` burnt the OSM network into
+the runnability raster at scene load, over a guard list that refused to paint
+`Impassable`. The guard was written for a good reason — a footpath crossing the
+Vltava polygon must not turn the river into a road — and it also severed **every
+bridge in the venue**. The Vltava is an unbroken impassable ribbon round the old
+town, so the arena's connected component was the meander and nothing else.
+
+Flood-filled from Náměstí Svornosti on a 0.5 m grid, using the runtime's own
+collision and testing the *edges* between cells rather than only their centres:
+
+| | before | after |
+|---|---|---|
+| open ground reachable from the arena | **29.8 %** | **95.1 %** |
+| largest pocket the player can see and not reach | **54 ha** | 0.9 ha |
+| uncrossable barrier length present in the raster the map draws | **9.4 %** | **100 %** |
+| `reachableFraction` reported in-race | 0.36 | 0.97 |
+
+The "little square" was the old town. The map drew bridges; the bridges did not
+work.
+
+**The second half was a D-002 violation.** D-002 is that the map, the physics
+and the course generator read one `Runnability` raster, so the map cannot
+promise something the world does not deliver. Three things were reconstructing
+passability separately: the scene stamped the network and the footprints at
+load, `FieldTerrain.bakedRaster` re-derived the colliders per cell for the map,
+and the 619 walls, city walls and railings that stop the athlete under ISSprOM
+515/518 were *nowhere in the raster at all* — they existed only as collision
+volumes, so 90.6 % of uncrossable barrier length blocked the player without
+being drawn. Those symbols exist precisely to prevent that.
+
+**Decision.** `tools/terrain/townscape.mjs` stamps the raster once, offline:
+network → bridge decks → enclosed-square fill → footprints → barriers, in that
+order, and writes `runnability.bin` and `runnability-low.bin`. `townscape.json`
+records `rasterStamped`. `SprintScene` no longer derives any of it; it checks
+the flag and warns if the data predates the change.
+
+Two details that carry the weight:
+
+- **Only a way OSM tags `bridge` may cross impassable ground**, and at half its
+  carriageway width floored at 1.4 m. The guard is kept; it is given the one
+  exception it always needed. Tunnels are deliberately *not* carved: a
+  `tunnel=building_passage` under a burgher house would open the raster where
+  the footprint collider still blocks, which is the same disagreement in the
+  other direction.
+- **Barriers are stamped with no dilation** — cell centre inside the collider's
+  own band, plus a supercover trace of the centreline so a 10 cm railing cannot
+  slip between two cell centres and leave the drawn wall full of holes. No
+  dilation because that lesson is already written down: growing footprints by a
+  single cell once took this venue from 30 % connected to 1 %, since Krumlov's
+  alleys are 2–3 m wide. Measured cost of the barrier stamp: 0.6 % of open
+  ground, and no change to reachability.
+
+**A freeze that was one wall's width away.** `Race.step` reads its speed target
+from the runnability *under the athlete*, and that target is zero on impassable
+ground — so an athlete standing inside a barrier has a speed target of zero for
+the rest of the race and cannot move in any direction. `nearestReachable` was
+answering from a 1 m mask, which can put a continuous point most of a metre from
+the cell it approved. It now requires the exact point to be clear as well.
+
+**Gates.** New: `tools/ci/check-passable.mjs` (`npm run check:passable`) walks
+the whole venue with the runtime's collision and fails on a collapse in
+reachability, on an implausibly large sealed pocket, or on barrier length
+missing from the raster. `check-race.mjs` now runs **four** sprint seeds and
+asserts that no start, control or finish sits inside a barrier.
+
+**What is deliberately *not* zero.** 0.9 ha of the venue is still unreachable,
+and correctly: the Baroque zámecká zahrada is a walled parterre, and a handful
+of block interiors are reached only through arched passages OSM maps as
+building passages. The athlete cannot get in, so they cannot be stuck there, and
+the course generator will not site a control there.
+
+---
+
+## D-025 — The autopilot was passing on one lucky seed
+
+Found while fixing D-024, and worth separating from it.
+
+`check-race.mjs` required the blind autopilot to punch every control, and tested
+**one** sprint seed. Run on the *pre-fix* data, the other seeds do not pass:
+seed 7 finished 11/11, while seeds 3, 19 and 42 managed 2/9, 3/11 and 3/8. The
+gate had been green on a single draw from a random course generator.
+
+The gate's own comment already made the argument: the autopilot cannot read a
+map, which is the entire game, and "requiring it to finish would gate the build
+on the quality of a test robot". That is now true of what is enforced as well as
+of what is written. On every seed the gate asserts the deterministic properties
+a player depends on — every leg routable over the ground the runtime actually
+lets them cross, nothing sited inside a barrier, no shader that failed to
+compile — and prints how far the autopilot got without gating on it. It stays
+enforced in the forest, where the autopilot does finish.
+
+This is not the gate being relaxed to make a change pass. It is the gate being
+widened from one seed to four, which is what exposed that the enforced criterion
+was never being met in the first place.
+
+---
+
+## D-026 — Krumlov at eye level: the gable was never being built
+
+The client: *"the city looks pretty good from above, but from first person it's
+not much."* Correct, and the cause was not what the previous handover recorded.
+
+**The gable ends were missing geometry, not wrong data.** `Buildings.buildWalls`
+emits one quad per footprint edge and samples the roof height at the two
+*corners* only. On a gabled roof the ridge crosses the gable-end edge at its
+**midpoint**, not at a vertex — so the wall top ran flat from corner to corner
+at eave height and the triangle under the ridge was never built. Every gabled
+building in the town had an open triangular hole under its roof. With a
+front-facing roof material the far slope behind that hole was culled, so what
+stood on Náměstí Svornosti was a flat-topped slab with a black wedge on it,
+which is exactly the report. From above the roofs cover the hole and the town
+looks finished, which is why it survived. `RoofPlan.creases` now returns where
+the roof profile bends across each edge and the edge is split there, so the
+gable is built from the same height function that builds the roof.
+
+**Roofs were being lit as asphalt.** The tile albedo map has a mean linear
+luminance of **0.146** and it was being multiplied by a per-building terracotta
+vertex colour of about the same darkness. The product is an albedo near 0.02 —
+roughly asphalt — so every slope the 08:00 sun does not reach rendered black.
+The map now modulates luminance and the vertex colour says what colour the tile
+is, which is the argument the wall material already made and this one had not.
+The plaster had the same class of error in the other direction: it divided by
+0.42, an sRGB-ish guess for a texture whose true linear mean is **0.617**, so
+the average façade was pinned at the clamp ceiling and the only thing the map
+could still do was punch dark holes — the "grey damp on concrete" look.
+
+**Gables to the street.** Measured on the finished data, **164 of the 347**
+gabled footprints in the historic core carried a ridge running *along* the
+street, because the minimum-area rectangle knows nothing about streets. A
+Krumlov plot is narrow to the street and deep behind it, ridge running back,
+gable to the street. The extractor now turns those ridges (155 of them) and,
+where one OSM polygon covers several plots, builds a **comb** of that many
+gables — 8.5 m per bay, which is the median frontage of the footprints that
+already stood gable-on. The town measures its own plot width. The measured
+ridge is kept, because it is the p94 of the LiDAR and it is the skyline; the
+eave, which was always derived, moves to keep the pitch inside 39–52°.
+
+Two things learnt from screenshots rather than from reasoning:
+
+- **Combing is for burgher houses only.** Applied to churches, castle wings and
+  towers it produced a row of 60° spikes across the castle terrace that read as
+  shark teeth from Latrán. A monumental building is one designed mass with one
+  long roof.
+- **A roof faces up, and saying so is not defensive.** `triangulateShape`
+  returns faces in the winding of the ring it is handed, and clipping a concave
+  footprint can hand it a reversed one — so some roof planes were built inside
+  out and, with a front-facing material, simply culled. The winding is now
+  forced from the normal.
+
+**The rest of the eye-level list.** A ground-floor register — arched shopfronts
+and doors, one per bay — because a façade whose bottom three metres are blank
+plaster reads as a boundary wall, and in a sprint the bottom three metres are
+the whole frame. Gabled dormers on the roof slopes, placed off the roof's own
+height function so they cannot float. A cornice at the eave and a mostly blind
+gable field above it, both keyed off a new per-vertex `wallEave` attribute, so a
+7 m burgher house gets one upper floor and a 14 m one gets three instead of both
+getting the same infinite grid. Boulders and forest deadwood suppressed in the
+town except on `Rock`, where the castle crag genuinely is bare. The castle
+tower's polychrome painted with contrast rather than suggested with it, because
+at 190 m the only thing that survives is contrast.
+
+**And one that had nothing to do with roofs.** `loadSurface` sets a texture
+repeat of `1/physicalSize` because everything using it authors UVs in world
+metres; the landmarks are lathes and cylinders with unit UVs, so the Marian
+column's plinth was showing a *third* of a 3 m granite tile stretched over 3 m
+of stone. At the foot of the arena, in the middle of the frame every sprint
+starts on, it was a boulder with a column on it.
+
+**Cost.** Building triangles 31.8 k → 70.1 k over 1738 buildings. Measured on a
+quiet-enough machine: `sprint.desktop` median 4.40 ms, p95 13.30 ms against a
+16.7 / 25 ms budget.
+
+**What still does not look like Krumlov**, honestly: the windows are a regular
+grid with a per-building phase and nothing else — no shutters, no varied bay
+rhythm, no oriel; the plaster palette is measured but narrow, so a street reads
+creamier than the real one; the roofscape has no chimneys, and Krumlov's has
+hundreds; and the tower's painted shaft is only visible from a few places in the
+town, so its polychrome is doing less work than the effort suggests.

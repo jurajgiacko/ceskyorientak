@@ -327,13 +327,25 @@ export class FieldTerrain implements CourseTerrain, RaceTerrain {
    * ground the athlete can stand on.
    */
   nearestReachable(p: { x: number; z: number }, maxR = 220): { x: number; z: number } {
-    if (this.reachableAt(p.x, p.z)) return p;
+    // Both tests, and the second one is not belt and braces.
+    //
+    // `reachableAt` answers about the nearest cell of a 1 m mask; the athlete
+    // stands at a continuous point, which can be most of a metre from that cell
+    // centre and inside a wall's collision band. `Race.step` reads its speed
+    // target from the runnability *at the athlete's own position*, and that
+    // target is zero on impassable ground — so an athlete placed inside a
+    // barrier has a speed target of zero for the rest of the race and cannot
+    // move in any direction. A start or finish half a metre out is a race that
+    // never begins.
+    const ok = (x: number, z: number): boolean =>
+      this.reachableAt(x, z) && !this.isBlocked(x, z);
+    if (ok(p.x, p.z)) return p;
     for (let r = this.maskStep; r <= maxR; r += this.maskStep * 2) {
       const n = Math.max(8, Math.round((2 * Math.PI * r) / (this.maskStep * 2)));
       for (let i = 0; i < n; i++) {
         const a = (i / n) * Math.PI * 2;
         const q = { x: p.x + Math.sin(a) * r, z: p.z - Math.cos(a) * r };
-        if (this.reachableAt(q.x, q.z)) return q;
+        if (ok(q.x, q.z)) return q;
       }
     }
     return p;
