@@ -109,18 +109,61 @@ const SIM_BUDGET_S = 4 * 3600;
 const MISPUNCH_DECOY_M = 12;
 
 /**
- * What a sprint course has to look like, asserted independently of the code
- * that produces it.
+ * How long a course of each discipline may be, metres, asserted independently
+ * of the code that produces it.
  *
- * `specFor` in src/sim/courseGen.ts aims at 1.5 km and `courseLengthBand` gives
- * itself ±25%; reading those numbers back out of the build would be the gate
- * marking its own homework. These are the sport's numbers instead. A sprint is
- * 1.5–2.0 km of straight-line course for a 13–15 minute winning time (IOF
- * Competition Rules appendix 2; RESEARCH-SPORT §7.2), and the band here is that
- * with room for a real street network at either end. Krumlov used to produce
- * 2.7–4.3 km, which is what the client was sent out to run.
+ * **Why these are restated rather than imported.** `specFor` in
+ * src/sim/courseGen.ts aims each discipline at a target and `courseLengthBand`
+ * opens −20/+25% around it; reading those numbers back out of the build would
+ * be the gate marking its own homework, and the regression this venue actually
+ * had was a *wrong target* — Krumlov aimed at 3.4 km and duly produced 2.7–4.3,
+ * which is what the client was sent out to run. Every check derived from 3.4 km
+ * would have passed it. So these are the sport's numbers, on the same footing
+ * as `MIN_START_FINISH_M` and `MIN_FIRST_LEG_AWAY_DEG` below.
+ *
+ * **What ties them to the generator is containment, not equality.** The band
+ * `setCourse` shops against must sit inside the band asserted here — see the
+ * `lengthBandM` check in the assertions — because a setter whose acceptance
+ * test is looser than the judge's shops for courses that will be refused. Keep
+ * both sides in that relation and they may be tuned independently; the gate
+ * says so out loud when they drift apart. The generator side of this argument
+ * is written at `courseLengthBand` in src/sim/courseGen.ts.
+ *
+ * **The figures.**
+ *  - *Sprint* — 1.5–2.0 km of straight-line course for a 13–15 min winning
+ *    time, widened for a real street network at either end. ⚠ See the note
+ *    below: this is the one figure here that the research file does not carry.
+ *  - *Middle* — 30–35 min. RESEARCH-SPORT §7.3 measures WOC middle finals at
+ *    4.5–6.0 km and middle qualification at 3.4–4.8; 3.0–6.5 km is that span
+ *    with room. `specFor` aims at 4.3 km and Martinkov yields 4.0–5.2 over 60
+ *    seeds, so the band is loose on the terrain and tight on a mix-up: a sprint
+ *    number or a long number handed to middle fails it.
+ *  - *Long* — 88–92 min. §7.3 measures WOC long finals at 9.5–16 km and long
+ *    qualification at 7–11. `specFor` aims at `min(9000, extent × 4.5)`, so
+ *    unlike the other two this target is venue-dependent; at Martinkov's 2 km
+ *    extent it is the 9 km cap and yields 8.0–9.6 km over 60 seeds. A venue too
+ *    small to hold a long course would fail the containment check rather than
+ *    this one, which is the right way round — the fault is the venue, not the
+ *    draw. Long is forest-only by construction (see `deepLinkRace`), so no
+ *    such venue is reachable today.
+ *
+ * ⚠ **The sprint figure's citation does not check out.** It is written in three
+ * places as "IOF Competition Rules appendix 2; RESEARCH-SPORT §7.2", but §7.3
+ * states plainly that the rules specify *no* course length in km for any
+ * format — length is derived from the mandated winning time — and the research
+ * file's own envelope for an elite sprint is **3.5–4.3 km** at 3:30–4:20/km.
+ * 1.5 km is a venue accommodation: Krumlov's AOI is 1200 m square and its old
+ * town about 500 m across, so a 4 km sprint cannot be set inside it without
+ * leaving for the meadows, which is exactly the complaint. That is a sound
+ * reason and it is not the reason the comments give. Left as it stands here —
+ * changing the target changes the game, and this gate is not the place to
+ * decide it — but the citation should be corrected to say what it is.
  */
-const SPRINT_LENGTH_M = { min: 1200, max: 2200 };
+const COURSE_LENGTH_M = {
+  sprint: { min: 1200, max: 2200 },
+  middle: { min: 3000, max: 6500 },
+  long: { min: 6500, max: 17000 },
+};
 
 /**
  * How far a sprint control may sit from a runnable paved way, metres.
@@ -143,7 +186,7 @@ const SPRINT_PAVED_M = { p90: 8, max: 25 };
  * first leg of the course is meaningless if the run-in is already in view.
  *
  * These are the sport's numbers, asserted independently of `specFor` for the
- * same reason `SPRINT_LENGTH_M` is: reading the generator's own constant back
+ * same reason `COURSE_LENGTH_M` is: reading the generator's own constant back
  * out of the build would be the gate marking its own homework. A sprint arena is
  * compact and a town blocks sight lines in fifty metres, so 170 m is a real
  * separation there; a forest arena is open and 300 m is the equivalent.
@@ -325,6 +368,9 @@ async function main() {
           punched: v.splits.length,
           controls: r.course.controls.length,
           lengthM: r.course.lengthM,
+          // The band the setter shopped against, so the gate can check the
+          // build's acceptance rule against its own without adopting it.
+          lengthBandM: info.lengthBandM || null,
           climbM: r.course.climbM,
           timeS: Math.round(v.timeS),
           seedsTried: info.seedsTried,
@@ -357,20 +403,42 @@ async function main() {
         (c.autopilotMustPunch ||
           (r.mispunchDecoyM >= 0 && r.mispunchDecoyM <= r.punchRadiusM + MISPUNCH_DECOY_M));
 
-      // Sprint course shape. Two properties, both of them the client's report
-      // stated as a number: a sprint is 1.5–2.0 km, and its controls are on the
-      // street network rather than out on the grass.
+      // Course length, on every discipline rather than only on the sprint. The
+      // sprint is where it went wrong, but "a course of this format is this
+      // long" is not a sprint property, and a middle or long course drifting
+      // was simply not being looked at.
+      const lengthFaults = [];
+      const lenBand = COURSE_LENGTH_M[r.discipline] ?? COURSE_LENGTH_M.middle;
+      if (r.lengthM < lenBand.min || r.lengthM > lenBand.max) {
+        lengthFaults.push(
+          `the course is ${r.lengthM} m — a ${r.discipline} is ${lenBand.min}–${lenBand.max} m` +
+            ` (see COURSE_LENGTH_M above and specFor in src/sim/courseGen.ts)`,
+        );
+      }
+      // The setter's acceptance test against the judge's. `courseLengthBand` is
+      // what `setCourse` re-shops the seed on, and it has to be at least as
+      // strict as this gate or it spends its ten seeds looking for courses that
+      // will be refused here. Checking the *rule* rather than the *length* is
+      // why this does not collapse the two into one number: the assertion above
+      // still comes from the sport, and this one only says the build agrees to
+      // live inside it.
+      const genBand = r.lengthBandM;
+      if (genBand && (genBand.min < lenBand.min || genBand.max > lenBand.max)) {
+        lengthFaults.push(
+          `courseLengthBand accepts ${genBand.min}–${genBand.max} m for a ${r.discipline}, outside the` +
+            ` ${lenBand.min}–${lenBand.max} m this gate allows — the setter would ship a course the gate` +
+            ` refuses (see courseLengthBand in src/sim/courseGen.ts)`,
+        );
+      }
+
+      // Sprint course shape: the controls are on the street network rather than
+      // out on the grass. The other half of the client's report, and the half
+      // that is genuinely a sprint property.
       const sprintFaults = [];
       const paved = [...r.pavedM].sort((a, b) => a - b);
       const p90 = paved.length ? paved[Math.min(paved.length - 1, Math.floor(paved.length * 0.9))] : 0;
       const pavedMax = paved.length ? paved[paved.length - 1] : 0;
       if (r.discipline === 'sprint') {
-        if (r.lengthM < SPRINT_LENGTH_M.min || r.lengthM > SPRINT_LENGTH_M.max) {
-          sprintFaults.push(
-            `the course is ${r.lengthM} m — a sprint is ${SPRINT_LENGTH_M.min}–${SPRINT_LENGTH_M.max} m` +
-              ` for a 13–15 min winning time (see specFor in src/sim/courseGen.ts)`,
-          );
-        }
         if (paved.length && p90 > SPRINT_PAVED_M.p90) {
           sprintFaults.push(
             `90% of controls are within ${p90.toFixed(1)} m of a runnable way, not ${SPRINT_PAVED_M.p90} m` +
@@ -440,6 +508,7 @@ async function main() {
         r.brokenLegs.length === 0 &&
         r.onBarrier === 0 &&
         !decoyed &&
+        lengthFaults.length === 0 &&
         sprintFaults.length === 0 &&
         arenaFaults.length === 0 &&
         r.renderErrors.length === 0;
@@ -482,6 +551,7 @@ async function main() {
               ` distance of the route to the right one, so a competitor reading the map can mispunch here`,
           );
         }
+        for (const f of lengthFaults) console.log(`     ✗ ${f}`);
         for (const f of sprintFaults) console.log(`     ✗ ${f}`);
         for (const f of arenaFaults) console.log(`     ✗ ${f}`);
         if (r.onBarrier) console.log(`     ${r.onBarrier} sited point(s) inside a barrier`);

@@ -249,9 +249,18 @@ function specFor(d: Discipline, anchor: VenueAnchor): Spec {
  * metres.
  *
  * Exported because `setCourse` shops between seeds and needs to know what it is
- * shopping for, and because `tools/ci/check-race.mjs` asserts on it: the band
- * and the target must come from the same place or the gate is checking a number
- * nobody is aiming at.
+ * shopping for.
+ *
+ * **This is not the figure the gate asserts against.** `COURSE_LENGTH_M` in
+ * `tools/ci/check-race.mjs` states the sport's numbers independently, on the
+ * argument written out there — a gate that reads the build's own target cannot
+ * catch a wrong target, which is the one regression this venue has actually
+ * had. The two are related by containment rather than by equality: **this band
+ * must sit inside that one**, because a setter that accepts what the judge will
+ * refuse is shopping for rejects. That containment is asserted rather than
+ * maintained by hand — `setCourse` reports the band it used as
+ * `lengthBandM` and the gate checks it against its own — which is what the low
+ * edge below needed and did not have.
  *
  * The width is the terrain's, not the sport's. A sprint is *specified* at
  * 1.5–2.0 km; a generator laying out fifteen legs on a real street network,
@@ -259,6 +268,10 @@ function specFor(d: Discipline, anchor: VenueAnchor): Spec {
  * a 500 m window on every draw, and forcing it to would mean rejecting good
  * courses for arithmetic. A band a quarter wide at the top of the target is
  * what Krumlov actually yields, with the median sitting inside the IOF band.
+ * (⚠ On where that 1.5–2.0 km itself comes from, and why the citation attached
+ * to it here and in `specFor` does not check out, see the note under
+ * `COURSE_LENGTH_M` in `tools/ci/check-race.mjs`. The figure is a sound *venue*
+ * decision described as a sport one.)
  *
  * **The band is not symmetric, and the low edge is the interesting one.** It
  * used to be −25%, which put it at 1125 m for a sprint while

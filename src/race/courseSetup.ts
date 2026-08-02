@@ -54,6 +54,24 @@ export interface CourseSetupResult {
    * without a bisect.
    */
   arenaFaults: string[];
+  /**
+   * The length band this setup shopped against, metres — `courseLengthBand` for
+   * the discipline and venue.
+   *
+   * Reported for `tools/ci/check-race.mjs`, and it is deliberately *not* the
+   * number that gate asserts lengths against. That gate states the sport's
+   * figures independently, because reading the build's own target back out of
+   * the build would leave it unable to catch the regression it exists for — a
+   * sprint aimed at 3.4 km passes any check derived from the 3.4 km.
+   *
+   * What it does with this is the other half: assert that the band the setter
+   * *accepts* sits inside the band the gate *allows*. A setter whose acceptance
+   * test is looser than the judge's is not a setter — it shops for courses that
+   * will be refused downstream — and until this was surfaced the two edges were
+   * kept in step by hand, which is how the low edge came to be 1125 m against a
+   * gate floor of 1200.
+   */
+  lengthBandM: { min: number; max: number };
 }
 
 /** How many seeds to try before accepting an edited course. */
@@ -158,6 +176,7 @@ export function setCourse(
             tightestEscapeM2: escape,
             pavedDistanceM: pavedDistances(terrain, course),
             arenaFaults: arena,
+            lengthBandM: band,
           };
         }
         // Keep the best runner-up: a sound arena first, then enough controls,
@@ -189,6 +208,7 @@ export function setCourse(
       tightestEscapeM2: complete.escape,
       pavedDistanceM: pavedDistances(terrain, complete.course),
       arenaFaults: arenaOf(complete.course),
+      lengthBandM: band,
     };
   }
 
@@ -205,6 +225,7 @@ export function setCourse(
     tightestEscapeM2: tightestEscape(terrain, edited),
     pavedDistanceM: pavedDistances(terrain, edited),
     arenaFaults: arenaOf(edited),
+    lengthBandM: band,
   };
 }
 
