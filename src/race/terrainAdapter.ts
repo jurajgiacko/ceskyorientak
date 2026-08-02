@@ -11,6 +11,14 @@
  * harnesses already validate courses with — copied in shape deliberately, so
  * the game and the checker are looking at the same terrain.
  *
+ * There is one thing here that is more than adaptation, and it is deliberate:
+ * this class is where the **rules surface** is defined. `TerrainField` is the
+ * surface the venue is *drawn* on and its resolution is a per-tier rendering
+ * budget; the heights the course setter and the athlete's legs are costed
+ * against may not be, so they come off a fixed 4 m lattice every tier can
+ * reproduce exactly. See `rulesHeightAt`, which carries the failure that
+ * motivated it.
+ *
  * The one piece of real logic here is `blocked`: Krumlov's uncrossable walls,
  * fences and railings live in mesh-space collision volumes rather than in the
  * runnability raster, and a race that let you run through a wall would be a
@@ -20,6 +28,7 @@
 
 import { Runnability } from '@/core/types';
 import type { TerrainSample } from '@/core/types';
+import { GROUND_FOR_RUNNABILITY } from '@/world/terrain';
 import type { TerrainField } from '@/world/terrain';
 import type { ControlSite, CourseTerrain } from '@/sim/courseGen';
 import type { RaceTerrain } from '@/sim/race';
@@ -58,6 +67,16 @@ const FEATURE_REACH = 12;
  * want. 18 m is about the depth of one Krumlov courtyard.
  */
 const PAVED_REACH = 18;
+
+/**
+ * The lattice the rules are computed on, metres.
+ *
+ * 4 m because that is the coarsest heightfield any tier is handed, so it is the
+ * only spacing every tier can reproduce exactly — see `rulesHeightAt`. It is
+ * also, not by accident, the lattice `CONTOUR_CELL_M` extracts the printed
+ * map's contours on, so the map and the rules read the same surface.
+ */
+const RULES_CELL_M = 4;
 
 /** Four-connected steps, for `escapeAreaM2`. */
 const NEIGHBOUR_STEPS: readonly (readonly [number, number])[] = [
@@ -122,17 +141,114 @@ export class FieldTerrain implements CourseTerrain, RaceTerrain {
    */
   heading = 0;
 
+  /** Cells of `field` between rules-lattice nodes. See `rulesHeightAt`. */
+  private readonly rStride: number;
+  private readonly rW: number;
+  private readonly rH: number;
+  private readonly rCellM: number;
+  private readonly rScale: number;
+
   constructor(field: TerrainField, opts: FieldTerrainOptions = {}) {
     this.field = field;
     this.blocked = opts.blocked ?? null;
     this.urban = opts.urban ?? false;
     this.features = opts.features ?? null;
+
+    const m = field.hMeta;
+    this.rStride = Math.max(1, Math.round(RULES_CELL_M / m.resM));
+    this.rCellM = m.resM * this.rStride;
+    this.rW = Math.floor((m.width - 1) / this.rStride) + 1;
+    this.rH = Math.floor((m.height - 1) / this.rStride) + 1;
+    this.rScale = (m.maxH - m.minH) / 65535;
+  }
+
+  // --- the rules surface ---------------------------------------------------
+
+  /**
+   * Raw rules-lattice node, clamped at the edges.
+   *
+   * Reads `field.heights` directly rather than going through `heightAt`,
+   * because the point is to touch the *stored* sample and nothing between it
+   * and the caller: `height-low.bin` is a point decimation of `height.bin`
+   * carrying its min/max, so node (i, j) is the identical uint16 through the
+   * identical scale whichever file the tier was handed.
+   */
+  private rulesCell(i: number, j: number): number {
+    const m = this.field.hMeta;
+    const ci = i < 0 ? 0 : i >= this.rW ? this.rW - 1 : i;
+    const cj = j < 0 ? 0 : j >= this.rH ? this.rH - 1 : j;
+    const k = cj * this.rStride * m.width + ci * this.rStride;
+    return m.minH + (this.field.heights[k] as number) * this.rScale;
+  }
+
+  /**
+   * Height on the surface the *rules* are computed on, metres.
+   *
+   * Not `field.heightAt`, and the difference is the whole reason this method
+   * exists. `TerrainField.load` hands the `low` tier a 4 m heightmap and every
+   * other tier a 1 m one, which is a fair rendering trade and an unfair racing
+   * one: `generateCourse` reads heights for the per-leg climb budget, and the
+   * seeded RNG in `pickNextControl` is drawn *inside* geometry-dependent
+   * branches, so one flipped candidate makes every subsequent draw diverge.
+   * Krumlov duly handed 3 of 4 seeds a different sprint course on a phone than
+   * on a desktop — seed 29760961 gave 14 controls over 1441 m on `low` and over
+   * 1787 m on `high`. The athlete's slope-driven speed read the same tiered
+   * surface, so the physics diverged with it.
+   *
+   * This is the same invariant `TerrainField.load` already states for the class
+   * raster — a tier is a rendering budget, never a rules budget — and the same
+   * resolution as the fix there. The difference is the bill. Runnability could
+   * simply be shipped once at 1 m for a quarter of a megabyte; the full
+   * heightfield costs 4.5 MB gzip on Krumlov and 10.4 MB on Martinkov against a
+   * 25 MB device budget, so "ship one heightfield" is not available. What is
+   * available is to make every tier *agree on one lattice*: 4 m, the coarsest
+   * any tier holds, which the low tier stores outright and the others hold
+   * every fourth sample of. `tools/terrain/lowtier.mjs` derives the low file so
+   * those samples are bit-identical, so this is exact rather than close —
+   * "close" is worthless against a chaotic RNG stream.
+   *
+   * What it costs: the climb budget and the felt gradient are computed over 4 m
+   * instead of 1 m. Climb is a whole-course quantity over legs of 55–190 m and
+   * does not notice. The gradient is now a central difference over 8 m, which
+   * is if anything closer to what a runner feels than an 8 mm-precision 1 m
+   * lattice's local noise. Nothing *drawn* changes: the mesh, the vegetation,
+   * the townscape and the eye all still read `TerrainField` at the tier's own
+   * resolution, which is what a rendering budget is for.
+   */
+  rulesHeightAt(x: number, z: number): number {
+    const m = this.field.hMeta;
+    const fx = (x - m.originX) / this.rCellM;
+    const fz = (z - m.originZ) / this.rCellM;
+    const i = Math.floor(fx);
+    const j = Math.floor(fz);
+    const tx = fx - i;
+    const tz = fz - j;
+    return (
+      this.rulesCell(i, j) * (1 - tx) * (1 - tz) +
+      this.rulesCell(i + 1, j) * tx * (1 - tz) +
+      this.rulesCell(i, j + 1) * (1 - tx) * tz +
+      this.rulesCell(i + 1, j + 1) * tx * tz
+    );
+  }
+
+  /**
+   * Gradient of the rules surface, metres of rise per metre, as [d/dx, d/dz].
+   *
+   * Stepped by the rules cell rather than the field's, so two tiers sampling
+   * the same point get the same number — the same reason as `rulesHeightAt`.
+   */
+  private rulesGradient(x: number, z: number): [number, number] {
+    const d = this.rCellM;
+    return [
+      (this.rulesHeightAt(x + d, z) - this.rulesHeightAt(x - d, z)) / (2 * d),
+      (this.rulesHeightAt(x, z + d) - this.rulesHeightAt(x, z - d)) / (2 * d),
+    ];
   }
 
   // --- CourseTerrain -------------------------------------------------------
 
   heightAt(x: number, z: number): number {
-    return this.field.heightAt(x, z);
+    return this.rulesHeightAt(x, z);
   }
 
   runnabilityAt(x: number, z: number): Runnability {
@@ -780,12 +896,28 @@ export class FieldTerrain implements CourseTerrain, RaceTerrain {
 
   // --- RaceTerrain ---------------------------------------------------------
 
+  /**
+   * Full sample for the physics layer.
+   *
+   * Built here rather than delegated to `TerrainField.sample`, because the
+   * slope is a rules quantity and must come off the rules lattice: the athlete's
+   * speed reads `slope`, so a tiered gradient means two players on one seed run
+   * at different paces. `height` follows the same surface for consistency —
+   * nothing in `Race.step` reads it, and everything that puts a body or an eye
+   * on the ground goes to `TerrainField` directly, where the drawn surface is.
+   */
   sample(x: number, z: number): TerrainSample {
-    const s = this.field.sample(x, z, this.heading);
-    if (this.blocked?.(x, z)) {
-      return { ...s, runnability: Runnability.Impassable };
-    }
-    return s;
+    const g = this.rulesGradient(x, z);
+    // Travel direction in world axes: north is -z, east is +x.
+    const dx = Math.sin(this.heading);
+    const dz = -Math.cos(this.heading);
+    const run = this.runnabilityAt(x, z);
+    return {
+      height: this.rulesHeightAt(x, z),
+      slope: g[0] * dx + g[1] * dz,
+      runnability: run,
+      ground: GROUND_FOR_RUNNABILITY[run],
+    };
   }
 
   /**

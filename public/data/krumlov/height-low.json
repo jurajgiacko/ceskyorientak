@@ -3,9 +3,13 @@
   "width": 401,
   "height": 401,
   "resM": 4,
-  "minH": 474.7799377441406,
-  "maxH": 605.3448486328125,
+  "minH": 474.7169189453125,
+  "maxH": 605.404052734375,
   "originX": -800,
   "originZ": -800,
-  "stepMm": 1.992292834190461
+  "stepMm": 1.9941578361037993,
+  "derivedFrom": {
+    "file": "height.bin",
+    "decimateBy": 4
+  }
 }

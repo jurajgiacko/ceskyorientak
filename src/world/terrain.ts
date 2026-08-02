@@ -133,6 +133,19 @@ export class TerrainField {
      *
      * The bill is ~190 kB gzip on Krumlov and ~240 kB on Martinkov, against a
      * 25 MB device budget. Correct rules are worth a quarter of a megabyte.
+     *
+     * The heightmap could not be settled the same way — shipping it once at 1 m
+     * costs the phone 4.2 MB gzip on Krumlov and 9.7 MB on Martinkov, which is
+     * most of that budget — and it *is* read for rules: the course setter's
+     * climb budget and the athlete's slope-driven speed both sample it, so a
+     * tiered heightmap handed 3 of 4 Krumlov seeds a different sprint course on
+     * a phone than on a desktop. It is settled instead by making the two files
+     * agree where it matters: `height-low.bin` is a point decimation of
+     * `height.bin` carrying its own `minH`/`maxH` (`tools/terrain/lowtier.mjs`),
+     * so both hold the identical sample at every 4 m node, and the rules are
+     * computed on that lattice by `FieldTerrain.rulesHeightAt`. What is loaded
+     * here is therefore only what the venue is *drawn* on, which is what a
+     * rendering budget should mean.
      */
     const heightSuffix = tier === 'low' ? '-low' : '';
 

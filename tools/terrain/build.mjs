@@ -58,6 +58,7 @@ import { gzipSync, constants } from 'node:zlib';
 
 import { exportElevation, exportOrtho, queryZabagedAll, MAX_EXPORT_PX } from './cuzk.mjs';
 import { parseFloat32GeoTiff } from './geotiff.mjs';
+import { decimateHeight16, lowMeta } from './lowtier.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, '../..');
@@ -1099,30 +1100,21 @@ async function buildVenue(v) {
   );
 
   // --- low tier ------------------------------------------------------------
+  //
+  // A point decimation of the *encoded* full raster, carrying its own min/max
+  // rather than renormalising — so every 4 m lattice node holds the identical
+  // uint16 in both files. This is not a nicety about noise. The heightfield is
+  // read for the course's climb budget and for the athlete's slope, and a
+  // box-average over its own normalisation disagreed by a couple of millimetres
+  // everywhere, which was enough to hand a phone and a desktop two different
+  // sprint courses off one seed. See `tools/terrain/lowtier.mjs`.
   const lowF = Math.round(v.lowResM / v.resM);
-  const hLow = downsampleFloat(elev.height, grid.w, grid.h, lowF);
-  const encLow = encodeHeight16(hLow.data);
-  await emit(dir, 'height-low.bin', Buffer.from(encLow.data.buffer, 0, encLow.data.byteLength));
+  const low = decimateHeight16(enc.data, grid.w, grid.h, lowF);
+  await emit(dir, 'height-low.bin', Buffer.from(low.data.buffer, 0, low.data.byteLength));
   await emit(
     dir,
     'height-low.json',
-    Buffer.from(
-      JSON.stringify(
-        {
-          format: 'uint16le',
-          width: hLow.w,
-          height: hLow.h,
-          resM: v.lowResM,
-          minH: encLow.min,
-          maxH: encLow.max,
-          originX: grid.minX,
-          originZ: grid.minZ,
-          stepMm: encLow.stepMm,
-        },
-        null,
-        2,
-      ),
-    ),
+    Buffer.from(JSON.stringify(lowMeta(heightMeta, low.w, low.h, lowF), null, 2)),
   );
 
   // There is deliberately no `runnability-low`. A downsampled *height* map is

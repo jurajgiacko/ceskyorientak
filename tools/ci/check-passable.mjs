@@ -18,7 +18,9 @@
  * may be inside a barrier or a building footprint; none may leave the eye
  * hovering off the surveyed ground; and from the start the athlete must be able
  * to reach open ground, tested with the runtime's own collision rather than
- * with a mask.
+ * with a mask. Then it asks the question those points cannot answer on their
+ * own: do two tiers, on one seed, produce the *same course on the same rules
+ * surface*? Both are fingerprinted and compared exactly.
  *
  * ---------------------------------------------------------------------------
  * Why phase 2, and why "every tier"
@@ -1045,10 +1047,47 @@ const PROBE = (limits) => `(async () => {
     );
   }
 
+  // Two fingerprints the caller compares across tiers. Both are full precision
+  // on purpose: the RNG stream in \`pickNextControl\` is consumed inside
+  // geometry-dependent branches, so a millimetre of disagreement is not a small
+  // difference in the answer, it is a different answer. Rounding before
+  // comparing would hide exactly the thing being checked.
+  const fnv = (s) => {
+    let h = 0x811c9dc5;
+    for (let i = 0; i < s.length; i++) {
+      h ^= s.charCodeAt(i);
+      h = Math.imul(h, 0x01000193) >>> 0;
+    }
+    return h.toString(16).padStart(8, '0');
+  };
+
+  // The course as printed: every point, every code, in order.
+  const courseKey = fnv(JSON.stringify([
+    c.start.x, c.start.z, c.finish.x, c.finish.z, c.lengthM, c.climbM,
+    c.controls.map((k) => [k.code, k.position.x, k.position.z]),
+  ]));
+
+  // The surface the *rules* run on — what the course is a function of, and what
+  // the athlete's slope-driven speed reads. Sampled off-lattice so the
+  // interpolation is exercised too, not only the stored nodes.
+  let rulesKey = 'absent';
+  if (r.terrain && typeof r.terrain.heightAt === 'function') {
+    const hs = [];
+    for (let j = 0; j < 24; j++) {
+      for (let i = 0; i < 24; i++) {
+        hs.push(r.terrain.heightAt(-560 + i * 47.3, -560 + j * 47.3));
+      }
+    }
+    rulesKey = fnv(hs.join(','));
+  }
+
   return JSON.stringify({
     faults,
     controls: c.controls.length,
     lengthM: c.lengthM,
+    climbM: c.climbM,
+    courseKey,
+    rulesKey,
     reachable: Number(reachable.toFixed(3)),
     pocketM2: pocket.sealed ? Number(pocket.m2.toFixed(0)) : -1,
     eyeErr: Number(eyeErr.toFixed(3)),
@@ -1084,7 +1123,13 @@ async function runtimePhase(venue, port) {
         const raw = await tab.evaluate(PROBE(LIMITS));
         const res = JSON.parse(raw);
         rasterByTier.set(tier, res.raster);
-        courseByTierSeed.set(`${tier}|${seed}`, { controls: res.controls, lengthM: res.lengthM });
+        courseByTierSeed.set(`${tier}|${seed}`, {
+          controls: res.controls,
+          lengthM: res.lengthM,
+          climbM: res.climbM,
+          courseKey: res.courseKey,
+          rulesKey: res.rulesKey,
+        });
         const ok = res.faults.length === 0 && res.renderErrors.length === 0;
         if (!ok) bad = true;
         console.log(
@@ -1127,41 +1172,59 @@ async function runtimePhase(venue, port) {
 
   // Does one seed give two players the same course on two phones?
   //
-  // Reported, not enforced, and the distinction is honest rather than lazy. The
-  // passability raster is identical on every tier and that *is* enforced above.
-  // The **heightfield** is not: `height-low.bin` is a cheaper surface, and
-  // `generateCourse` reads heights for the climb budget, so a centimetre of
-  // disagreement can flip one candidate and every subsequent draw from the
-  // seeded RNG diverges from there. That is a property of the terrain pipeline,
-  // not of the course setter, and it predates the sprint work — but it is the
-  // same shape as the bug this gate exists for, and a number nobody is looking
-  // at is a number that gets worse. So: measure it every run.
+  // Enforced, like the raster above, and for the same reason. This was reported
+  // only for one release, while `TerrainField.load` handed the `low` tier a 4 m
+  // heightmap: `generateCourse` reads heights for the per-leg climb budget and
+  // the seeded RNG in `pickNextControl` is drawn *inside* geometry-dependent
+  // branches, so one flipped candidate diverges every subsequent draw. Krumlov
+  // gave 3 of 4 seeds a different course per tier — seed 29760961 ran 1441 m on
+  // a phone and 1787 m on a desktop. The athlete's slope-driven speed read the
+  // same tiered surface, so the physics diverged with it.
+  //
+  // The fix is not a rounder comparison. `FieldTerrain.rulesHeightAt` computes
+  // the rules on a fixed 4 m lattice that every tier holds bit-identically —
+  // `tools/terrain/lowtier.mjs` derives `height-low.bin` by decimating
+  // `height.bin` so that it does — so equality here is exact, and a tolerance
+  // would only let the next regression in. Both keys are checked: the course is
+  // the symptom, the rules surface is the cause, and naming which one moved is
+  // the difference between a five-minute fix and a day of bisecting.
   const seedsSeen = [...new Set([...courseByTierSeed.keys()].map((k) => k.split('|')[1]))];
   const tiersSeen = [...rasterByTier.keys()];
   let divergent = 0;
+  let surfaceDivergent = 0;
   for (const seed of seedsSeen) {
     const rows = tiersSeen
       .map((t) => [t, courseByTierSeed.get(`${t}|${seed}`)])
       .filter(([, v]) => v);
     if (rows.length < 2) continue;
     const [, ref] = rows[0];
-    const differs = rows.some(
-      ([, v]) => v.controls !== ref.controls || v.lengthM !== ref.lengthM,
-    );
-    if (differs) {
-      divergent++;
-      console.log(
-        `  · seed ${seed} gives a different course per tier: ` +
-          rows.map(([t, v]) => `${t} ${v.controls}/${v.lengthM} m`).join(' · '),
+
+    if (rows.some(([, v]) => v.rulesKey !== ref.rulesKey)) {
+      surfaceDivergent++;
+      console.error(
+        `  ✗ seed ${seed}: the tiers are computing the rules on different ground — ` +
+          rows.map(([t, v]) => `${t} ${v.rulesKey}`).join(' · ') +
+          `\n    FieldTerrain.rulesHeightAt must return the same metres on every tier. If` +
+          `\n    height-low.bin was rebuilt by anything but tools/terrain/lowtier.mjs it will not.`,
       );
+      bad = true;
+    }
+    if (rows.some(([, v]) => v.courseKey !== ref.courseKey)) {
+      divergent++;
+      console.error(
+        `  ✗ seed ${seed} gives a different course per tier: ` +
+          rows.map(([t, v]) => `${t} ${v.controls}/${v.lengthM} m/${v.climbM} m climb`).join(' · ') +
+          `\n    A tier is a rendering budget. Two players on one seed and two phones must be` +
+          `\n    running the same race — see FieldTerrain.rulesHeightAt.`,
+      );
+      bad = true;
     }
   }
-  console.log(
-    divergent
-      ? `  ${divergent}/${seedsSeen.length} seeds diverge across tiers — the heightfield differs by tier` +
-          ` and generateCourse reads it (see TerrainField.load and the climb budget in specFor)`
-      : `  every seed gives the same course on every tier`,
-  );
+  if (!divergent && !surfaceDivergent) {
+    console.log(
+      `  every seed gives the same course, on the same rules surface, on every tier`,
+    );
+  }
   return bad;
 }
 

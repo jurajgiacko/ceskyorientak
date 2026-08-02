@@ -1106,3 +1106,72 @@ It is rendered as a `MeshBasicMaterial` with a generated alpha texture rather
 than a custom shader. That is a deliberate downgrade: a shader that fails to
 compile makes geometry vanish while every other gate stays green, and this
 project has shipped that twice.
+
+---
+
+## D-029 — The rules run on one surface; only the drawing follows the tier
+
+D-027 settled the class raster and left the heightfield tiered, which looked
+safe: `height-low.bin` is *only* the terrain someone stands on. It is not.
+`generateCourse` reads heights for the per-leg climb budget, and the seeded RNG
+in `pickNextControl` is drawn **inside** geometry-dependent branches — the
+candidate is rejected, or it is not, and the next `rng.next()` lands in a
+different place. One flipped candidate and every subsequent draw diverges.
+
+Measured on Krumlov, four menu-shaped seeds, `low` against `high`:
+
+| Seed | `low` | `high` |
+|---|---|---|
+| 29760961 | 14 controls, 1441 m | 14 controls, **1787 m** |
+| 29112007 | 15 controls, 1666 m | **17 controls, 1590 m** |
+| 28803419 | 17 controls, 1829 m | 17 controls, 1829 m — *and different control positions* |
+| 30240557 | 14 controls, 1418 m | 14 controls, **1576 m** |
+
+Three of four visibly, the fourth only under a fingerprint. The athlete's
+slope-driven speed reads the same tiered surface, so the physics diverged with
+the course: same seed, same route, different pace.
+
+**Shipping one heightfield is not available.** That is the D-027 move and it
+does not price out here — `height.bin` is 4.5 MB gzip on Krumlov and 10.4 MB on
+Martinkov, against the 25 MB device budget that runnability's 190 kB fitted
+inside comfortably. The phone is exactly the device the low tier exists for.
+
+**What is available is to make the tiers agree on one lattice.** The rules are
+computed at 4 m — the coarsest spacing any tier holds, so the only one every
+tier can reproduce — by `FieldTerrain.rulesHeightAt`. The low tier stores those
+nodes outright; the others hold every fourth sample. For that to be *exact*
+rather than close, `height-low.bin` is now a **point decimation of the encoded
+`height.bin` carrying its own `minH`/`maxH`** (`tools/terrain/lowtier.mjs`,
+imported by `build.mjs` so the two cannot drift), not a box-average renormalised
+over its own range. Both files then hold the identical `uint16` at every shared
+node and decode through the identical scale. Zero extra bytes.
+
+"Close" would have been worthless. Against a chaotic RNG stream a tolerance is
+not a smaller error, it is a later one.
+
+**What it costs.** The climb budget and the felt gradient are computed over 4 m
+instead of 1 m — climb is a whole-course quantity over 55–190 m legs and does
+not notice, and the gradient is now a central difference over 8 m, closer to
+what a runner feels than a 1 m lattice's local noise. Decimation drops the
+box-average's noise suppression, which is fine: DMR 5G is already smoothed at
+1 m, and 4 m is the lattice `CONTOUR_CELL_M` extracts the printed map's contours
+on, so the map and the rules now read the same surface — and the contours, too,
+became identical across tiers as a side effect.
+
+Nothing *drawn* changed. The mesh, the vegetation, the townscape and the eye
+still read `TerrainField` at the tier's own resolution. `TerrainField` is the
+surface the venue is drawn on; `FieldTerrain` is the surface the race is run on.
+
+**The gate.** `check:passable` had been *reporting* this divergence since D-027
+rather than failing on it, on the honest ground that it was a terrain-pipeline
+property and not the sprint work's fault. It now enforces it, on two
+fingerprints compared exactly: the course (every control position and code,
+length, climb) and the rules surface itself (`FieldTerrain.heightAt` over a
+576-point off-lattice grid). The surface is reported first, because it is the
+cause and the course is the symptom. Verified by regenerating `height-low.bin`
+the old way, which fails all four seeds — including 28803419, the one the old
+controls-and-length comparison called identical.
+
+The invariant is D-027's, unchanged, and this is the second thing that had to be
+dragged inside it: **a tier decides how the venue is drawn, never what happens
+in the race.**
