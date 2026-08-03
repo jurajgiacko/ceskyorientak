@@ -433,8 +433,8 @@ the 4× throttle:
 | | before | after |
 |---|---|---|
 | reachability fill | 4450 ms | **0 ms** |
-| `bakedRaster` | 1452 ms | **1 ms** |
-| venue setup | **5902 ms** | **1 ms** |
+| `bakedRaster` | 1452 ms | **3 ms** |
+| venue setup | **5902 ms** | **3 ms** |
 
 **The census**, over 144 ha: 111.5 ha open, 105.9 ha reachable — **95.0 %** — in
 645 components. 143 pockets over 6 m², **all sealed**; 0 porous, 0 grid
@@ -474,11 +474,31 @@ finished.**
   derivation reconciles to a fixed point with the same entry probe the census
   uses: **where the lattice and the athlete disagree, the athlete wins.**
 
+**The fault this work introduced, and the gate that caught it.** `check-race`
+failed with *"legs with no route"* on a sampled seed: `reachableAt` had moved to
+the 0.5 m shipped plane and `routeField` was still flooding a 1 m lattice of its
+own, so the setter sited controls the router called unroutable. Two reachability
+answers in one runtime — the second-opinion failure this phase exists to delete,
+put back by the change that removed the others. There is one graph now, and the
+artefact ships the number (`looseUnreachable`, asserted zero) that says reachable
+means routable.
+
+**And two bridges the re-roll walked onto.** A watercourse ribbon has no
+surveyed level — it follows the terrain at `RIBBON_RISE_M` — so where one runs
+under a slab the survey puts at ground level, and 26 of the venue's 47 bridge
+ways are in that class, the stream was drawn ten centimetres above the athlete's
+shoes. And a deck chord derived from two abutments knows nothing about what is
+between them: the worst raised span cleared the water by 0.34 m. Both fixed at
+source; worst freeboard −0.10 m before, **0.57 m** after. Neither is phase 2's
+fault and neither was reachable by any earlier course, which is the argument for
+re-picking on a graph rather than re-rolling on geometry.
+
 **What it cost.** +224 kB gzip on the wire; device fetch 17.4 MB of 25, now that
 `check-payload` counts `townmodel.*`, `passable.*` and `townscape.json` at all —
 phase 1 shipped 134 kB nobody was counting. And the course re-rolled again for
-D-029's reason, 13 controls/1740 m to **17/1788 m**; still a generated course
-rather than a chosen one, and still phase 3's to re-pick.
+D-029's reason, 13 controls/1740 m to **17/1788 m**, D 1.23, worst leg 2.1×;
+still a generated course rather than a chosen one, and still phase 3's to
+re-pick.
 
 **Do not re-enable the menu entry until phase 5 passes.** That is the client's sequencing and
 it is the correct one: every Krumlov fault so far reached him because something shipped on a

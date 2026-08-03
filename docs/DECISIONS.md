@@ -1956,8 +1956,8 @@ every timing here is stated against.
 | | before | after |
 |---|---|---|
 | reachability fill | 4450 ms | **0 ms** |
-| `bakedRaster` | 1452 ms | **1 ms** |
-| **venue setup, total** | **5902 ms** | **1 ms** |
+| `bakedRaster` | 1452 ms | **3 ms** |
+| **venue setup, total** | **5902 ms** | **3 ms** |
 
 Phase 0 predicted 2.6 s and 2.9 s for these two and was right.
 `buildReachability` now reads `reachableFraction` out of the file.
@@ -2003,6 +2003,54 @@ otherwise the shipped mask says unreachable about ground you can stand on, and
 the course generator refuses to site a control there for a reason that is not
 true.
 
+### The fault the gates found in this work, which is the one worth reading
+
+`check-race` failed on a sampled seed with *"legs with no route: 5, 6"*, and it
+was mine. `reachableAt` had been moved onto the 0.5 m shipped plane and
+`routeField` was still flooding a 1 m lattice of its own — so the course setter
+sited controls on ground the router then called unroutable. **Two reachability
+answers in one runtime**: the second-opinion failure this entire phase exists to
+delete, reintroduced in the one place a flood was left behind, by the change
+that removed the others.
+
+There is one graph now. Its cells are the shipped `reach` plane; its edges are
+plain 8-adjacency between them, which is a *superset* of the swept graph the
+components were labelled with, so anything the strict graph joins this joins
+too. The converse is what could bite — a cell the entry probe reconciled in
+across a gap wider than one lattice step would be reachable and unroutable — so
+`passable.mjs` measures it, ships it as `looseUnreachable`, and the gate asserts
+it is zero. Krumlov: **0**.
+
+The lesson is not "be careful". It is that **the deliverable was one artefact and
+I had left two consumers reading different things**, and only a gate that ran the
+whole race caught it. `check-passable` did not: every phase in it that touches
+reachability reads the same plane the setter does.
+
+### Two bridges, found by the re-roll and fixed at their source
+
+The re-rolled sampled courses put controls on crossings no earlier course had
+touched, and two latent faults surfaced. The gate on the pre-phase-2 build is
+green only because *"no sited point on any seed or tier stood over water at all"*.
+
+**A watercourse ribbon was drawn over the crossings.** A ribbon has no surveyed
+level — it follows the terrain at `RIBBON_RISE_M` so it does not z-fight with the
+ground it is laid on. Run one under a slab the survey puts at ground level — and
+`MIN_DECK_LIFT_M`'s own comment counts **26 of Krumlov's 47 bridge ways** in that
+class — and the stream is drawn ten centimetres above the athlete's shoes.
+Measured freeboard: exactly −0.10 m, four times, which is the ribbon rise to the
+centimetre. The ribbon now stops at a crossing, decided in `WaterIndex` for the
+drawing and for every rule that reads it alike. Water *areas* are untouched: the
+Vltava's surface is surveyed, a deck over it can genuinely sag under it, and
+that is D-031's whole subject.
+
+**And a chord derived from two abutments knows nothing about what is between
+them.** D-031 fixed a deck that sagged 5.2 m and left the general case standing;
+the worst raised span in the venue cleared the water by 0.34 m.
+`BridgeDecks.measure` now lifts the span clear, *after* the raised/not-raised
+decision rather than before, so it lifts a bridge that is one and does not invent
+one. Worst freeboard over the sampled seeds: −0.10 m before, **0.57 m** after,
+median 2.34 m.
+
 ### Two smaller things found on the way
 
 **`bakedRaster` had been almost entirely redundant since phase 1.** It swept
@@ -2018,12 +2066,33 @@ never listed `townscape.json`, and phase 1 added `townmodel.*` without adding it
 either. With `passable.*` that would have been 1.5 MB of a 25 MB budget going
 unmeasured. Now counted: **17.4 MB of 25**.
 
+**And the course audit was measuring its own lattice.** `makeCourseAudit` walked
+1 m, *"the resolution the runtime's own reachability fill uses"* — a sentence
+that now points at 0.5, so it reads `passable.json` for the number rather than
+declaring it. That is not a free refinement: a lattice coarser than the alley it
+is measuring does not round the answer, it **lengthens** it, because the shortest
+chain of open cells through a 2.5 m passage is not the shortest path through the
+passage. On the shipped course, leg 6→7 went from 155 m to **52 m** against its
+50 m straight line — 3.1×, over the limit, to 1.0×. The gate was reporting a
+course fault that does not exist, which is D-037's own 2 m router in the other
+direction.
+
 ### And one thing that moved without being asked to
 
 `COURSE_SEED` is untouched and the course changed again, for D-029's reason:
 the generator's RNG is drawn inside geometry-dependent branches and the
 reachable set is now a 0.5 m 8-connected one rather than a 1 m 4-connected one.
-Krumlov went from 13 controls / 1740 m to **17 controls / 1788 m**. As in D-038
-this is a *generated* course that happens to be sound, not a chosen one, and
-**phase 3 must re-run `pick-course.mjs` on the street graph** — which it was
-always going to do.
+Krumlov went from 13 controls / 1740 m to **17 controls / 1788 m**, D 1.16 to
+**1.23**, worst leg 1.9× to **2.1×**, 92 % of it street. As in D-038 this is a
+*generated* course that happens to be sound, not a chosen one, and **phase 3
+must re-run `pick-course.mjs` on the street graph** — which it was always going
+to do.
+
+That distinction is now doing real work rather than being a caveat. D-037
+asserts the per-leg detour **absolutely on the course that ships**, on the stated
+ground that the shipped course is *chosen* by `pick-course.mjs` from several
+hundred candidates while the sampled seeds are only the generator's output. Since
+phase 1 that premise has not held: `COURSE_SEED` names a seed whose course
+re-rolls whenever the geometry moves, so the gate's strictest assertion is being
+applied to an unchosen sample. It passed this time at 2.1× against a 3.0× limit.
+It is luck, and phase 3 is where it stops being luck.
