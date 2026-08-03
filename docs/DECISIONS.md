@@ -1521,7 +1521,7 @@ rejecting the wet ones forbids only the fault.
 
 So `blockedAt`'s water clause is exposed on its own — `SprintScene.inWaterAt` →
 `RaceSceneHost` → `FieldTerrain.inWaterAt` → `CourseTerrain.inWaterAt` — and
-`pickNextControl` refuses a leg whose straight line crosses it, at 2 m samples
+`pickNextControl` prices a leg whose straight line crosses it, at 2 m samples
 along one line, which is nothing. The run-in is covered too: the finish is
 sited before the loop begins, so the leg from the last control to it is the one
 leg no candidate is ever scored on.
@@ -1560,12 +1560,37 @@ in its second fault, 70, 72 and 92 m in the sampled seeds. A 300 m leg with a
 3× detour is a bad leg; a 60 m leg with a 3× detour is what makes a player
 think the game is broken.
 
-The generator's one piece of backtracking came out of this. It places controls
-greedily and cannot revisit an earlier one, so a leg where all five shortlisted
-candidates are laps of the town usually means the *previous* control was the
-mistake — measured on seed 28803419, the fault survived the probe untouched for
-exactly that reason, because the best of a bad set was still being returned.
-`pickNextControl` now returns null instead: the course ends there, `setCourse`
-shops for another seed, and a seed that had to be shopped away from is one
-`pick-course.mjs` disqualifies outright. A bad seed becomes visibly bad rather
-than quietly producing a bad course.
+### Both of these are preferences, and refusing was tried twice
+
+The obvious shape for both tests is a refusal: the leg is a fault, so reject the
+candidate. It was written that way twice and measured, and **both times it made
+the courses worse**, which is worth recording rather than quietly reverting.
+
+* A `continue` on the water test starves the candidate pool. On a leg where the
+  river takes most of the ninety samples none survives, and `generateCourse`
+  breaks out of its loop — which does not shorten the course by one leg, it
+  *ends* it. Krumlov came out at 12 controls instead of 15 to 18, under the 14 a
+  sprint is specified at.
+* Returning null when all five shortlisted candidates fail the detour probe does
+  the same thing at the other end, and additionally makes two seeds in three
+  shop for another. **Nought candidates in twenty survived `pick-course.mjs`**;
+  before the change it was about a third.
+
+The cause is that this generator is greedy and cannot revisit a control it has
+already placed. A leg where every candidate is across the obstacle usually means
+the *previous* control was the mistake, so refusing here punishes the wrong leg.
+Real backtracking would be the fix and it is not a small change.
+
+So both are preferences that degrade. `WET_PENALTY` is larger than the whole
+rest of the candidate score can reach, so a wet candidate never outscores a dry
+one and is evicted from the shortlist the moment five dry ones exist; it is
+chosen only when the alternative is no leg at all. The probe likewise moves the
+choice down the shortlist and, where it cannot help, hands the whole course to
+the offline filter to refuse. Six consecutive menu-shaped seeds after the
+change: five of six settle first try, 14 to 19 controls, against 12 to 13 and
+two-in-three shopping.
+
+That division of labour — a cheap preference at load time, the exact filter
+offline — is the answer to "can the generator avoid this rather than only be
+filtered for it". Partly, and it is worth what it costs; the rest belongs to the
+picker.
