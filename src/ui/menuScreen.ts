@@ -68,23 +68,35 @@ const ENTRIES: MenuEntry[] = [
       );
     },
   },
-  {
-    id: 'sprint',
-    labelKey: 'menu.sprint',
-    sublabelKey: 'menu.sprintSub',
-    go: async () => {
-      const { makeBeforeScreen } = await import('@/ui/beforeScreen');
-      await transitionTo(
-        makeBeforeScreen({
-          venue: 'krumlov',
-          discipline: 'sprint',
-          seed: courseSeed('krumlov'),
-          heat: 0.45,
-          startInMin: 45,
-        }),
-      );
-    },
-  },
+  /**
+   * Krumlov is **withheld from the menu on purpose**, not unfinished by accident.
+   *
+   * The client, after the course itself was finally sane: *"the town is
+   * completely bewitched — you run out and there's a wall straight away, you
+   * can't get anywhere. Look, the forest you've built superbly, we don't want
+   * to wreck it."* His call, and the right one: ship the venue that works, stop
+   * paying for the one that does not, and rebuild it deliberately rather than
+   * patching it a sixth time.
+   *
+   * The record of why is worth keeping, because it is a pattern and not a run
+   * of bad luck. Krumlov has produced, in order: severed bridges; a 4 m raster
+   * on phones against 2–3 m alleys; 13.8 km of barrier drawn with no collider;
+   * a start in the river; drawn water that was never out of bounds; a barrier
+   * stamp that re-closed the bridges; and a course whose second leg ran 12×
+   * its straight line. Every one was real, every one was found by the client
+   * rather than by a gate, and every fix exposed the next. That is what a venue
+   * looks like when its *representation* is wrong rather than its details: OSM
+   * outlines, a ZABAGED raster and a bare-earth heightfield, three sources that
+   * disagree about where a wall is, reconciled by stamping one onto another.
+   *
+   * The forest has none of this, from the same pipeline — 2111 legs measured,
+   * not one over 1.55× — because a forest is a cost surface and a town is a
+   * set of hard edges. A rebuild is a rebuild of that model, not a re-tune.
+   *
+   * `?scene=sprint` still reaches it, and every gate still exercises it. This
+   * hides it from the player; it does not park the work.
+   */
+  { id: 'sprint', labelKey: 'menu.sprint', sublabelKey: 'menu.sprintSub', soon: true },
   { id: 'career', labelKey: 'menu.career', sublabelKey: 'menu.careerSub', soon: true },
   { id: 'daily', labelKey: 'menu.daily', sublabelKey: 'menu.dailySub', soon: true },
 ];
