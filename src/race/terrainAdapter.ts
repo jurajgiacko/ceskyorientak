@@ -100,6 +100,15 @@ export interface FieldTerrainOptions {
   /** Extra out-of-bounds geometry the raster does not carry. */
   blocked?: Blocker;
   /**
+   * Which of that out-of-bounds ground is *water* — the Vltava, off a bridge.
+   *
+   * A strict subset of `blocked`, and it is separated out for the course setter
+   * rather than for the athlete: to a runner a river and a wall are both simply
+   * a stop, but to a setter a wall is twenty metres round and the river is the
+   * length of the town. `CourseTerrain.inWaterAt` and D-037 have the argument.
+   */
+  water?: Blocker;
+  /**
    * Score control sites the way a sprint course setter does.
    *
    * In the forest a control sits on a landform, so relief is the signal. In a
@@ -127,6 +136,7 @@ export interface FieldTerrainOptions {
 export class FieldTerrain implements CourseTerrain, RaceTerrain {
   private readonly field: TerrainField;
   private readonly blocked: Blocker | null;
+  private readonly water: Blocker | null;
   private readonly urban: boolean;
   private readonly features: UrbanFeatureIndex | null;
 
@@ -151,6 +161,7 @@ export class FieldTerrain implements CourseTerrain, RaceTerrain {
   constructor(field: TerrainField, opts: FieldTerrainOptions = {}) {
     this.field = field;
     this.blocked = opts.blocked ?? null;
+    this.water = opts.water ?? null;
     this.urban = opts.urban ?? false;
     this.features = opts.features ?? null;
 
@@ -254,6 +265,20 @@ export class FieldTerrain implements CourseTerrain, RaceTerrain {
   runnabilityAt(x: number, z: number): Runnability {
     if (this.blocked?.(x, z)) return Runnability.Impassable;
     return this.field.runnabilityAt(x, z);
+  }
+
+  /**
+   * Uncrossable water with no bridge over it — ISSprOM 301. See
+   * `CourseTerrain.inWaterAt` for why the course setter needs this separated
+   * out from the rest of `runnabilityAt`'s Impassable, and D-037.
+   *
+   * Declared unconditionally rather than as an optional member so the class
+   * satisfies the interface plainly; where the scene has no water — the forest
+   * — `water` is null and the answer is always false, which is the truth there
+   * rather than a stub.
+   */
+  inWaterAt(x: number, z: number): boolean {
+    return this.water ? this.water(x, z) : false;
   }
 
   /**

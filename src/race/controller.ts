@@ -76,6 +76,15 @@ export interface RaceSceneHost {
   beforeFrame: ((dtS: number) => void) | null;
   /** Extra out-of-bounds geometry the raster does not carry (Krumlov's walls). */
   blockedAt?(x: number, z: number): boolean;
+  /**
+   * Which of that is uncrossable *water* — ISSprOM 301, the Vltava — with no
+   * bridge deck over it.
+   *
+   * Always a subset of `blockedAt`; a scene with no drawn water does not
+   * implement it. The course setter needs the distinction and the athlete does
+   * not: see `CourseTerrain.inWaterAt` and D-037.
+   */
+  inWaterAt?(x: number, z: number): boolean;
   resize(width: number, height: number): void;
 }
 
@@ -209,6 +218,10 @@ export class RaceController {
     const urban = setup.anchor.mapScale <= 5000;
     this.terrain = new FieldTerrain(host.field, {
       ...(host.blockedAt ? { blocked: (x: number, z: number) => host.blockedAt!(x, z) } : {}),
+      // The water clause of `blockedAt`, on its own, so `generateCourse` can
+      // refuse a leg across the river without also refusing one round a
+      // building — which is the best leg a sprint has. See D-037.
+      ...(host.inWaterAt ? { water: (x: number, z: number) => host.inWaterAt!(x, z) } : {}),
       urban,
       ...(urban && setup.townscape
         ? { features: buildUrbanFeatures(setup.townscape) }

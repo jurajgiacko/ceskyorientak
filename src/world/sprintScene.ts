@@ -408,6 +408,20 @@ export class SprintScene {
   }
 
   /**
+   * The water clause of `blockedAt`, on its own — ISSprOM 301 with the bridge
+   * exception, and nothing else.
+   *
+   * `RaceSceneHost.inWaterAt`, and it exists for the course setter rather than
+   * for the athlete. Running into a wall and running into the river feel the
+   * same; *setting a leg* across one and across the other do not, because the
+   * way round a Krumlov block is twenty metres and the way round the Vltava is
+   * the length of the town. See D-037.
+   */
+  inWaterAt(x: number, z: number): boolean {
+    return this.surface.inWater(x, z);
+  }
+
+  /**
    * The height of the surface the athlete stands on at (x, z), metres ASL.
    *
    * Not `field.heightAt`, and the difference is a bridge. The heightfield is a

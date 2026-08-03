@@ -84,6 +84,32 @@ export interface CourseTerrain {
    * `FieldTerrain.pavedDistanceAt`.
    */
   pavedDistanceAt?(x: number, z: number): number;
+  /**
+   * Is (x, z) uncrossable water — ISSprOM 301, the Vltava — with no bridge
+   * carrying you over it?
+   *
+   * **The one thing `routeCost` structurally cannot see.** D-037. `routeCost`
+   * samples the straight line between two controls; a straight line across a
+   * river reports Impassable, `legInterest` scores the leg 0, and 0 is a
+   * *deduction* competing against the feature score and the RNG jitter rather
+   * than a refusal. Nothing anywhere told the generator how far round the fault
+   * was, and it cannot find out by sampling a line: the answer is 800 m away
+   * and off the line entirely.
+   *
+   * Water is separated out from the rest of `runnabilityAt`'s Impassable
+   * because the two mean opposite things to a course setter. A building in the
+   * way is the *best* leg a sprint can have — you pick a side, at speed, off
+   * the map, and `legInterest` rightly rewards it — because Krumlov's blocks
+   * are twenty to thirty metres across and either way round costs you seconds.
+   * A river in the way is not a route choice at all: this town has one channel
+   * with bridges hundreds of metres apart, so the leg has exactly one route and
+   * it is a lap of the town. Rejecting every blocked leg would forbid sprint
+   * orienteering; rejecting the ones blocked by water forbids only the fault.
+   *
+   * Optional, and absent in the forest — Lachovice has no drawn water and
+   * `ForestScene` has no `blockedAt`, so the whole question is empty there.
+   */
+  inWaterAt?(x: number, z: number): boolean;
 }
 
 /** Target shape per discipline. Winning times are the IOF-specified quantity. */
@@ -583,6 +609,9 @@ export function generateCourse(o: GenerateOptions): Course {
       clearOf: { p: finish, m: finishClearanceM },
       // Leg 1 only: leave the arena, do not run back through it.
       ...(i === 0 ? { awayFrom: { p: finish, rad: FIRST_LEG_AWAY_RAD } } : {}),
+      // Last control only: the run-in is a leg too, and the only one that is
+      // never a candidate. See `PickOptions.runInTo`.
+      ...(i === targetLegs - 1 ? { runInTo: finish } : {}),
       // A floor, so an exhausted budget does not reject every candidate and
       // strand the course — but a floor proportional to the budget rather than
       // a flat 25 m, which on a sprint's 19 m allowance *is* the whole budget
@@ -688,6 +717,56 @@ interface PickOptions {
    * the first leg only — see `FIRST_LEG_AWAY_RAD`.
    */
   awayFrom?: { p: World2; rad: number };
+  /**
+   * Where the run-in goes, on the last control only.
+   *
+   * The finish is sited before the loop starts, so the leg from the last
+   * control to it is the one leg no candidate is ever scored on. Passing the
+   * finish here lets the last control be rejected for a run-in that crosses
+   * the river — see the water test in `pickNextControl`.
+   */
+  runInTo?: World2;
+}
+
+/**
+ * How finely the water test below walks a leg, metres.
+ *
+ * The Vltava is about thirty metres across in Krumlov and its narrowest mill
+ * race a few, so 2 m cannot step over the channel. It is deliberately not
+ * `Spec.routeStepM`: that is a *cost* sample, where a missed cell shifts a
+ * score, and this is a *rejection*, where a missed cell ships the bug.
+ */
+const WATER_STEP_M = 2;
+
+/**
+ * Does the straight line from `a` to `b` cross uncrossable water? **D-037.**
+ *
+ * The cheap half of the fix, and it is cheap on purpose. The expensive and
+ * complete answer — route the leg and compare with the straight line — is what
+ * `tools/ci/check-passable.mjs` and `tools/sim/pick-course.mjs` do offline, and
+ * it costs a Dijkstra over a lattice of several hundred thousand cells per leg.
+ * `generateCourse` runs at load time on a phone and considers ninety candidates
+ * for each of fifteen legs, so it cannot have that. What it can have is the one
+ * feature in this venue that turns a blocked leg into a lap of the town.
+ *
+ * That asymmetry is the point. A building blocks a leg for twenty metres and
+ * the way round is twenty metres; a river blocks it for the length of the town.
+ * `routeCost` cannot tell those apart, because both read Impassable along the
+ * straight line and neither says how far round the way round is — and the way
+ * round is not on the line to be sampled.
+ *
+ * `null` where the terrain does not answer, which is the forest, where there is
+ * no drawn water and the question is empty.
+ */
+function crossesWater(a: World2, b: World2, terrain: CourseTerrain): boolean {
+  if (!terrain.inWaterAt) return false;
+  const legM = dist2(a, b);
+  const steps = Math.max(2, Math.ceil(legM / WATER_STEP_M));
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps;
+    if (terrain.inWaterAt(a.x + (b.x - a.x) * t, a.z + (b.z - a.z) * t)) return true;
+  }
+  return false;
 }
 
 /** Perpendicular distance from `p` to the segment `a`–`b`, metres. */
@@ -843,6 +922,23 @@ function pickNextControl(o: PickOptions): World2 | null {
     const overBudget = Math.max(0, legClimb - o.climbLeftM);
     if (overBudget > o.maxLegClimbOverM) continue;
     const climbPenalty = legClimb / Math.max(30, o.climbLeftM);
+
+    // **Not across the river.** See `crossesWater` and D-037.
+    //
+    // A refusal rather than a penalty, and last among the cheap tests because
+    // it is the only one that walks the leg. The client's report — *"I can see
+    // it across the water but I can't get across"* — was two controls 58 m
+    // apart on opposite banks with 810 m of running between them, and nothing
+    // in the score below could see it: `legInterest` returned 0, which is a
+    // deduction of 1.3 against a feature score of up to 1.0 and 0.15 of RNG
+    // jitter, and 0 is also what it returns for a leg into a courtyard.
+    //
+    // The run-in is checked here too, on the last control only, because it is
+    // the one leg `pickNextControl` never gets asked about: the finish was
+    // sited before the loop began, so a last control across the river from it
+    // would place the fault in the one leg no candidate test covers.
+    if (crossesWater(o.from, sited, o.terrain)) continue;
+    if (o.runInTo && crossesWater(sited, o.runInTo, o.terrain)) continue;
 
     const interest = legInterest(o.from, sited, o.terrain, o.routeStepM);
     const score =
