@@ -29,10 +29,13 @@ import {
   speedFactor,
   controlApproachPenalty,
   overfuellingPenalty,
+  relativeIntensity,
   SPEED_BY_RUNNABILITY,
   freshStats,
 } from './athlete';
 import { Cornering, easeSpeed } from './cornering';
+import type { RefreshmentPoint, CupKind } from './refreshment';
+import { drinkCup, cupContents, type CupEffect } from '@/nutrition/cup';
 import {
   Rng,
   initNav,
@@ -87,6 +90,18 @@ export interface RaceView {
   focus: number;
   /** Set for a couple of seconds after a punch, for the beep and the flash. */
   justPunched: { code: number; correctedM: number } | null;
+  /**
+   * The refreshment point the athlete is standing in, if any, and whether it
+   * still has anything for them.
+   *
+   * Null everywhere on a Sprint, because IOF Rule 19.8 puts no refreshment on a
+   * course whose winning time is under 30 minutes — see `sim/refreshment.ts`.
+   */
+  atRefreshment: {
+    point: RefreshmentPoint;
+    /** False once this athlete has drunk here; a station is taken once. */
+    available: boolean;
+  } | null;
 }
 
 export class Race {
@@ -136,6 +151,17 @@ export class Race {
   private preRace: string[];
   private carbsConsumedG = 0;
   private beltItems = 0;
+
+  /**
+   * Refreshment points already drunk at, by point id.
+   *
+   * A station is taken once. Standing at the table drinking cup after cup is
+   * not a thing that happens in a race, and allowing it would turn a rule of
+   * the sport into a refill button.
+   */
+  private refreshmentsTaken = new Set<string>();
+  /** Cups drunk, for the results screen. */
+  private cupsTaken: { kind: CupKind; atS: number; pointId: string }[] = [];
 
   /** Seconds of route recording granularity. 1 Hz is ample for a ghost. */
   private static readonly ROUTE_SAMPLE_S = 1;
@@ -250,8 +276,13 @@ export class Race {
     }
 
     // --- physiology -------------------------------------------------------
+    // Effort is measured against what THIS ground allows, not against a road
+    // pace — see `relativeIntensity()`. Using `a.speed / BASE_MS` scored an
+    // athlete racing through Green1 at 0.15 intensity because they were only
+    // making 0.7 m/s, which had terrain quietly *reducing* the metabolic cost
+    // of the hardest running in the sport.
     depleteStats(a.stats, {
-      intensity: Math.min(1, a.speed / BASE_MS),
+      intensity: relativeIntensity(a.speed, BASE_MS, here.runnability),
       runnability: here.runnability,
       slope: here.slope,
       heat: this.heat,
@@ -370,6 +401,55 @@ export class Race {
     this.beltItems = n;
   }
 
+  /**
+   * The refreshment point the athlete is within reach of, or null.
+   *
+   * Distance is to the *true* position, not the believed one. A table with
+   * people at it is a thing you can see; being lost does not hide it from you,
+   * and the whole reason a station stands at a control is that you cannot miss
+   * it once you are there.
+   */
+  refreshmentInReach(): RefreshmentPoint | null {
+    if (this.phase !== 'running') return null;
+    const p = this.athlete.position;
+    for (const r of this.course.refreshments) {
+      if (dist2(p, r.position) <= r.reachM) return r;
+    }
+    return null;
+  }
+
+  /**
+   * Drink a cup at the station the athlete is standing in.
+   *
+   * Returns what moved, or null if there was nothing to take — out of reach,
+   * already drunk here, or that station does not offer that cup. The caller
+   * applies the time cost, exactly as it does for a belt item.
+   */
+  takeCup(kind: CupKind): CupEffect | null {
+    const r = this.refreshmentInReach();
+    if (!r) return null;
+    if (this.refreshmentsTaken.has(r.id)) return null;
+    if (!r.offers.includes(kind)) return null;
+
+    this.refreshmentsTaken.add(r.id);
+    const effect = drinkCup(this.athlete.stats, kind);
+    this.cupsTaken.push({ kind, atS: this.athlete.timeS, pointId: r.id });
+
+    // A cup of the event's hypotonic mix carries ~5 g of carbohydrate, and it
+    // counts toward the gut like any other carbohydrate. It is small enough
+    // that it will never on its own trip `overfuellingPenalty`, which is the
+    // honest outcome rather than a designed exemption.
+    if (kind === 'sportsDrink') {
+      this.carbsConsumedG += cupContents(kind).carbsG;
+    }
+    return effect;
+  }
+
+  /** True once this athlete has drunk at this point. */
+  hasTakenRefreshment(id: string): boolean {
+    return this.refreshmentsTaken.has(id);
+  }
+
   private recordRoute(force = false): void {
     const t = Math.floor(this.athlete.timeS / Race.ROUTE_SAMPLE_S);
     if (!force && t === this.lastRouteAt) return;
@@ -406,6 +486,14 @@ export class Race {
       bloodSugar: a.stats.bloodSugar,
       focus: a.stats.focus,
       justPunched: flash,
+      // Computed here rather than tracked, because "am I standing in it" is a
+      // question about right now and the answer has to survive the athlete
+      // being moved by anything other than their own legs.
+      atRefreshment: ((): RaceView['atRefreshment'] => {
+        const point = this.refreshmentInReach();
+        if (!point) return null;
+        return { point, available: !this.refreshmentsTaken.has(point.id) };
+      })(),
     };
   }
 

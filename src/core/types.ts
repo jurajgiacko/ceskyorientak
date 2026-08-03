@@ -162,6 +162,33 @@ export interface Control {
   punchRadius: number;
 }
 
+/**
+ * What a refreshment point hands out. Both are free, neither is carried, and
+ * which of them is present is decided by IOF Rule 19.10, not by us.
+ */
+export type CupKind = 'water' | 'sportsDrink';
+
+/**
+ * A refreshment point on the course — ISOM symbol **713**, the cup.
+ *
+ * Mandated by IOF Rule 19.8 wherever the winning time reaches 30 minutes. The
+ * siting logic and the rule text live in `src/sim/refreshment.ts`; this is only
+ * the shape, kept here so `Course` can carry it without a cycle.
+ */
+export interface RefreshmentPoint {
+  id: string;
+  /** Index of the control this point stands at, into `Course.controls`. */
+  atControl: number;
+  position: World2;
+  /** Fraction of the course, 0..1, by IOF straight-line measurement. */
+  courseFraction: number;
+  /** Time at the winner's pace at which the athlete reaches it, seconds. */
+  atWinnerPaceS: number;
+  offers: readonly CupKind[];
+  /** Radius in metres within which the athlete can take a cup. */
+  reachM: number;
+}
+
 export interface Course {
   id: string;
   venue: VenueId;
@@ -173,6 +200,11 @@ export interface Course {
   start: World2;
   finish: World2;
   controls: Control[];
+  /**
+   * Refreshment points required by IOF Rule 19.8. **Empty for Sprint**, and
+   * that is the rule rather than an omission — see `src/sim/refreshment.ts`.
+   */
+  refreshments: RefreshmentPoint[];
   /** Expected elite winning time in seconds — used to calibrate the field. */
   expectedWinningTimeS: number;
   /** Deterministic seed; identical seed ⇒ identical course. */

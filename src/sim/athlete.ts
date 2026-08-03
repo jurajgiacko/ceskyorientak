@@ -91,32 +91,119 @@ export const TYPICAL_DURATION_S: Readonly<Record<Discipline, number>> = {
   relay: 35 * 60,
 };
 
+/**
+ * Effort as a fraction of what *this ground* allows, not of a road pace.
+ *
+ * This is the correction that makes terrain cost anything at all. The obvious
+ * formulation — `speed / BASE_MS` — says an orienteer fighting through dark
+ * green at 0.9 m/s is working at 20% effort, because they are moving slowly.
+ * That is precisely backwards: dark green is where an orienteer works hardest
+ * and moves least. Measured on the real course this file is calibrated against,
+ * the naive form scored a runner in Green1 at **0.15 intensity**, which is a
+ * brisk walk, while they were racing.
+ *
+ * An athlete in a race self-regulates to roughly constant *effort*, not
+ * constant speed — the pace is whatever that effort buys on the ground
+ * underfoot. So intensity is measured against the speed this runnability class
+ * permits, and the metabolic difference between classes is carried entirely by
+ * `COST_BY_RUNNABILITY`, which is what that table was always documented to be
+ * for. Before this change the two cancelled and the Creagh & Reilly 26% did
+ * nothing.
+ *
+ * @param speedMs   achieved ground speed, m/s
+ * @param baseMs    the athlete's road speed at full effort, m/s
+ */
+export function relativeIntensity(
+  speedMs: number,
+  baseMs: number,
+  runnability: Runnability,
+): number {
+  const permitted = baseMs * SPEED_BY_RUNNABILITY[runnability];
+  // Impassable permits nothing; anyone still there is standing against it.
+  if (permitted <= 0.01) return 0;
+  return clamp01(speedMs / permitted);
+}
+
+/**
+ * Fraction of energy expenditure drawn from carbohydrate, by intensity.
+ *
+ * **The crossover concept** — Brooks & Mercier, J Appl Physiol
+ * 1994;76(6):2253–2261 — and the substrate measurements in Romijn et al.,
+ * Am J Physiol 1993;265(3):E380–E391. As relative intensity rises, the fuel
+ * mix shifts from fat toward carbohydrate: roughly 40% of energy from
+ * carbohydrate at 40% VO2max, ~60% at 65% VO2max, ~80% at 85% VO2max.
+ *
+ * This is the single term that makes **pacing** a decision rather than
+ * scenery. Without it, glycogen cost is linear in effort and the only way to
+ * save fuel is to cover less ground — which is not a choice anybody would
+ * make. With it, going out too hard on a Long costs carbohydrate
+ * disproportionately, and the athlete who holds a sustainable effort arrives
+ * at the last controls with something left. That is the actual lesson of long
+ * distance racing, and it is why the refreshment points and the belt have
+ * something to bite on.
+ *
+ * The linear fit below reproduces the three anchor points above to within a
+ * few percent across the range a race actually occupies; the underlying curve
+ * is sigmoid, but not over 0.4–1.0, and a fit that claimed more resolution
+ * than the source data has would be false precision.
+ */
+export function carbFraction(intensity: number): number {
+  return clamp01(0.35 + 0.55 * clamp01(intensity));
+}
+
 // ---------------------------------------------------------------------------
 // Depletion
 // ---------------------------------------------------------------------------
 
 /**
- * Glycogen drain per second at reference effort, as a fraction of full stores.
+ * Glycogen drain per second at reference effort **and** reference fuel mix, as
+ * a fraction of full stores. Multiplied by `carbFraction()` at use, so the
+ * headline number is not itself a race-length figure — read the arithmetic
+ * below, not the constant.
  *
- * Sized so a 90-minute Long at racing intensity, starting fully fuelled and
- * taking nothing, arrives at the finish genuinely empty — which matches both
- * the physiology and the lived experience of the distance. A 14-minute Sprint
- * barely dents it, which is why Sprint has no in-race fuelling decision.
+ * Sized against the one race that has a fuelling problem. A Long run at the
+ * winner's pace spends ~5400 s at effort ≈ 1.35 (forest cost × the climb) and
+ * a carbohydrate fraction ≈ 0.85, which is ~6200 reference-seconds, and lands
+ * the athlete at the finish **around 0.15 — the wall knee in `speedFactor()`,
+ * not through it.** That is the design intent stated as a number: a Long run
+ * honestly and fuelled with nothing finishes *on the edge*, so the refreshment
+ * points mandated by Rule 19.8 and anything on the belt are the difference
+ * between arriving empty and arriving able to run the last two controls.
+ *
+ * The same constant leaves a 14-minute Sprint at ~0.88 and a 33-minute Middle
+ * around 0.7. Sprint barely dents it and that is correct, not a flat bar to be
+ * fixed: Sprint's story is navigation under load, and it is told by `focus`.
+ *
+ * Previously `1/(105*60)`, paired with an `intensity` that fell when terrain
+ * slowed the athlete. The two errors partly cancelled; both are fixed here.
  */
-const GLYCOGEN_DRAIN_PER_S = 1 / (105 * 60);
+const GLYCOGEN_DRAIN_PER_S = 1 / (120 * 60);
 
 /**
- * Hydration drain. Deliberately gentle.
+ * Hydration drain, per second, at full effort in neutral conditions.
  *
- * Field data: competitive runners in ~75–90 min events voluntarily drink only
- * ~150 ml/h and finish ~2.4% down without incident (ACSM 2007, Table 2). And
- * whether 2% impairs performance at all in real-world short events is
- * genuinely contested — blinded studies contradict each other.
+ * **The scale now means something.** `hydration` 1.0 is euhydrated and 0.0 is
+ * a **5% body-mass fluid deficit**, which is the point at which the ACSM
+ * position stand describes clear performance and thermoregulatory impairment.
+ * That fixes the two knees to real numbers: `speedFactor()`'s 0.55 is a ~2.25%
+ * deficit, sitting on the widely-cited 2% threshold, and it is why the knee is
+ * where it is rather than being a taste.
  *
- * So this is tuned to bind only on a Long in warm conditions. See D-012: making
+ * Sweat rate is the input. Distance runners in warm conditions sweat ~1.0–1.8
+ * l/h; at 1.2 l/h a 70 kg athlete loses 3.5 l — the full scale — in just under
+ * three hours, which is the rate below. Field data: competitive runners in
+ * ~75–90 min events voluntarily drink only ~150 ml/h and finish ~2.4% down
+ * without incident (ACSM 2007, Table 2), and whether 2% impairs performance at
+ * all in real-world short events is genuinely contested — blinded studies
+ * contradict each other.
+ *
+ * So this binds on a Long in the heat and nowhere else. See D-012: making
  * Sprint or Middle hydration-limited would be a gameplay lie.
  */
-const HYDRATION_DRAIN_PER_S = 1 / (150 * 60);
+const HYDRATION_DRAIN_PER_S = 1 / (170 * 60);
+
+/** Body-mass fluid deficit, in percent, represented by `hydration` = 0. */
+export const HYDRATION_SCALE_DEFICIT_PCT = 5;
 
 /**
  * Focus drain. The interesting one.
@@ -129,8 +216,18 @@ const HYDRATION_DRAIN_PER_S = 1 / (150 * 60);
  * Expert consensus (Lam et al. Delphi, 2022) is that mental fatigue hits
  * *decision-making*, with no agreement that it affects running speed. Our model
  * follows that exactly: Focus never touches speed.
+ *
+ * **Why this is slower than it was.** At `1/(70*60)` a 90-minute Long reached
+ * focus 0 at around the 50-minute mark, and `navigationQuality()` returns
+ * `focus` directly — so the athlete spent the last 40 minutes at the floor,
+ * navigating as badly as it is possible to navigate, with no further
+ * distinction between a good race and a disastrous one. A stat that saturates
+ * has stopped being a mechanic. At the rate below a Long finishes near 0.3,
+ * a Middle near 0.75 and a Sprint near 0.9 *from time alone* — and the rest of
+ * the spread comes from `controlApproachPenalty()`, which is where it belongs,
+ * because that is the term the player controls.
  */
-const FOCUS_DRAIN_PER_S = 1 / (70 * 60);
+const FOCUS_DRAIN_PER_S = 1 / (180 * 60);
 
 /** Blood sugar drifts toward a set point unless fed; fast timescale. */
 const BLOOD_SUGAR_HALFLIFE_S = 420;
@@ -161,12 +258,23 @@ export function depleteStats(s: AthleteStats, i: DepletionInput): void {
 
   const effort = i.intensity * terrainCost * slopeCost;
 
-  s.glycogen = clamp01(s.glycogen - GLYCOGEN_DRAIN_PER_S * effort * i.dtS);
+  // Only the carbohydrate share of the energy cost comes out of glycogen; the
+  // rest is fat, and the split moves with intensity. See `carbFraction()` —
+  // this is what makes going out too hard expensive in a way that going far is
+  // not, and it is the mechanic that pacing acts on.
+  s.glycogen = clamp01(
+    s.glycogen - GLYCOGEN_DRAIN_PER_S * effort * carbFraction(i.intensity) * i.dtS,
+  );
 
   // Heat is the dominant term here, per ACSM: sweat rate, not duration, is what
-  // moves hydration on this timescale.
+  // moves hydration on this timescale. Climb is in it too — the extra work of
+  // going up is dissipated as heat like any other, and a 735 m Long in August
+  // is a sweat problem before it is anything else. Terrain class is *not*: a
+  // slower surface costs metabolic energy, which is glycogen's business, but it
+  // does not itself raise core temperature per unit of effort.
   s.hydration = clamp01(
-    s.hydration - HYDRATION_DRAIN_PER_S * i.intensity * (0.6 + 1.4 * i.heat) * i.dtS,
+    s.hydration -
+      HYDRATION_DRAIN_PER_S * i.intensity * slopeCost * (0.6 + 1.4 * i.heat) * i.dtS,
   );
 
   // Blood sugar decays toward a level set by remaining glycogen: once the tank

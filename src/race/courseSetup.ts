@@ -18,6 +18,7 @@
  */
 
 import { arenaFaults, courseLengthBand, generateCourse } from '@/sim/courseGen';
+import { siteRefreshments } from '@/sim/refreshment';
 import type { Course, Control, Discipline, VenueAnchor, World2 } from '@/core/types';
 import { dist2 } from '@/core/geo';
 import type { FieldTerrain } from './terrainAdapter';
@@ -286,11 +287,19 @@ function renumber(course: Course, kept: Control[], terrain: FieldTerrain): Cours
     }
   }
 
-  return {
+  const next: Course = {
     ...course,
     controls,
     lengthM: Math.round(lengthM),
     // Rounded to 5 m, as printed on a control description sheet.
     climbM: Math.round(climbM / 5) * 5,
+    refreshments: [],
   };
+
+  // Dropping unreachable controls renumbers the course and moves every
+  // percentage along it, so the Rule 19.8 siting has to be recomputed rather
+  // than carried over — a station indexed at old control 9 is not the same
+  // place, or even the same control, once three have gone.
+  next.refreshments = siteRefreshments(next);
+  return next;
 }

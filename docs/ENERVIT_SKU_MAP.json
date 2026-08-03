@@ -249,52 +249,6 @@
       "gameNote": "Use this as the default Liquid Gel in the loadout UI — it is the variant with the fewest open questions."
     },
     {
-      "id": "isotonic-gel-grapefruit",
-      "nameEn": "Isotonic Gel Grapefruit",
-      "nameCz": "ENERVIT Isotonic Gel",
-      "range": "SPORT",
-      "phase": "during",
-      "packshotPath": "/Users/jurajgiacko/Projects/JG 2026/VitarSport2026/Context/brand-assets/enervit-brand/SPORT/ISOTONIC GEL/Enervit Isotonic Gel foil Grapefruit MOD2 traspa.png",
-      "servingNote": "1 gel.",
-      "carbsG": 20,
-      "sodiumMg": null,
-      "caffeineMg": 0,
-      "proteinG": 0,
-      "volumeMl": null,
-      "verified": false,
-      "sourceNote": "20 g carb/serving comes from Enervit's NUTRITION SYSTEM® sheet, which is a primary Enervit document but a marketing sheet rather than a pack panel. Both enervit.com Isotonic Gel product URLs failed to fetch (404 / redirect loop). Pack volume, sodium and the isotonic claim conditions are all UNVERIFIED. Enervit describes it as 'maltodextrin based with isotonic formulation'.",
-      "gameStat": {
-        "glycogen": 0.25,
-        "bloodSugar": 0.35,
-        "hydration": 0.2,
-        "focus": 0.0
-      },
-      "gameNote": "Positioned between a gel and a drink: the point of difference is that it does not cost hydration. Do not call it 'isotonic' in player-facing copy on our own authority until the osmolality is confirmed — that word has a regulatory meaning."
-    },
-    {
-      "id": "isotonic-gel-lemon-caffeine",
-      "nameEn": "Isotonic Gel Lemon with caffeine",
-      "nameCz": "ENERVIT Isotonic Gel s kofeinem",
-      "range": "SPORT",
-      "phase": "during",
-      "packshotPath": "/Users/jurajgiacko/Projects/JG 2026/VitarSport2026/Context/brand-assets/enervit-brand/SPORT/ISOTONIC GEL/Enervit Isotonic Gel foil Lemon caffeine MOD2 traspa.png",
-      "servingNote": "1 gel.",
-      "carbsG": 20,
-      "sodiumMg": null,
-      "caffeineMg": null,
-      "proteinG": 0,
-      "volumeMl": null,
-      "verified": false,
-      "sourceNote": "As isotonic-gel-grapefruit. Caffeine dose UNVERIFIED — the product page redirect-looped.",
-      "gameStat": {
-        "glycogen": 0.25,
-        "bloodSugar": 0.35,
-        "hydration": 0.2,
-        "focus": 0.0
-      },
-      "gameNote": "Blocked on a verified caffeine figure. COMPLIANCE OVERRIDE: focus was zeroed. Per CLAIMS_TO_REVIEW.md no product in the range may drive the focus stat — there is no authorised EU cognition claim on any of these SKUs, and for caffeine there is no authorised claim of any kind (the Commission's draft was vetoed by the European Parliament, P8_TA(2016)0319). A product-driven focus effect would be a symbolic health claim under Art. 2(2)(1) of Reg. 1924/2006. Drive focus from fatigue and terrain only."
-    },
-    {
       "id": "competition-bar-orange",
       "nameEn": "Competition Bar Orange",
       "nameCz": "ENERVIT Competition Bar",

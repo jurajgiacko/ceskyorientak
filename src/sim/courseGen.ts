@@ -28,6 +28,7 @@ import { Runnability } from '@/core/types';
 import { Rng } from './navigation';
 import { bearing, dist2, wrapAngle } from '@/core/geo';
 import { COST_BY_RUNNABILITY, SPEED_BY_RUNNABILITY, TYPICAL_DURATION_S } from './athlete';
+import { siteRefreshments } from './refreshment';
 
 /**
  * What a control turned out to be sited on, in IOF column D/G terms.
@@ -627,7 +628,7 @@ export function generateCourse(o: GenerateOptions): Course {
   const lengthM = measureLength(start, controls, finish);
   const climbM = measureClimb(start, controls, finish, o.terrain);
 
-  return {
+  const course: Course = {
     id: `${o.venue.id}-${o.discipline}-${o.seed}`,
     venue: o.venue.id,
     discipline: o.discipline,
@@ -636,9 +637,16 @@ export function generateCourse(o: GenerateOptions): Course {
     start,
     finish,
     controls,
+    refreshments: [],
     expectedWinningTimeS: TYPICAL_DURATION_S[o.discipline],
     seed: o.seed,
   };
+
+  // Rule 19.8 is a property of the finished course, not of the setter's
+  // intentions, so it is applied last and derived from what was actually sited.
+  // Empty for Sprint by the rule — see src/sim/refreshment.ts.
+  course.refreshments = siteRefreshments(course);
+  return course;
 }
 
 // ---------------------------------------------------------------------------

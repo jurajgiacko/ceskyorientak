@@ -53,8 +53,25 @@ export type EnergyBand = 'strong' | 'steady' | 'digging' | 'empty';
 export const KNEE_BITE = 0.35;
 /** Where `speedFactor()` collapses — "the wall", modelled as a hard knee. */
 export const KNEE_WALL = 0.15;
-/** Above this the athlete is holding comfortably. Presentation only. */
-const KNEE_COMFORT = 0.6;
+/**
+ * Above this the athlete is holding comfortably. **Presentation only** — it is
+ * the one band edge with no physiological knee under it, because there is no
+ * knee to find: between full and the first speed cap, nothing is happening to
+ * the athlete that they would notice.
+ *
+ * It sits at 0.75 rather than 0.6 because of what the formats actually do. A
+ * Middle run at race pace finishes near 0.68 (`tools/sim/energy-check.mjs`), so
+ * at 0.6 the word under the bar read *"Máš sílu" / "Running strong"* for the
+ * entire race while the bar itself fell by a third — the number was moving and
+ * the label was not, which is the worst of both. At 0.75 a Middle crosses into
+ * *"Držíš tempo" / "Holding pace"* around a third of the way in, which is both
+ * legible and true: a quarter of the tank is gone and this is now a race.
+ *
+ * A Sprint still reads *strong* start to finish, and that stays correct rather
+ * than being a flat bar to fix — 14 minutes barely touches glycogen. Sprint's
+ * cost is navigational, and the focus row is where it shows.
+ */
+const KNEE_COMFORT = 0.75;
 
 /**
  * The hydration knee, from `speedFactor()`. Below it, water starts costing
