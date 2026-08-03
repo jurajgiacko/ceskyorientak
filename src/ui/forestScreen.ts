@@ -16,7 +16,6 @@ import { getCapabilities, transitionTo } from '@/ui/shell';
 import type { ForestScene } from '@/world/scene';
 import type { RaceController } from '@/race/controller';
 import type { ScreenRaceSetup } from './beforeScreen';
-import { getSettings } from '@/core/settings';
 import { getVenue } from '@/core/venues';
 import { t } from '@/i18n';
 
@@ -37,7 +36,6 @@ export function makeForestScreen(opts: ForestScreenOptions): Screen {
     id: 'forest',
 
     async mount(host: HTMLElement): Promise<void> {
-      const settings = getSettings();
       host.innerHTML = `
         <div class="world">
           <canvas class="world__canvas"></canvas>
@@ -71,7 +69,6 @@ export function makeForestScreen(opts: ForestScreenOptions): Screen {
           venue: 'martinkov',
           weather: opts.weather,
           bench: opts.bench,
-          viewmodel: opts.bench || settings.showHands,
           onProgress: (f, label) => {
             if (bar) bar.style.width = `${Math.round(f * 100)}%`;
             if (step) step.textContent = label;

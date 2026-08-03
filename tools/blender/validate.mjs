@@ -32,10 +32,12 @@ const MODELS = path.join(ROOT, 'public', 'models');
  *
  * Raised again, 60k to 80k, to admit the third-person character. The original
  * reasoning applies with more force to a character than to scatter: this budget
- * governs VRAM, not frame time. The runner and the viewmodel are drawn ONCE
- * each — they are not instanced at all — so together they add about 18.5k
- * triangles to the library and about one draw call to the frame. At roughly
- * 50 kB per 1000 tris that is under 1 MB of VRAM.
+ * governs VRAM, not frame time. The runner is drawn ONCE — it is not instanced
+ * at all — so it adds about 12.7k triangles to the library and about one draw
+ * call to the frame. At roughly 50 kB per 1000 tris that is well under 1 MB of
+ * VRAM. (The 9k first-person viewmodel that shared this reasoning is gone; see
+ * D-036. The ceiling is left where it is rather than lowered to fit — a budget
+ * that tracks the current asset set exactly is not a budget.)
  *
  * Leaving the body parked to protect a number that does not govern frame time
  * would have been the same mistake as the deadwood root plate, and this time
@@ -76,11 +78,6 @@ export const BUDGETS = {
   // slightly looser allowance than a scatter asset. The global ceiling is the
   // real constraint here and there is room under it.
   'race-belt': 1000,
-  // First-person viewmodel: one instance, always on screen, always at ~0.45 m
-  // from the camera. It is the most closely inspected surface in the game, so
-  // it gets the loosest per-asset allowance in the library — and it is the
-  // only skinned asset, so its cost is a fixed one-off rather than per-instance.
-  'orienteer-hands': 9000,
   // Drawn once, never instanced, and on screen constantly in third person.
   // A character carries its cost in VRAM rather than in the frame.
   orienteer: 14000,

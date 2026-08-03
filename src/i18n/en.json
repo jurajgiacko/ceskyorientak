@@ -90,7 +90,6 @@
   "race.quitStay": "Keep running",
   "hint.freeRun": "WASD move · mouse look (click to capture) · Q/E turn · R/F pitch · Shift sprint · V camera",
   "hint.freeRunSprint": "WASD move · mouse look (click to capture) · Q/E turn · R/F pitch · Shift sprint · N noclip",
-  "settings.showHands": "Show hands",
   "settings.on": "ON",
   "settings.off": "OFF",
   "nutrition.startIn": "Start in {min} min",

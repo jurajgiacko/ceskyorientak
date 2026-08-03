@@ -24,7 +24,6 @@ import type { Asset } from './vegetation';
 import { RunnerCharacter } from './runner';
 import type { RunnerIntent } from './runner';
 import { SpringArm, THIRD_PITCH_MAX, THIRD_PITCH_MIN } from './thirdPerson';
-import { Viewmodel } from './viewmodel';
 import { BearingBand, aidColour } from './bearingBand';
 import type { BearingAim } from './bearingBand';
 import { ControlMarkers, loadControlAssets } from './controlMarkers';
@@ -40,14 +39,6 @@ export interface ForestSceneOptions {
   weather?: Weather;
   /** Benchmark mode: deterministic camera path, no input, for the perf gate. */
   bench?: boolean;
-  /**
-   * Render the first-person arms and let V switch to third person.
-   *
-   * Off by default now that the map is a full-screen 2D overlay — see
-   * `src/core/settings.ts`. Always on in bench, because the perf gate has to
-   * keep measuring the skinned draw it has always measured.
-   */
-  viewmodel?: boolean;
   onProgress?: (fraction: number, label: string) => void;
 }
 
@@ -91,7 +82,6 @@ export class ForestScene {
   private readonly bench: boolean;
   private readonly weather: Weather;
   private readonly venueId: VenueId;
-  private readonly wantViewmodel: boolean;
 
   /**
    * Called at the top of every frame, before anything reads the camera.
@@ -122,14 +112,6 @@ export class ForestScene {
   private spawn = new THREE.Vector2();
   private pointerLocked = false;
 
-  /**
-   * The first-person hands, map and thumb compass.
-   *
-   * This is the primary view: an orienteer races with the map in hand for the
-   * whole course, and the map-reading mechanic is built on top of it.
-   */
-  private viewmodel!: Viewmodel;
-
   // Third-person state.
   private runner!: RunnerCharacter;
   private readonly arm = new SpringArm();
@@ -150,7 +132,6 @@ export class ForestScene {
     this.bench = opts.bench ?? false;
     this.weather = opts.weather ?? 'sunny';
     this.venueId = opts.venue ?? 'martinkov';
-    this.wantViewmodel = opts.viewmodel ?? this.bench;
 
     this.camera = new THREE.PerspectiveCamera(
       // 46° vertical — about 28 mm full-frame at 16:9, which is where the
@@ -224,12 +205,6 @@ export class ForestScene {
     await this.runner.load();
     this.warnings.push(...this.runner.warnings);
     for (const w of this.runner.warnings) console.warn('[runner]', w);
-
-    step(0.76, 'hands');
-    this.viewmodel = new Viewmodel();
-    await this.viewmodel.load();
-    this.warnings.push(...this.viewmodel.warnings);
-    for (const w of this.viewmodel.warnings) console.warn('[hands]', w);
 
     step(0.8, 'world');
     this.build({ spruce, beech, boulder, deadwood });
@@ -315,17 +290,6 @@ export class ForestScene {
     this.scene.add(this.runner.group);
     this.lastEye.copy(this.camera.position);
 
-    // The viewmodel is authored in camera space, so it is a *child of the
-    // camera*. That in turn means the camera has to be in the scene graph:
-    // three renders the scene, and a camera outside it renders its own children
-    // nowhere. This is the only reason `scene.add(camera)` is here.
-    this.camera.add(this.viewmodel.group);
-    this.scene.add(this.camera);
-    // Off unless asked for. The model, the gait blend and the map-texture
-    // binding all stay loaded and working — this is a visibility switch, not a
-    // removal, so turning it back on in settings costs nothing.
-    this.viewmodel.setVisible(this.wantViewmodel);
-
     // --- post ---
     if (this.tier !== 'low' && this.sky.isSunny) {
       // Strength is deliberately low. Shafts read as *atmosphere*; the moment
@@ -366,10 +330,13 @@ export class ForestScene {
     const onKey = (e: KeyboardEvent, down: boolean) => {
       if (down) this.keys.add(e.code);
       else this.keys.delete(e.code);
-      // V is behind the same switch as the hands: the chase camera exists to
-      // look at the athlete, and the athlete is only worth looking at when the
-      // player has opted into seeing themselves.
-      if (down && e.code === 'KeyV' && !e.repeat && this.wantViewmodel) {
+      // V is the chase camera. It used to be behind the hands switch, which
+      // defaulted off — so with the hands gone the correct move was not to
+      // delete the key but to stop hiding it. This listener is only attached
+      // in the free-run sandbox (`attachInput` is not called while a race owns
+      // the camera), which is also the only place the chase camera works: in a
+      // race `applyExternal` drives the eye and a spring arm would fight it.
+      if (down && e.code === 'KeyV' && !e.repeat) {
         this.toggleCameraMode();
       }
       if (down && (e.code === 'KeyW' || e.code === 'KeyS' || e.code === 'Space')) {
@@ -434,8 +401,6 @@ export class ForestScene {
       // the first-person camera happened to be standing.
       this.arm.reset();
       this.runner.setVisible(true);
-      // You cannot see your own hands from four metres behind your own back.
-      this.viewmodel.setVisible(false);
     } else {
       // Hand the eye back to the body it was following, or the view jumps by
       // the length of the boom.
@@ -446,7 +411,6 @@ export class ForestScene {
       );
       this.lastEye.copy(this.camera.position);
       this.runner.setVisible(this.bench);
-      this.viewmodel.setVisible(true);
       this.applyLook();
     }
     return mode;
@@ -492,16 +456,12 @@ export class ForestScene {
       this.benchCamera();
       this.settleEye(dt);
       this.benchRunner(dt);
-      this.viewmodel.update(dt, this.runner.speed, false, this.yaw, this.pitch);
     } else if (this.cameraMode === 'third') {
       this.thirdPersonStep(dt);
     } else {
       this.freeMove(dt);
       this.settleEye(dt);
       this.mirrorRunner(dt);
-      // The hands run on the same speed the body does, and on the same M key
-      // the third-person map pose uses. One athlete, two views of it.
-      this.viewmodel.update(dt, this.runner.speed, this.keys.has('KeyM'), this.yaw, this.pitch);
     }
 
     this.bearing?.update(this.aim, dt);
@@ -575,7 +535,6 @@ export class ForestScene {
     this.applyLook();
     this.settleEye(dt);
     this.mirrorRunner(dt);
-    this.viewmodel.update(dt, this.runner.speed, false, this.yaw, this.pitch);
   }
 
   /**
@@ -734,24 +693,6 @@ export class ForestScene {
     this.renderer.setSize(width, height);
   }
 
-  /**
-   * The held map's drawing surface — the seam for the race loop.
-   *
-   * `src/map/renderer.ts`'s `renderMap(ctx, w, h, options)` draws straight into
-   * this canvas; call `markDirty()` afterwards and the texture on the map in the
-   * athlete's hand updates. Nothing in `src/world/` knows what a course or a
-   * believed position is, and it should not — this is the whole interface.
-   *
-   * Returns null before `load()` has run.
-   */
-  get mapSurface(): { canvas: HTMLCanvasElement; markDirty: () => void } | null {
-    if (!this.viewmodel) return null;
-    return {
-      canvas: this.viewmodel.mapCanvas,
-      markDirty: () => this.viewmodel.markMapDirty(),
-    };
-  }
-
   /** Live counters for the debug overlay and the perf report. */
   debugStats(): Record<string, string | number> {
     const s = this.renderer.perf.sample();
@@ -759,10 +700,6 @@ export class ForestScene {
       tier: this.tier,
       weather: this.weather,
       camera: `${this.cameraMode} (V)`,
-      hands: this.viewmodel
-        ? `${this.viewmodel.pose}${this.viewmodel.isProxy ? ' PROXY' : ''}` +
-          `${this.viewmodel.mapBound ? ' map:live' : ' map:UNBOUND'}`
-        : '—',
       gait: this.runner ? `${this.runner.gait} ${this.runner.speed.toFixed(1)} m/s` : '—',
       boom: this.cameraMode === 'third'
         ? `${this.arm.length.toFixed(2)} m${this.arm.collided ? ' *' : ''}`
@@ -813,7 +750,6 @@ export class ForestScene {
     this.markers?.dispose();
     this.markers = null;
     this.controlAssets = null;
-    this.viewmodel?.dispose();
     this.runner?.dispose();
     this.terrain?.dispose();
     this.vegetation?.dispose();

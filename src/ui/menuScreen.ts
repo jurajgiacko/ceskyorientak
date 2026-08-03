@@ -124,8 +124,8 @@ export function makeMenuScreen(): Screen {
         </div>
 
         <!--
-          These are switches, not buttons, and they used to be indistinguishable
-          from buttons: the only thing separating on from off was a lime outline
+          This is a switch, not a button, and it used to be indistinguishable
+          from one: the only thing separating on from off was a lime outline
           against a grey one. Clicking "Beginner hints" once, to read them, turned
           them off — and the thing it turns off is a pale band on the ground that
           a first-time player has never seen and so cannot miss. The state is now
@@ -138,14 +138,6 @@ export function makeMenuScreen(): Screen {
             ${t('settings.beginnerAid')}
             <span class="menu__toggleState" data-role="state">${
               getSettings().beginnerAid ? t('settings.on') : t('settings.off')
-            }</span>
-          </button>
-          <button class="menu__toggle${getSettings().showHands ? ' is-on' : ''}"
-                  data-toggle="showHands"
-                  aria-pressed="${getSettings().showHands ? 'true' : 'false'}">
-            ${t('settings.showHands')}
-            <span class="menu__toggleState" data-role="state">${
-              getSettings().showHands ? t('settings.on') : t('settings.off')
             }</span>
           </button>
           <div class="menu__locales" role="group" aria-label="${t('menu.language')}">
@@ -189,16 +181,6 @@ export function makeMenuScreen(): Screen {
         if (target.dataset.toggle === 'beginnerAid') {
           const next = !getSettings().beginnerAid;
           setSetting('beginnerAid', next);
-          markToggle(target, next);
-          return;
-        }
-
-        // The hands are off by default now that the map is a 2D overlay; this
-        // is the way back to them. See src/core/settings.ts.
-        if (target.dataset.toggle === 'showHands') {
-          const next = !getSettings().showHands;
-          setSetting('showHands', next);
-          setSetting('thirdPerson', next);
           markToggle(target, next);
           return;
         }
