@@ -74,8 +74,24 @@ export interface RaceSceneHost {
   setMarkerState?(state: ControlMarkerState): void;
   /** Hook called at the top of the scene's own frame, so ordering is defined. */
   beforeFrame: ((dtS: number) => void) | null;
-  /** Extra out-of-bounds geometry the raster does not carry (Krumlov's walls). */
+  /**
+   * What is out of bounds, from the venue's own vector model.
+   *
+   * Not "extra geometry the raster does not carry" any more, which is what it
+   * was and what cost 12.8 % of Krumlov's alley centreline: where a scene
+   * offers this, it is the *whole* answer inside `authoritativeR` and the class
+   * raster stops deciding anything about bounds. See `FieldTerrain.blockedAt`.
+   */
   blockedAt?(x: number, z: number): boolean;
+  /**
+   * Half-extent of the square `blockedAt` is authoritative over, metres.
+   *
+   * `TownModel.playableR` in the sprint. A scene with a model but no radius
+   * would be claiming its model covers the whole heightfield, which Krumlov's
+   * does not — it stops at the playable square and the terrain runs 200 m
+   * further.
+   */
+  readonly authoritativeR?: number;
   resize(width: number, height: number): void;
 }
 
@@ -214,6 +230,7 @@ export class RaceController {
     const urban = setup.anchor.mapScale <= 5000;
     this.terrain = new FieldTerrain(host.field, {
       ...(host.blockedAt ? { blocked: (x: number, z: number) => host.blockedAt!(x, z) } : {}),
+      ...(host.authoritativeR !== undefined ? { authoritativeR: host.authoritativeR } : {}),
       urban,
       ...(urban && setup.townscape
         ? { features: buildUrbanFeatures(setup.townscape) }

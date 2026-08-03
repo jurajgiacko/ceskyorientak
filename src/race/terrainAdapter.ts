@@ -122,6 +122,16 @@ export interface FieldTerrainOptions {
    * with no townscape still works; Krumlov always passes the index.
    */
   features?: UrbanFeatureIndex;
+  /**
+   * Half-extent of the square the vector model is authoritative over, metres.
+   *
+   * `TownModel.playableR`. Inside it the model is the only thing that decides
+   * what is out of bounds; outside it the class raster still is, because the
+   * heightfield runs 200 m past the model and nothing else out there knows
+   * where the river is. Absent for a venue with no model — the forest — where
+   * the raster is the answer everywhere and always was.
+   */
+  authoritativeR?: number;
 }
 
 export class FieldTerrain implements CourseTerrain, RaceTerrain {
@@ -129,6 +139,8 @@ export class FieldTerrain implements CourseTerrain, RaceTerrain {
   private readonly blocked: Blocker | null;
   private readonly urban: boolean;
   private readonly features: UrbanFeatureIndex | null;
+  /** See `FieldTerrainOptions.authoritativeR`. */
+  private readonly authoritativeR: number | null;
 
   /**
    * Direction of travel, radians.
@@ -165,6 +177,7 @@ export class FieldTerrain implements CourseTerrain, RaceTerrain {
     this.blocked = opts.blocked ?? null;
     this.urban = opts.urban ?? false;
     this.features = opts.features ?? null;
+    this.authoritativeR = opts.authoritativeR ?? null;
 
     const m = field.hMeta;
     this.rStride = Math.max(1, Math.round(RULES_CELL_M / m.resM));
@@ -263,9 +276,86 @@ export class FieldTerrain implements CourseTerrain, RaceTerrain {
     return this.rulesHeightAt(x, z);
   }
 
+  // --- what is out of bounds ------------------------------------------------
+
+  /**
+   * Is this point out of bounds? The one predicate the athlete meets.
+   *
+   * **Where a vector model exists, it is the whole answer.** That is the phase
+   * 2 correction and it is not a refinement: this used to be
+   * `runnabilityAt(x, z) === Impassable`, so Krumlov's centimetre-accurate
+   * colliders were being read through a 1 m class raster whose `Impassable`
+   * cells are 1 m squares of world — and whose class is written by widening any
+   * feature narrower than the lattice out to half a cell diagonal, so that a
+   * 0.10 m railing appears on the map as a line rather than as dots (D-038).
+   * Fair on the map, and a wall up to 2.4 m thick in the physics.
+   *
+   * Measured on the town's own 62 741 paved centreline points
+   * (`tools/terrain/quantisation.mjs`), casting perpendicular to each, which is
+   * what alley width means:
+   *
+   * | | vector | through the raster |
+   * |---|---|---|
+   * | median ≤3 m alley | 1.80 m | **1.52 m** |
+   * | alley centreline the athlete cannot stand on | 0 % | **12.8 %** |
+   *
+   * D-027 is this fault at 4 m and 49 % of the centre. It survived at 1 m and
+   * 12.8 % because nobody measured the alleys, only the area — which is
+   * precisely what phase 0 warned the area measurement could never catch.
+   *
+   * The raster keeps the ground the model does not cover. `TownModel` is built
+   * over the playable square and the heightfield runs 200 m further, so beyond
+   * `authoritativeR` the class raster is still the only thing that knows the
+   * Vltava is there. Inside it, the model is alone and exact.
+   */
+  blockedAt(x: number, z: number): boolean {
+    if (!this.blocked) return this.field.runnabilityAt(x, z) === Runnability.Impassable;
+    if (this.blocked(x, z)) return true;
+    if (this.authoritativeR !== null && Math.abs(x) <= this.authoritativeR && Math.abs(z) <= this.authoritativeR) {
+      return false;
+    }
+    return this.field.runnabilityAt(x, z) === Runnability.Impassable;
+  }
+
+  /**
+   * The class the athlete's speed is read off.
+   *
+   * Two things it must do, and the second only became necessary once
+   * `blockedAt` stopped consulting the raster. `Impassable` carries a speed of
+   * zero (`SPEED_BY_RUNNABILITY`), so a cell that the model calls open and the
+   * raster calls impassable is now ground the athlete can walk into and never
+   * leave — frozen at zero speed, which is the "I'm stuck" report arriving by
+   * its third road. That is the widening halo: 0.24 m either side of a wall,
+   * 0.41 m either side of a railing, about 1.5 ha of Krumlov.
+   *
+   * So the halo takes the nearest real class instead, by a ring search on the
+   * raster's own lattice. It is the same rule `deriveRaster` applies offline to
+   * the cells it frees — nearest non-impassable class — and it is deterministic
+   * and tier-independent, because the raster is one file for every tier.
+   */
   runnabilityAt(x: number, z: number): Runnability {
-    if (this.blocked?.(x, z)) return Runnability.Impassable;
-    return this.field.runnabilityAt(x, z);
+    if (this.blockedAt(x, z)) return Runnability.Impassable;
+    const cls = this.field.runnabilityAt(x, z);
+    if (cls !== Runnability.Impassable) return cls;
+    return this.nearestClass(x, z);
+  }
+
+  /** Nearest non-impassable class on the raster lattice. See `runnabilityAt`. */
+  private nearestClass(x: number, z: number): Runnability {
+    const res = this.field.rMeta.resM;
+    for (let r = 1; r <= 3; r++) {
+      for (let dj = -r; dj <= r; dj++) {
+        for (let di = -r; di <= r; di++) {
+          if (Math.max(Math.abs(di), Math.abs(dj)) !== r) continue;
+          const c = this.field.runnabilityAt(x + di * res, z + dj * res);
+          if (c !== Runnability.Impassable) return c;
+        }
+      }
+    }
+    // Three cells out and still nothing: the halo is never this deep, so this
+    // is a courtyard the model opened inside a block of ZABAGED building.
+    // OpenRough is the honest guess and it is not fast.
+    return Runnability.OpenRough;
   }
 
   /**

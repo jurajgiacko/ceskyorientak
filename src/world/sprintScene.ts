@@ -429,6 +429,19 @@ export class SprintScene {
   }
 
   /**
+   * How far out `blockedAt` is the whole answer, metres.
+   *
+   * The model is built over the playable square; the heightfield runs 200 m
+   * further so the town has a horizon to stand in. Inside this radius the
+   * vector model is the only thing that decides what is out of bounds — phase
+   * 2, and the reason is in `FieldTerrain.blockedAt`. Outside it, the class
+   * raster still knows where the river is and the model does not.
+   */
+  get authoritativeR(): number {
+    return this.model.playableR;
+  }
+
+  /**
    * The height of the surface the athlete stands on at (x, z), metres ASL.
    *
    * Not `field.heightAt`, and the difference is a bridge. The heightfield is a

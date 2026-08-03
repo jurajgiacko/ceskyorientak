@@ -54,6 +54,27 @@ export interface RaceTerrain {
   ambiguityAt(x: number, z: number): number;
   /** How hard the ground is to keep map contact with, 0..1. */
   complexityAt(x: number, z: number): number;
+  /**
+   * Is this point out of bounds? The **only** thing that stops the athlete.
+   *
+   * Optional, and it falls back to `sample().runnability === Impassable`,
+   * which is what this used to be everywhere and is still exactly right in a
+   * forest: there is no vector model of Lachovice, its lakes and cliffs live in
+   * the class raster, and the raster is what a runner meets there.
+   *
+   * In a town it is not right, and phase 2 measured the bill. `FieldTerrain`
+   * carries a vector model of Krumlov accurate to the centimetre, and routing
+   * the athlete's collision through a 1 m class raster threw that away at the
+   * last step: the raster's `Impassable` cells are 1 m squares of world, and
+   * the class is written by widening any feature narrower than the lattice out
+   * to half a cell diagonal so a 0.10 m railing appears on the map as a line
+   * rather than as dots. Measured over the town's own 62 741 paved centreline
+   * points (`tools/terrain/quantisation.mjs`): the median ≤3 m alley ran
+   * 1.80 m against the vector model and **1.52 m** against the raster, and
+   * **12.8 % of alley centreline was ground the athlete could not stand on at
+   * all**. D-027 is the same fault at 4 m and 49 %.
+   */
+  blockedAt?(x: number, z: number): boolean;
 }
 
 export interface RaceOptions {
@@ -257,7 +278,9 @@ const BASE_MS = 4.6;
     const dx = Math.sin(a.heading) * moved;
     const dz = -Math.cos(a.heading) * moved;
     const blocked = (x: number, z: number) =>
-      this.terrain.sample(x, z).runnability === Runnability.Impassable;
+      this.terrain.blockedAt
+        ? this.terrain.blockedAt(x, z)
+        : this.terrain.sample(x, z).runnability === Runnability.Impassable;
 
     /**
      * Is the *path* from here to there blocked, not merely its far end?
