@@ -1450,13 +1450,15 @@ the first.
 
 The per-leg limit is asserted **absolutely on the course that ships**, in the
 stability phase, which is the only phase that loads what `COURSE_SEED`
-resolves to. None of the four sampled `SEEDS` is it, and both of the client's
-faults were in the shipped course and in none of the samples.
+resolves to, and by the 1 m `makeCourseAudit` below rather than by the 2 m
+router. None of the four sampled `SEEDS` is it, and both of the client's faults
+were in the shipped course and in none of the samples.
 
 Across the sampled seeds the gate asserts a *population* figure instead — the
 median leg detour, capped at 1.6×, which is the top of the measured real range
 for a sprint course (§8.6: real running "can be 30–60 % longer than the stated
-length"). Measured: 1.13×. It is a regression tripwire, not a quality bar.
+length"). Measured on the sampled seeds: 1.18×. It is a regression tripwire,
+not a quality bar.
 
 That distinction is D-032's argument applied to this measure. The sampled seeds
 are menu-shaped samples of the generator's output space and nobody plays them.
@@ -1495,102 +1497,82 @@ leg as *unroutable*, which disqualifies the candidate. The street-fraction term
 stays urban-only: a forest course scored on time spent on tracks would be a
 course set along the tracks, which is the opposite of orienteering.
 
-### Can the generator avoid it, rather than only being filtered for it?
 
-Partly, and the honest answer has two halves.
+### The gate that would have caught the fix
 
-`src/sim/courseGen.ts` scores legs with `routeCost`, which samples the straight
-line. **A straight line across a river cannot see the detour at all** — it
-reports Impassable, `legInterest` returns 0, and 0 is a *deduction* of 1.3
-competing against a feature score of up to 1.0 and 0.15 of RNG jitter. It is
-also exactly what `legInterest` returns for a leg into a courtyard. Nothing
-anywhere told the generator how far round the fault was, and it cannot find out
-by sampling a line: the answer is eight hundred metres away and off the line
-entirely. A generator that cannot perceive the fault keeps producing it and
-burns seeds — measured before any of this, 12 of 106 sampled legs were over the
-limit, and three of the four sampled seeds failed.
+The first attempt at this decision was merged, measured, and reverted. It
+shipped a Krumlov course with **six unreachable legs and a sealed control**,
+where the ugly-but-runnable course it replaced had all fifteen controls
+reachable — strictly worse. Nothing in `check:passable` failed. The fault was
+found by hand, with a 1 m probe, after the merge.
 
-**The cheap half: water is not a building.** The two mean opposite things to a
-setter. A building in the way is the *best* leg a sprint can have — you pick a
-side, at speed, off the map — because Krumlov's blocks are twenty to thirty
-metres across and either way costs seconds; `legInterest` rightly rewards it.
-A river in the way is not a route choice at all: this town has one channel with
-bridges hundreds of metres apart, so the leg has exactly one route and it is a
-lap of the town. Rejecting every blocked leg would forbid sprint orienteering;
-rejecting the wet ones forbids only the fault.
+That is the more important failure of the two, and it has the same shape as the
+one this decision started with: **a measurement that has to be made by hand
+after a merge is not a gate.** `makeLegRouter` reported every one of those six
+legs routable, because it walks a **2 m** lattice and Krumlov's alleys are
+2–3 m wide — the exact aliasing `FieldTerrain.buildReachability` refuses to
+accept, and which its own comment warns about.
 
-So `blockedAt`'s water clause is exposed on its own — `SprintScene.inWaterAt` →
-`RaceSceneHost` → `FieldTerrain.inWaterAt` → `CourseTerrain.inWaterAt` — and
-`pickNextControl` prices a leg whose straight line crosses it, at 2 m samples
-along one line, which is nothing. The run-in is covered too: the finish is
-sited before the loop begins, so the leg from the last control to it is the one
-leg no candidate is ever scored on.
+So `makeCourseAudit` is a second, stricter measurement, and deliberately not
+`makeLegRouter` with different constants:
 
-That alone took the sampled p90 leg detour from **4.81× to 1.58×** and legs
-over the limit from 12 in 106 to 4 in 120.
+* **1 m, not 2 m** — the resolution the runtime's own reachability fill uses.
+* **Shortest distance, not fastest time.** `makeLegRouter` minimises time at the
+  athlete's class speeds, which is the right question for *"does it run through
+  the alleys"* and the wrong one for *"how far is it"*: the fastest way round
+  can be longer than the shortest, and route efficiency (§8.6) is a distance
+  ratio.
+* **Eight-connected with the corner rule**, so it can neither slip diagonally
+  between two blocked cells nor report the four-connectivity "grid artifacts"
+  this venue's athlete walks straight through.
+* **`SEALED` is distinct from `UNREACHABLE` is distinct from a long leg.** A
+  control with no open ground within 3 m is sited inside a wall; a control the
+  start cannot reach is a course that cannot be completed; a 12× leg is a course
+  that should not have been set. Three different bugs, three different messages.
 
-**The expensive half: what remained was not water.** A new `probeBlockers` in
-the gate names what stops the athlete at each metre of a leg rather than
-returning a boolean, and the survivors were a *building* (a straight line 74 %
-inside one, 999 m round) and four metres of *garden wall* (a line 93 % open,
-652 m round). Sampling the straight line can see that something is in the way.
-Only a search can see how far round it is.
+It runs on the shipped course with no tolerance, prints the full per-leg table
+every run, and `tools/sim/pick-course.mjs` calls the identical function over its
+top 25 in score order — recommending the first that passes and printing every
+rejection. A tool that chooses a course the gate then rejects is worse than no
+tool.
 
-`FieldTerrain.routeWithinM` is that search, and it is affordable only because
-`buildReachability` already builds the 1 m mask and the edge tests it needs —
-the edge rule is what stops it walking through Krumlov's railings. It is
-four-connected, so its distance is Manhattan and overstates a real route by up
-to √2; its cap is 4.0× rather than the gate's 3.0× so that nothing it rejects
-can be inside the gate's limit. `pickNextControl` asks it about a **shortlist
-of five** rather than all ninety candidates, in the same shape as
-`pickOpenSite`'s `verify` band, and it consumes no RNG — the stream in that
-function is what makes one seed one course on every tier
-(`FieldTerrain.rulesHeightAt`), and a probe drawing from it would diverge two
-phones on the first blocked leg.
+### Can the generator avoid this rather than only being filtered for it?
 
-**What is deliberately left to the offline filter.** Legs over 125 m of
-straight line are not probed at load time. The probe explores everything within
-`4 × straight` of its origin, so its cost grows with the square of the leg: at
-125 m that is a 500 m radius on the 1 m mask, a couple of milliseconds; at the
-sprint's 190 m maximum it is the whole venue, tens of milliseconds, and up to
-five of those per leg on a phone. That is not a budget excuse alone — it is
-also where the fault lives. **Every instance measured in this venue had a
-straight line between 50 and 92 m**: 58 m in the course the client played, 50 m
-in its second fault, 70, 72 and 92 m in the sampled seeds. A 300 m leg with a
-3× detour is a bad leg; a 60 m leg with a 3× detour is what makes a player
-think the game is broken.
+**No — not safely, and that is the finding rather than a budget excuse.** Three
+variants were written and measured against the real build:
 
-### Both of these are preferences, and refusing was tried twice
+1. **Refuse a leg whose straight line crosses uncrossable water.** Starves the
+   candidate pool: on a leg where the river takes most of the ninety samples
+   none survives, `generateCourse` breaks out of its loop, and the course does
+   not lose a leg — it *ends*. Krumlov came out at 12 controls against the 14 a
+   sprint is specified at.
+2. **Refuse on a bounded route probe** over the 1 m mask
+   (`FieldTerrain.routeWithinM`, four-connected, capped at 4× the straight
+   line). Same failure at the other end, plus two seeds in three shopping for
+   another. **Nought candidates in twenty survived the picker**, against about a
+   third before.
+3. **Prefer dry ground rather than refusing it** — a penalty larger than the
+   whole rest of the candidate score. This kept the control counts up, and it
+   is the one that was merged. Measured on the shipped course afterwards: the
+   14× leg was untouched, and six legs had become unreachable with control 13
+   sealed. It moved *where controls are sited* without changing *whether the
+   result is checked*, so it found riverside ground the athlete cannot reach.
 
-The obvious shape for both tests is a refusal: the leg is a fault, so reject the
-candidate. It was written that way twice and measured, and **both times it made
-the courses worse**, which is worth recording rather than quietly reverting.
+The cause of all three is structural. `pickNextControl` is greedy and cannot
+revisit a control it has already placed, so a leg where every candidate is
+across the obstacle usually means the *previous* control was the mistake, and
+anything done at this leg punishes the wrong one. And `routeCost` samples the
+straight line, which cannot see a detour at all: it reports Impassable,
+`legInterest` returns 0, and 0 is a deduction of 1.3 competing against a feature
+score of 1.0 and 0.15 of jitter — the same 0 it returns for a leg into a
+courtyard. Real backtracking would be the fix and it is not a small change.
 
-* A `continue` on the water test starves the candidate pool. On a leg where the
-  river takes most of the ninety samples none survives, and `generateCourse`
-  breaks out of its loop — which does not shorten the course by one leg, it
-  *ends* it. Krumlov came out at 12 controls instead of 15 to 18, under the 14 a
-  sprint is specified at.
-* Returning null when all five shortlisted candidates fail the detour probe does
-  the same thing at the other end, and additionally makes two seeds in three
-  shop for another. **Nought candidates in twenty survived `pick-course.mjs`**;
-  before the change it was about a third.
+**So `src/` is unchanged by this decision — back at 98472c1 exactly.** The
+argument for that is not only the measurements above:
 
-The cause is that this generator is greedy and cannot revisit a control it has
-already placed. A leg where every candidate is across the obstacle usually means
-the *previous* control was the mistake, so refusing here punishes the wrong leg.
-Real backtracking would be the fix and it is not a small change.
+> A generator change moves every course at every seed, including the population
+> the gates sample. A filter that selects one good course out of several hundred
+> is a smaller claim, and a checkable one.
 
-So both are preferences that degrade. `WET_PENALTY` is larger than the whole
-rest of the candidate score can reach, so a wet candidate never outscores a dry
-one and is evicted from the shortlist the moment five dry ones exist; it is
-chosen only when the alternative is no leg at all. The probe likewise moves the
-choice down the shortlist and, where it cannot help, hands the whole course to
-the offline filter to refuse. Six consecutive menu-shaped seeds after the
-change: five of six settle first try, 14 to 19 controls, against 12 to 13 and
-two-in-three shopping.
-
-That division of labour — a cheap preference at load time, the exact filter
-offline — is the answer to "can the generator avoid this rather than only be
-filtered for it". Partly, and it is worth what it costs; the rest belongs to the
-picker.
+Which is D-032's argument again. The generator produces candidates; the setter
+picks. When the picking is the thing that was broken, fix the picking.
