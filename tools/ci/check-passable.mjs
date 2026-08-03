@@ -46,6 +46,7 @@ import { readFileSync, existsSync } from 'node:fs';
 import { resolve, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { serve, withChrome, openTab } from './chrome.mjs';
+import { readModel } from '../terrain/townmodel.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, '../..');
@@ -125,8 +126,10 @@ const LIMITS = {
    * exit, to tell the two apart.
    *
    * Entry is possible because `Race.step` tests only the **destination** of a
-   * step, never the swept path: a step of length `MAX_STEP_M` crosses any
-   * barrier band thinner than that. So a pocket is enterable when some point
+   * step, never the swept path: a step of length `MAX_STEP_M` crossed any
+   * barrier band thinner than that — until `SWEEP_M` (see `floodFill`). The
+   * figure is kept because it still bounds how far a single frame moves the
+   * athlete. So a pocket is enterable when some point
    * inside it is within one step of open ground in the arena's component. Once
    * in, the athlete gets back out the same way only if they can build the same
    * step — and they may not be able to, because step length is speed × dt and
@@ -444,6 +447,16 @@ function loadVenue(venue, bin) {
   const town = existsSync(townPath)
     ? JSON.parse(readFileSync(townPath, 'utf8'))
     : { buildings: [], walls: [], water: [], paved: [] };
+  // The vector model, where the venue has one. Everything below that used to
+  // reconstruct the runtime's colliders from `townscape.json` now reads the
+  // artefact the game itself loads — see D-038. The forest has no model and
+  // takes the raster-only path, which is what it has always had.
+  const modelPath = join(dir, 'townmodel.bin');
+  if (existsSync(modelPath)) {
+    const { header, model } = readModel(dir);
+    town.model = model;
+    town.modelHeader = header;
+  }
   return { rMeta, r, town };
 }
 
@@ -474,6 +487,34 @@ class Colliders {
     this.segs = new Map();
     this.ringData = [];
     this.segData = [];
+
+    // The vector model, where there is one: its footprints and the barriers it
+    // derives solidity for, from the same height and thickness the geometry is
+    // drawn to. Where there is not — the forest — nothing is added and the
+    // caller's collision is the raster alone, as it has always been.
+    const model = town.model;
+    if (model) {
+      const h = town.modelHeader;
+      for (const ring of model.buildings) {
+        if (ring.length >= 6) this.addRing(ring);
+      }
+      for (const b of model.barriers) {
+        // `blocks` is `height > crossableMaxH`, derived here exactly as
+        // `TownModel` derives it. There is no flag in the file to read instead.
+        if (!(b.height > h.crossableMaxH)) continue;
+        const half = h.thicknessByKind[b.kind] * 0.5 + h.skinM;
+        for (let i = 0; i + 3 < b.pts.length; i += 2) {
+          const ax = b.pts[i];
+          const az = b.pts[i + 1];
+          const bx = b.pts[i + 2];
+          const bz = b.pts[i + 3];
+          const len = Math.hypot(bx - ax, bz - az);
+          if (len < 0.15 || len > 120) continue;
+          this.addSeg(ax, az, bx, bz, half);
+        }
+      }
+      return;
+    }
 
     for (const b of town.buildings ?? []) {
       if (b.p.length < 6) continue;
@@ -578,6 +619,23 @@ const DECK_HALF_MIN_M = 1.4;
 class WaterBounds {
   constructor(town) {
     this.water = new Colliders({ buildings: [], walls: [] });
+    this.decks = new Colliders({ buildings: [], walls: [] });
+    const model = town.model;
+    if (model) {
+      for (const a of model.waterAreas) this.water.addRing(a.pts);
+      for (const c of model.waterCourses) {
+        for (let i = 0; i + 3 < c.pts.length; i += 2) {
+          this.water.addSeg(c.pts[i], c.pts[i + 1], c.pts[i + 2], c.pts[i + 3], c.width * 0.5);
+        }
+      }
+      for (const d of model.decks) {
+        const half = Math.max(town.modelHeader.deckHalfMinM, d.width * 0.5);
+        for (let i = 0; i + 3 < d.pts.length; i += 2) {
+          this.decks.addSeg(d.pts[i], d.pts[i + 1], d.pts[i + 2], d.pts[i + 3], half);
+        }
+      }
+      return;
+    }
     for (const w of town.water ?? []) {
       if (w.p && w.p.length >= 6) this.water.addRing(w.p);
       else if (w.l && w.w) {
@@ -586,7 +644,6 @@ class WaterBounds {
         }
       }
     }
-    this.decks = new Colliders({ buildings: [], walls: [] });
     for (const way of town.paved ?? []) {
       if (!way.b) continue;
       const half = Math.max(DECK_HALF_MIN_M, way.w * 0.5);
@@ -626,11 +683,11 @@ class WaterBounds {
  * crossing, and neither an uncrossable barrier nor the class under it may close
  * it. Water off the deck still does.
  */
-function blockedAtOf(col, wb, rasterAt) {
+function blockedAtOf(col, wb, rasterAt, useRaster = true) {
   return (x, z) =>
     col.inBuilding(x, z) ||
     (col.inBarrier(x, z) && !wb.onDeck(x, z)) ||
-    rasterAt(x, z) === IMPASSABLE ||
+    (useRaster && rasterAt(x, z) === IMPASSABLE) ||
     wb.blocks(x, z);
 }
 
@@ -1086,8 +1143,26 @@ function floodFill(venue, bin, step) {
     const dt = 0.1;
     const stepIn = BASE_MS * (SPEED_BY_CLASS[outsideCls] ?? 0) * DOWNHILL_MAX * dt;
     const stepOut = BASE_MS * (SPEED_BY_CLASS[insideCls] ?? 0) * DOWNHILL_MAX * dt;
-    const enterable = Number.isFinite(minJump) && minJump <= Math.max(stepIn, MAX_STEP_M);
-    const escapable = Number.isFinite(minJump) && minJump <= stepOut;
+
+    /**
+     * A pocket is enterable when there is a clear way in — and only then.
+     *
+     * This used to be "when the athlete's step is longer than the thinnest
+     * barrier", because `Race.step` tested the destination of a step and not
+     * its path, so anything thinner than 0.55 m could be jumped. `SWEEP_M` in
+     * src/sim/race.ts ended that: a step is sampled every 0.20 m, which is
+     * under the narrowest collider in either venue.
+     *
+     * The consequence is worth stating, because it deletes a whole class of
+     * fault rather than fixing an instance of it: **entering and leaving are
+     * now the same test**. A trap was made of the asymmetry — you arrived on
+     * Road with a 0.56 m step and left through Green2 with 0.18 m — and with no
+     * jump available in either direction there is no asymmetry left to trap
+     * anybody with. `minJump` is still measured and printed, because how thin
+     * the thinnest barrier is remains worth knowing.
+     */
+    const enterable = reallyConnected;
+    const escapable = reallyConnected;
 
     traps.push({
       id, m2, minJump, jumpAt, enterable, escapable, reallyConnected,
@@ -1197,7 +1272,19 @@ export function makeLegRouter(venue, bin, opts = {}) {
     if (i < 0 || j < 0 || i >= rMeta.width || j >= rMeta.height) return IMPASSABLE;
     return r[j * rMeta.width + i];
   };
-  const blocked = blockedAtOf(col, wb, rasterAt);
+  /**
+   * The router asks the model and not the raster, where there is a model.
+   *
+   * The raster's impassable class *is* the model — see D-038 — but drawn at
+   * 1 m: a cell is impassable if the model blocks anywhere inside it, because
+   * a 0.60 m railing cannot be a continuous line on a 1 m lattice any other
+   * way. That is right for the raster and wrong for a router walking a 2 m
+   * lattice: it turns a 2.5 m alley into a 0.9 m one, which the athlete runs
+   * through and this router cannot fit a node in. Measured: five legs of one
+   * sampled seed came back "no route between its ends" through alleys that are
+   * open. The model is the finer and the truer answer, so the router takes it.
+   */
+  const blocked = blockedAtOf(col, wb, rasterAt, !town.model);
 
   const step = 2;
   // The lattice has to contain the whole venue, and the venues are not the same
@@ -1626,7 +1713,10 @@ export function makeCourseAudit(venue, bin, opts = {}) {
     if (i < 0 || j < 0 || i >= rMeta.width || j >= rMeta.height) return IMPASSABLE;
     return r[j * rMeta.width + i];
   };
-  const blocked = blockedAtOf(col, wb, rasterAt);
+  // The 1 m audit walks the model for the same reason the 2 m router does: the
+  // raster's impassable class is the model drawn at cell resolution, and a
+  // lattice finer than a cell should ask the finer thing. See `makeLegRouter`.
+  const blocked = blockedAtOf(col, wb, rasterAt, !town.model);
 
   const step = 1;
   const R = opts.radiusM ?? PLAYABLE_R;
