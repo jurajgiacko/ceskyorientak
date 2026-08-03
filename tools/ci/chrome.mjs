@@ -171,10 +171,25 @@ export async function openTab(cdpPort, url) {
     }
   };
 
+  /**
+   * A PNG of what the tab is showing, base64, or null if Chrome refused.
+   *
+   * The gates measure; this is for looking. A course fault like D-037's is
+   * stated in metres but *reported* as "I can see it across the water and I
+   * can't get across", and the frame from the athlete's own eye is the only
+   * artefact that answers the sentence the client actually wrote.
+   */
+  const screenshot = async () => {
+    const r = await send('Page.captureScreenshot', { format: 'png' });
+    return r.result?.result?.data ?? r.result?.data ?? null;
+  };
+
   await send('Runtime.enable');
+  await send('Page.enable');
   return {
     evaluate,
     waitFor,
+    screenshot,
     consoleErrors,
     close: async () => {
       sock.close();

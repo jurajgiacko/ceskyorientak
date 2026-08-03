@@ -1805,9 +1805,7 @@ async function runtimePhase(venue, port) {
         // per-leg limit is reported rather than asserted, and the reason is in
         // `LIMITS.maxMedianLegDetour`. The assertion lives on the course that
         // ships, in `stabilityPhase`.
-        for (const f of detourFaults(routed, LIMITS)) {
-          console.log(`     · ${f}`);
-        }
+        const detourNotes = detourFaults(routed, LIMITS);
 
         courseByTierSeed.set(`${tier}|${seed}`, {
           controls: res.controls,
@@ -1828,6 +1826,8 @@ async function runtimePhase(venue, port) {
             (res.pocketM2 < 0 ? 'start opens onto the venue' : `start pocket ${res.pocketM2} m²`),
         );
         for (const f of res.faults) console.log(`     ✗ ${f}`);
+        // Noted, not failed: this is a sampled seed, not the one that ships.
+        for (const f of detourNotes) console.log(`     · ${f}`);
         for (const e of res.renderErrors) console.log(`     ✗ render: ${e}`);
         if (!ok && tab.consoleErrors.length) console.log(`     console: ${tab.consoleErrors[0]}`);
         await tab.close();
