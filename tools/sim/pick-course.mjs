@@ -46,7 +46,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { resolve, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { serve, withChrome, openTab } from '../ci/chrome.mjs';
-import { makeLegRouter } from '../ci/check-passable.mjs';
+import { makeLegRouter, detourFaults, detourStats } from '../ci/check-passable.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, '../..');
@@ -65,6 +65,15 @@ const SEED_BASE = 29_500_000;
 
 const VENUE_SCENE = { krumlov: 'sprint', martinkov: 'forest' };
 const VENUE_DISCIPLINE = { krumlov: 'sprint', martinkov: 'middle' };
+
+/**
+ * Half-extent of each venue, metres — the radius the leg router's lattice has
+ * to cover. `VENUES` in src/core/venues.ts: Krumlov 1 200 m, Lachovice 2 000 m.
+ * A lattice too small for the venue reports a *clipped* leg as unroutable, and
+ * an unroutable leg disqualifies the candidate, so getting this wrong throws
+ * away good forest courses silently.
+ */
+const VENUE_R = { krumlov: 600, martinkov: 1000 };
 
 /**
  * What the discipline's course should look like.
@@ -174,6 +183,32 @@ function score(res, routed, shape, urban) {
     return { dq: `${res.controls} controls` };
   }
   if (routed && routed.legs.some((l) => !l.routed)) return { dq: 'a leg cannot be run' };
+  // **A hard filter, not a score term.** D-037.
+  //
+  // The course that shipped had control 2 fifty-eight metres from control 1 on
+  // the far bank of the Vltava with no bridge between them: 810 m of running
+  // for a leg the player can see across the water. It won its round of picking
+  // because every term it failed was a *preference* and the seventy points of
+  // street fraction, control count and climb outvoted them. So this is a
+  // disqualification. A course with a 14× leg must be unable to win, not merely
+  // score badly — the same reason a point in the river is a disqualification
+  // rather than a deduction.
+  //
+  // `detourFaults` is imported from tools/ci/check-passable.mjs rather than
+  // reimplemented, so a course this tool can choose is by construction a course
+  // that gate accepts.
+  if (routed) {
+    const bad = detourFaults(routed);
+    if (bad.length) {
+      const worst = routed.legs.reduce((a, l) => (l.detour > a.detour ? l : a), routed.legs[0]);
+      return {
+        dq:
+          `leg ${worst.leg} runs ${worst.detour.toFixed(1)}× its straight line ` +
+          `(${worst.lengthM} m for ${Math.round(worst.straightM)} m)` +
+          (bad.length > 1 ? ` and ${bad.length - 1} more` : ''),
+      };
+    }
+  }
   // A seed the setter had to shop around from is a seed whose own course was
   // rejected; the course that ships should be the one its seed produces.
   if (info.seedsTried > 1) return { dq: `took ${info.seedsTried} seeds to settle` };
@@ -181,9 +216,29 @@ function score(res, routed, shape, urban) {
   let s = 0;
 
   // The sentence's last clause, and the heaviest term.
+  //
+  // Urban only, and it always was: "runs through the alleys" is a statement
+  // about a town, and a forest course scored on the fraction of its running
+  // spent on Road or Path would be a course set along the forest tracks, which
+  // is the opposite of orienteering. The legs are now routed in the forest as
+  // well — see the detour term below — so the guard has to be explicit rather
+  // than implied by the router being null.
   if (routed) {
-    s += routed.fraction * 60;
-    reasons.push(`legs ${(routed.fraction * 100).toFixed(0)}% street`);
+    if (urban) {
+      s += routed.fraction * 60;
+      reasons.push(`legs ${(routed.fraction * 100).toFixed(0)}% street`);
+    }
+
+    // How far the worst leg runs against its straight line.
+    //
+    // Secondary to the filter above and deliberately small. The filter decides
+    // whether the course is *allowed*; this decides between two courses that
+    // both are, and the difference between a worst leg of 1.4× and one of 2.9×
+    // is real — the second is a course the setter would have to defend. Zero at
+    // the limit, so it cannot pull a candidate back over it.
+    const worst = routed.legs.reduce((a, l) => (l.detour > a.detour ? l : a), routed.legs[0]);
+    s += Math.max(0, 8 * (1 - (worst.detour - 1) / 2));
+    reasons.push(`worst detour ${worst.detour.toFixed(1)}×`);
   }
 
   // The ground the controls actually stand on.
@@ -283,11 +338,17 @@ async function main() {
     const m = JSON.parse(readFileSync(manifestPath, 'utf8'));
     bin = m.tiers?.high?.runnability ?? bin;
   }
-  const routable = existsSync(join(ROOT, 'public/data', venue, 'townscape.json'));
-
   // Built once: the lattice it walks costs 360 000 collider queries and does
   // not depend on the candidate.
-  const route = routable && urban ? makeLegRouter(venue, bin) : null;
+  //
+  // Both venues now, not only the town. The street-fraction term is meaningless
+  // in a forest and stays urban-only, but the detour ratio is not: a course
+  // whose legs cross a lake or a crag band is the same fault wherever it is
+  // set, and until this change the forest seed was picked without any leg ever
+  // being routed at all. The forest has no `townscape.json`, and `loadVenue`
+  // reads that as "the raster is the whole collision", which is what
+  // `ForestScene` enforces — it has no `blockedAt`.
+  const route = makeLegRouter(venue, bin, { radiusM: VENUE_R[venue] ?? 600 });
 
   // Randomised so two venues can be picked at once without one silently
   // failing to bind and reporting every candidate as "never mounted".
@@ -348,13 +409,32 @@ async function main() {
     );
   }
 
+  // The whole population's detour distribution, not only the winner's.
+  //
+  // Printed because it is the number that says whether the *generator* is
+  // healthy or whether this tool is merely filtering its output — see D-037.
+  // If a third of all candidates are being disqualified for detour, the answer
+  // is upstream in src/sim/courseGen.ts and not here.
+  const allRouted = rows.filter((r) => r.routed).map((r) => r.routed);
+  const st = detourStats(allRouted);
+  if (st) {
+    console.log(
+      `\n  leg detour across all ${rows.length} candidates (${st.n} legs):` +
+        ` median ${st.median.toFixed(2)}× · p90 ${st.p90.toFixed(2)}×` +
+        ` · p99 ${st.p99.toFixed(2)}× · max ${st.max.toFixed(2)}×` +
+        `\n    ${st.over(2)} leg(s) over 2.0×, ${st.over(3)} over 3.0×`,
+    );
+  }
+
   if (viable.length) {
     const b = viable[0];
     console.log(
       `\n  → ${venue}: ${b.seed}` +
         `\n    ${b.res.controls} controls, ${b.res.lengthM} m, ${b.res.climbM} m climb, ` +
         `start ${b.res.startFinishM.toFixed(0)} m from the finish` +
-        (b.routed ? `, ${(b.routed.fraction * 100).toFixed(0)} % of the running on the street network` : '') +
+        (b.routed && urban
+          ? `, ${(b.routed.fraction * 100).toFixed(0)} % of the running on the street network`
+          : '') +
         `\n    course id ${b.res.id}`,
     );
     if (urban) {
@@ -362,6 +442,21 @@ async function main() {
         `    control distance to paved: median ${median(b.res.info.paved).toFixed(1)} m, ` +
           `p90 ${percentile(b.res.info.paved, 0.9).toFixed(1)} m, ` +
           `worst ${Math.max(...b.res.info.paved).toFixed(1)} m`,
+      );
+    }
+    if (b.routed) {
+      const w = b.routed;
+      console.log(
+        `    it runs ${w.totalM} m for a printed ${b.res.lengthM} m — ` +
+          `whole-course detour D ${w.courseDetour.toFixed(2)} ` +
+          `(a real ${discipline} is ${discipline === 'sprint' ? '1.05' : '1.18'}, ` +
+          `RESEARCH-SPORT §8.6)`,
+      );
+      console.log(
+        `    per leg: ` +
+          w.legs
+            .map((l) => `${l.detour.toFixed(1)}×`)
+            .join(' '),
       );
     }
   }

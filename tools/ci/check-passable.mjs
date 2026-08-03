@@ -365,12 +365,26 @@ function tierRasters(venue) {
   return [...byFile].map(([bin, tiers]) => ({ bin, tiers }));
 }
 
+/**
+ * A venue's rules surface, offline.
+ *
+ * The townscape is **optional**, and that is what lets `makeLegRouter` serve
+ * the forest as well as the town. Krumlov's collision is the raster plus
+ * `Townscape.blocks` plus the water rule; Martínkov has no `SprintScene` and
+ * therefore no `blockedAt` at all, so its collision is the raster alone — which
+ * is exactly what an empty townscape produces here. Everything below reads
+ * `town.walls`, `town.water` and friends through `?? []`, so the two cases run
+ * the same code rather than a fork of it.
+ */
 function loadVenue(venue, bin) {
   const dir = venueDir(venue);
   const meta = bin.replace(/\.bin$/, '.json');
   const rMeta = JSON.parse(readFileSync(join(dir, meta), 'utf8'));
   const r = new Uint8Array(readFileSync(join(dir, bin)));
-  const town = JSON.parse(readFileSync(join(dir, 'townscape.json'), 'utf8'));
+  const townPath = join(dir, 'townscape.json');
+  const town = existsSync(townPath)
+    ? JSON.parse(readFileSync(townPath, 'utf8'))
+    : { buildings: [], walls: [], water: [], paved: [] };
   return { rMeta, r, town };
 }
 
@@ -402,11 +416,11 @@ class Colliders {
     this.ringData = [];
     this.segData = [];
 
-    for (const b of town.buildings) {
+    for (const b of town.buildings ?? []) {
       if (b.p.length < 6) continue;
       this.addRing(b.p);
     }
-    for (const w of town.walls) {
+    for (const w of town.walls ?? []) {
       const thick = WALL_THICK[w.k];
       if (thick === undefined || !w.u) continue;
       const half = thick * 0.5 + 0.25;
@@ -1114,7 +1128,7 @@ function floodFill(venue, bin, step) {
  * route. Cells the continuous collider rejects are excluded outright, so the
  * router cannot cut a corner the athlete could not.
  */
-export function makeLegRouter(venue, bin) {
+export function makeLegRouter(venue, bin, opts = {}) {
   const { rMeta, r, town } = loadVenue(venue, bin);
   const col = new Colliders(town);
   const wb = new WaterBounds(town);
@@ -1127,7 +1141,13 @@ export function makeLegRouter(venue, bin) {
   const blocked = blockedAtOf(col, wb, rasterAt);
 
   const step = 2;
-  const R = PLAYABLE_R;
+  // The lattice has to contain the whole venue, and the venues are not the same
+  // size: Krumlov is 1 200 m across and the Lachovice forest 2 000 m. A lattice
+  // sized for the town silently clips a forest course, and a clipped lattice
+  // does not report a shorter route — it reports an *unroutable* leg, which
+  // reads as a sealed venue. Defaults to the town so nothing that already calls
+  // this changes.
+  const R = opts.radiusM ?? PLAYABLE_R;
   const w = Math.floor((2 * R) / step) + 1;
   const h = w;
   const idx = (i, j) => j * w + i;
