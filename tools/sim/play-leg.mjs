@@ -68,20 +68,21 @@ const RUN = (maxSteps, dtS) => `(async () => {
   }
 
   const walked = new Array(straight.length).fill(0);
-  let view = r.autopilot(0, ${dtS});
+  const CHUNK = 25;
+  let view = r.autopilot(1, ${dtS});
   let leg = view.nextControl;
   let prev = { x: view.truePosition.x, z: view.truePosition.z };
   let steps = 0;
   let stalled = 0;
   while (steps < ${maxSteps} && view.phase !== 'finished') {
-    view = r.autopilot(1, ${dtS});
-    steps++;
+    view = r.autopilot(CHUNK, ${dtS});
+    steps += CHUNK;
     const p = view.truePosition;
     const d = Math.hypot(p.x - prev.x, p.z - prev.z);
     prev = { x: p.x, z: p.z };
     if (leg < walked.length) walked[leg] += d;
     if (view.nextControl !== leg) { leg = view.nextControl; stalled = 0; }
-    else if (d < 0.001) { if (++stalled > 2000) break; }
+    else if (d < 0.01) { if (++stalled > 200) break; }
     else stalled = 0;
   }
   return JSON.stringify({
@@ -97,6 +98,9 @@ const RUN = (maxSteps, dtS) => `(async () => {
 /** Stand at a control, face the next one, and let the scene settle. */
 const LOOK = (n) => `(async () => {
   const r = window.__race, w = window.__world, c = r.course;
+  // Begin, so the pre-race panel is down and the frame is the one a player
+  // sees. Without this the shot is the START OF NAVIGATION card.
+  r.autopilot(1, 0.1);
   const pts = [c.start].concat(c.controls.map((k) => k.position)).concat([c.finish]);
   const a = pts[${n}], b = pts[${n} + 1];
   const yaw = Math.atan2(b.x - a.x, -(b.z - a.z));
