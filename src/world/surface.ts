@@ -193,9 +193,14 @@ export class BridgeDecks {
    *
    * This is what `covers` answers from, and it is a pure function of
    * `townscape.json`: no heights, no tier. It has to be, because `covers` is
-   * what exempts a deck from the uncrossable-water rule, and a rule that
-   * changed with the graphics settings would hand two players on one seed two
-   * different courses. Same invariant as `FieldTerrain.rulesHeightAt`.
+   * what exempts a deck from the uncrossable-water rule *and* — since D-033 —
+   * from the uncrossable-barrier rule, and a rule that changed with the
+   * graphics settings would hand two players on one seed two different
+   * courses. Same invariant as `FieldTerrain.rulesHeightAt`.
+   *
+   * The band is `max(1.4, w/2)`, which is `stampRaster`'s band to the
+   * centimetre. Two exemptions of different widths would be two different
+   * answers to "am I on the bridge", one in the raster and one in the collider.
    */
   private readonly carriageways = new Grid<DeckSpan>(16);
 
@@ -227,7 +232,6 @@ export class BridgeDecks {
       at.push((at[i - 1] as number) + Math.hypot(dx, dz));
     }
     const length = at[n - 1] as number;
-    if (length < 1) return null;
     return {
       line,
       at,
@@ -245,6 +249,11 @@ export class BridgeDecks {
   ): DeckSpan | null {
     const { line, at, length } = flat;
     const n = line.length / 2;
+    // Nothing to raise, and `heightAt` would divide by it. The carriageway
+    // index above is deliberately not filtered this way: `stampRaster` walks
+    // every bridge-tagged way whatever its length, and `covers` has to answer
+    // over exactly the band the raster was stamped with. See D-033.
+    if (length < 1) return null;
 
     const y0 = heights(line[0] as number, line[1] as number);
     const y1 = heights(line[(n - 1) * 2] as number, line[(n - 1) * 2 + 1] as number);
@@ -297,8 +306,12 @@ export class BridgeDecks {
    *
    * Every bridge-tagged way counts, whether or not it stands high enough to be
    * drawn as a deck: a culvert under the road is still a crossing, and the
-   * question this answers is "is the athlete legitimately over the water here",
-   * which the survey's opinion of the clearance has no bearing on.
+   * question this answers is "is the athlete legitimately crossing here", which
+   * the survey's opinion of the clearance has no bearing on.
+   *
+   * Two rules read this, and they are the two rules that can otherwise close a
+   * crossing: uncrossable water (ISSprOM 301) and an uncrossable barrier
+   * (515/518). Both are lifted over the carriageway and nowhere else.
    */
   covers(x: number, z: number): boolean {
     for (const span of this.carriageways.at(x, z)) {

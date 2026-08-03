@@ -390,7 +390,13 @@ export class SprintScene {
    */
   blockedAt(x: number, z: number): boolean {
     if (this.buildings.blocks.test(x, z)) return true;
-    if (this.town.blocks.test(x, z)) return true;
+    // 515/518, and a bridge carriageway is the exception — the same exception
+    // `stampRaster` grants and, until D-033, the one it granted in step 2 and
+    // took back in step 5. Krumlov's river wall and its parapets are mapped as
+    // barrier ways running onto the decks, so the band below closed 17 of the
+    // venue's 47 crossings. Off the deck the barrier still blocks in full, and
+    // the water clause below is what stops anyone running off the parapet.
+    if (this.town.blocks.test(x, z) && !this.surface.decks.covers(x, z)) return true;
     if (this.field.runnabilityAt(x, z) === Runnability.Impassable) return true;
     // 301, and until now this line was the only part of the sentence above that
     // was not actually true. The raster's water comes from ZABAGED and the

@@ -469,7 +469,7 @@ class WaterBounds {
     return this.water.inBuilding(x, z) || this.water.inBarrier(x, z);
   }
 
-  /** Is (x, z) carried across the water by a bridge? */
+  /** Is (x, z) on a bridge carriageway? Mirrors `BridgeDecks.covers`. */
   onDeck(x, z) {
     return this.decks.inBarrier(x, z);
   }
@@ -478,6 +478,28 @@ class WaterBounds {
   blocks(x, z) {
     return this.wet(x, z) && !this.onDeck(x, z);
   }
+}
+
+/**
+ * `SprintScene.blockedAt`, offline and whole.
+ *
+ * Kept as one function rather than spelled out at each call site: it had been
+ * written out twice, in `floodFill` and in `makeLegRouter`, and the second copy
+ * is where a clause goes missing. Both now differ from the runtime in exactly
+ * one way, which is that they cannot see the landmark footprints `Buildings`
+ * skips — and that makes them stricter, never looser, because `Colliders` adds
+ * every ring in the file.
+ *
+ * The `onDeck` term on the barrier clause is D-033: a bridge carriageway is a
+ * crossing, and neither an uncrossable barrier nor the class under it may close
+ * it. Water off the deck still does.
+ */
+function blockedAtOf(col, wb, rasterAt) {
+  return (x, z) =>
+    col.inBuilding(x, z) ||
+    (col.inBarrier(x, z) && !wb.onDeck(x, z)) ||
+    rasterAt(x, z) === IMPASSABLE ||
+    wb.blocks(x, z);
 }
 
 // ---------------------------------------------------------------------------
@@ -569,13 +591,26 @@ function agreement(venue, bin) {
     return { n, miss };
   };
 
+  // Sampled off the carriageways, because since D-033 a barrier does not
+  // enforce there and the raster is right not to say it does. Skipping the
+  // points rather than loosening the threshold keeps this measuring the thing
+  // it was written for — barrier that stops the athlete and is not on the map —
+  // and would still catch a whole wall going missing.
+  const onDeck = new WaterBounds(town);
   const barrierPts = [];
+  let barrierOnDeck = 0;
   for (const [ax, az, bx, bz] of col.segData) {
     const len = Math.hypot(bx - ax, bz - az);
     const steps = Math.max(2, Math.ceil(len / 0.5));
     for (let i = 0; i <= steps; i++) {
       const t = i / steps;
-      barrierPts.push([ax + (bx - ax) * t, az + (bz - az) * t]);
+      const x = ax + (bx - ax) * t;
+      const z = az + (bz - az) * t;
+      if (onDeck.onDeck(x, z)) {
+        barrierOnDeck++;
+        continue;
+      }
+      barrierPts.push([x, z]);
     }
   }
   const barrier = missOf(barrierPts);
@@ -733,12 +768,7 @@ function floodFill(venue, bin, step) {
     return r[j * rMeta.width + i];
   };
 
-  /** Exactly `SprintScene.blockedAt`. */
-  const blocked = (x, z) =>
-    col.inBuilding(x, z) ||
-    col.inBarrier(x, z) ||
-    rasterAt(x, z) === IMPASSABLE ||
-    wb.blocks(x, z);
+  const blocked = blockedAtOf(col, wb, rasterAt);
 
   const R = PLAYABLE_R;
   const w = Math.floor((2 * R) / step) + 1;
@@ -1035,11 +1065,7 @@ export function makeLegRouter(venue, bin) {
     if (i < 0 || j < 0 || i >= rMeta.width || j >= rMeta.height) return IMPASSABLE;
     return r[j * rMeta.width + i];
   };
-  const blocked = (x, z) =>
-    col.inBuilding(x, z) ||
-    col.inBarrier(x, z) ||
-    rasterAt(x, z) === IMPASSABLE ||
-    wb.blocks(x, z);
+  const blocked = blockedAtOf(col, wb, rasterAt);
 
   const step = 2;
   const R = PLAYABLE_R;

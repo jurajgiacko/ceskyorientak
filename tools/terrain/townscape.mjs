@@ -853,11 +853,17 @@ function stampOne(r, m, { paved, buildings, walls }) {
   // Narrower than the carriageway on purpose: half the tagged width, floored at
   // 1.4 m. A bridge is a crossing point, and widening it eats the river bank
   // either side of the abutment for no gain.
+  //
+  // `carriageway` records the band whether or not the paint took, and step 5
+  // reads it. A cell already Road is still a crossing; what makes it one is the
+  // `bridge` tag, not what the class under it happened to be. See D-033.
+  const carriageway = new Uint8Array(r.length);
   let decks = 0;
   for (const way of paved) {
     if (!way.b) continue;
     const cls = way.k === 1 ? R.Path : R.Road;
     alongLine(way.l, Math.max(1.4, way.w * 0.5), (k) => {
+      carriageway[k] = 1;
       if (r[k] !== R.Impassable && !paintable(r[k])) return;
       if (r[k] === cls) return;
       r[k] = cls;
@@ -915,7 +921,19 @@ function stampOne(r, m, { paved, buildings, walls }) {
     // The runtime's own band: half the thickness plus the 0.25 m margin
     // `Townscape.buildWall` adds. Stamping exactly this and not a centimetre
     // more is what keeps the raster and the collider saying the same thing.
+    //
+    // Except on a carriageway, which this may not close — the exception step 2
+    // exists to grant, applied to the one stamp that was silently taking it
+    // back. Krumlov's river wall and its bridge parapets are mapped as barrier
+    // ways that run *onto* the deck, so stamping them here re-severed 17 of the
+    // venue's 47 crossings after step 2 had opened them, and `Townscape.blocks`
+    // enforced the same band at runtime. The athlete could see the far bank and
+    // not reach it. Off the deck the barrier still blocks in full, so this opens
+    // a gate exactly as wide as the way OSM tags as a bridge and no wider; the
+    // river either side of it is still out of bounds under ISSprOM 301, which is
+    // what stops anyone running off the parapet. See D-033.
     const mark = (k) => {
+      if (carriageway[k]) return;
       if (r[k] === R.Impassable) return;
       r[k] = R.Impassable;
       barrier++;
