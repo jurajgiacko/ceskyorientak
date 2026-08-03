@@ -294,18 +294,6 @@ export function derivePassable(col, { res, playableR, arena, sweepM = SWEEP_M })
   const reach = new Uint8Array(w * h);
   for (let k = 0; k < comp.length; k++) reach[k] = comp[k] === arenaId ? 1 : 0;
 
-  let openN = 0;
-  for (let k = 0; k < open.length; k++) openN += open[k];
-  const reachN = arenaId >= 0 ? sizes[arenaId] : 0;
-
-  // --- the census -----------------------------------------------------------
-  //
-  // The vocabulary is `check-passable`'s and is deliberately not reinvented:
-  // **sealed** (the athlete cannot get in either, which is not a fault — the
-  // zámecká zahrada is 0.9 ha of genuinely enclosed parterre), **porous** (a
-  // way in and the same way out), **grid artifact** (the labelling is wrong,
-  // not the town), and **trap** (in and not out, which is the thing that
-  // strands a player).
   const cellsOf = new Map();
   for (let k = 0; k < comp.length; k++) {
     const id = comp[k];
@@ -325,43 +313,62 @@ export function derivePassable(col, { res, playableR, arena, sweepM = SWEEP_M })
     return comp[j * w + i];
   };
 
-  const pockets = [];
-  for (const [id, cells] of cellsOf) {
-    const m2 = cells.length * cellM2;
-    if (m2 < MIN_POCKET_M2) continue;
+  /** How far the entry probe reaches, in cells. See `probe`. */
+  const NEAR_CELLS = Math.ceil((MAX_STEP_M + 0.15 + res) / res);
 
-    /**
-     * Is there a way in?
-     *
-     * Probed off the pocket's boundary cells in 32 bearings out to one full
-     * step, because the lattice is not where the gaps are: a 0.6 m doorway can
-     * fall between two cell centres and be invisible to the component graph
-     * while the athlete walks through it. `reallyConnected` is the case where
-     * nothing at all is in the way — the labelling missed a link, which after
-     * 8-connectivity and a swept edge should be impossible and is asserted so.
-     * `minJump` is the same probe with something in the way, which a swept step
-     * can no longer cross; it is measured anyway because how thin the thinnest
-     * barrier is remains worth knowing.
-     */
+  /**
+   * Is there a way into this component, and is anything in the way?
+   *
+   * Probed off its boundary cells in 32 bearings out to one full step, because
+   * **the lattice is not where the gaps are.** A 0.5 m doorway between two wall
+   * corners falls between cell centres: the athlete walks through it and no
+   * edge of the component graph — not even a swept diagonal one — can join the
+   * two cells, because the line between their *centres* is blocked while a line
+   * between two points inside them is not.
+   *
+   *  - `reallyConnected` — a clear swept line in, with nothing at all in the
+   *    way. The lattice is wrong and the athlete is right.
+   *  - `minJump` — the same probe with something in the way. A swept step
+   *    cannot cross that any more (D-038), so it can no longer make an entry;
+   *    it is measured because how thin the thinnest barrier is remains worth
+   *    knowing.
+   *
+   * The cheap lattice test comes first: a boundary cell with no arena cell
+   * within `NEAR_CELLS` cannot possibly have a clear step into one, and Krumlov's
+   * sealed courtyards are behind walls a metre and a half thick. It takes this
+   * from minutes to seconds.
+   */
+  const probe = (id, cells) => {
     let reallyConnected = false;
     let minJump = Infinity;
     let jumpAt = null;
-    let sx = 0;
-    let sz = 0;
     for (const k of cells) {
+      if (reallyConnected) break;
       const i = k % w;
       const j = (k / w) | 0;
-      sx += xAt(i);
-      sz += zAt(j);
       const boundary =
         (i > 0 && comp[k - 1] !== id) ||
         (i < w - 1 && comp[k + 1] !== id) ||
         (j > 0 && comp[k - w] !== id) ||
         (j < h - 1 && comp[k + w] !== id);
-      if (!boundary || reallyConnected) continue;
+      if (!boundary) continue;
+      let near = false;
+      for (let dj = -NEAR_CELLS; dj <= NEAR_CELLS && !near; dj++) {
+        const jj = j + dj;
+        if (jj < 0 || jj >= h) continue;
+        for (let di = -NEAR_CELLS; di <= NEAR_CELLS; di++) {
+          const ii = i + di;
+          if (ii < 0 || ii >= w) continue;
+          if (comp[jj * w + ii] === arenaId) {
+            near = true;
+            break;
+          }
+        }
+      }
+      if (!near) continue;
       const px = xAt(i);
       const pz = zAt(j);
-      for (let a = 0; a < 32; a++) {
+      for (let a = 0; a < 32 && !reallyConnected; a++) {
         const th = (a / 32) * Math.PI * 2;
         const ux = Math.sin(th);
         const uz = -Math.cos(th);
@@ -380,14 +387,75 @@ export function derivePassable(col, { res, playableR, arena, sweepM = SWEEP_M })
           }
           break;
         }
-        if (reallyConnected) break;
       }
     }
+    return { reallyConnected, minJump, jumpAt };
+  };
 
-    // A swept step is symmetric: a gap you can enter by is a gap you can leave
-    // by (D-038). So entry and escape are one predicate, and the trap class is
-    // arithmetically empty rather than merely unobserved — which is the whole
-    // point of having deleted the asymmetry instead of the instance.
+  /**
+   * Where the lattice and the athlete disagree, the athlete wins.
+   *
+   * A component the probe can walk into is part of the arena's component,
+   * whatever the graph says, and merging it is not a fudge — it is the only way
+   * the shipped `reach` plane can mean *"ground the athlete can get to"* rather
+   * than *"ground a 0.5 m lattice can express a path to"*. Left alone it says
+   * unreachable about ground you can stand on, and the course generator refuses
+   * to site a control there for a reason that is not true.
+   *
+   * Krumlov has two of them, 246 m² and 34 m². Iterated to a fixed point
+   * because merging one can put the arena within a step of the next.
+   */
+  let mergedComponents = 0;
+  let mergedCells = 0;
+  for (let round = 0; round < 8; round++) {
+    let merged = false;
+    for (const [id, cells] of [...cellsOf]) {
+      if (!probe(id, cells).reallyConnected) continue;
+      for (const k of cells) {
+        comp[k] = arenaId;
+        reach[k] = 1;
+      }
+      cellsOf.delete(id);
+      mergedComponents++;
+      mergedCells += cells.length;
+      merged = true;
+    }
+    if (!merged) break;
+  }
+
+  let openN = 0;
+  for (let k = 0; k < open.length; k++) openN += open[k];
+  let reachN = 0;
+  for (let k = 0; k < reach.length; k++) reachN += reach[k];
+
+  // --- the census -----------------------------------------------------------
+  //
+  // The vocabulary is `check-passable`'s and is deliberately not reinvented:
+  // **sealed** (the athlete cannot get in either, which is not a fault — the
+  // zámecká zahrada is 0.9 ha of genuinely enclosed parterre), **porous** (a
+  // way in and the same way out), **grid artifact** (the labelling is wrong,
+  // not the town), and **trap** (in and not out, which is the thing that
+  // strands a player).
+  //
+  // Two of those four are now arithmetically empty rather than merely
+  // unobserved, and it is worth saying which and why. A swept step is
+  // symmetric, so a gap you can enter by is a gap you can leave by (D-038) —
+  // there is no asymmetry left to make a **trap** out of, and nothing that is
+  // enterable is anything but **porous**. And the reconciliation above has
+  // already merged every **grid artifact** there was. What the census can still
+  // report is *sealed*, which is Krumlov being Krumlov, and it will report the
+  // other three the day one appears.
+  const pockets = [];
+  for (const [id, cells] of cellsOf) {
+    const m2 = cells.length * cellM2;
+    if (m2 < MIN_POCKET_M2) continue;
+    let sx = 0;
+    let sz = 0;
+    for (const k of cells) {
+      sx += xAt(k % w);
+      sz += zAt((k / w) | 0);
+    }
+    const { reallyConnected, minJump, jumpAt } = probe(id, cells);
     const enterable = reallyConnected;
     const escapable = reallyConnected;
     pockets.push({
@@ -419,6 +487,8 @@ export function derivePassable(col, { res, playableR, arena, sweepM = SWEEP_M })
     reachM2: reachN * cellM2,
     fraction: openN ? reachN / openN : 0,
     components: sizes.length,
+    mergedComponents,
+    mergedM2: mergedCells * cellM2,
     pockets,
     probes,
   };
@@ -498,6 +568,8 @@ function main() {
     reachM2: Math.round(space.reachM2),
     reachableFraction: Number(space.fraction.toFixed(5)),
     components: space.components,
+    /** Components the lattice split and the entry probe put back. See `probe`. */
+    reconciled: { components: space.mergedComponents, m2: Math.round(space.mergedM2) },
     census: {
       overM2: MIN_POCKET_M2,
       pockets: space.pockets.length,
@@ -534,6 +606,10 @@ function main() {
       `  ${space.components} components · ${space.pockets.length} pockets over ${MIN_POCKET_M2} m² ` +
         `(${sealed.length} sealed · ${porous.length} porous · ${artifacts.length} grid artifacts · ` +
         `${traps.length} traps)`,
+    );
+    console.log(
+      `  ${space.mergedComponents} components (${Math.round(space.mergedM2)} m²) the lattice split ` +
+        'and the entry probe put back',
     );
     for (const p of space.pockets.slice(0, 6)) {
       const kind = p.reallyConnected

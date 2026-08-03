@@ -115,7 +115,22 @@ const row = (label, value, budget, unit) => {
  * and the class raster — which is the passability the map, the course generator
  * and collision all read — does not. See the comment on `TerrainField.load`.
  */
-const LOW_TIER_TERRAIN = ['height-low.bin', 'height-low.json', 'runnability.bin', 'runnability.json', 'canopy.bin', 'canopy.json'];
+const LOW_TIER_TERRAIN = [
+  'height-low.bin', 'height-low.json',
+  'runnability.bin', 'runnability.json',
+  'canopy.bin', 'canopy.json',
+  /**
+   * The town's vector model and the passable space derived from it. Both are
+   * per-venue, both are fetched by `SprintScene.load` on every tier, and
+   * neither was counted here — phase 1 added the first and phase 2 the second,
+   * and a device-fetch estimate that quietly omits 1.5 MB is not an estimate.
+   * `townscape.json` is counted for the same reason: `loadTownscape` fetches
+   * it before the scene can be built.
+   */
+  'townmodel.bin', 'townmodel.json',
+  'passable.bin', 'passable.json',
+  'townscape.json',
+];
 
 /**
  * Estimate what one mid-range phone actually downloads for one race:

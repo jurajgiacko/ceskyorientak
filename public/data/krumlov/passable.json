@@ -1,6 +1,6 @@
 {
   "venue": "krumlov",
-  "generatedAt": "2026-08-03T23:09:48.994Z",
+  "generatedAt": "2026-08-03T23:19:04.063Z",
   "from": "townmodel.bin",
   "modelBytes": 137228,
   "resM": 0.5,
@@ -26,18 +26,22 @@
     }
   },
   "openM2": 1115015,
-  "reachM2": 1058741,
-  "reachableFraction": 0.94953,
+  "reachM2": 1059022,
+  "reachableFraction": 0.94978,
   "components": 645,
+  "reconciled": {
+    "components": 10,
+    "m2": 282
+  },
   "census": {
     "overM2": 6,
-    "pockets": 145,
+    "pockets": 143,
     "sealed": 143,
     "porous": 0,
-    "gridArtifacts": 2,
+    "gridArtifacts": 0,
     "traps": 0,
     "largestPocketM2": 9319,
-    "pocketM2": 56105
+    "pocketM2": 55825
   },
   "pocketList": [
     {
@@ -222,5 +226,5 @@
     }
   ],
   "bytes": 1441202,
-  "buildMs": 18040
+  "buildMs": 17227
 }

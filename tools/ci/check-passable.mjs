@@ -46,7 +46,8 @@ import { readFileSync, existsSync } from 'node:fs';
 import { resolve, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { serve, withChrome, openTab } from './chrome.mjs';
-import { readModel } from '../terrain/townmodel.mjs';
+import { readModel, colliders } from '../terrain/townmodel.mjs';
+import { derivePassable } from '../terrain/passable.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, '../..');
@@ -231,6 +232,20 @@ const LIMITS = {
    * the running game.
    */
   minRuntimeReachable: 0.9,
+  /**
+   * What opening the venue may spend on venue-wide passes, ms, unthrottled.
+   *
+   * Phase 0 measured the two that existed at 2.6 s and 2.9 s on the
+   * 4×-throttled Android proxy — 5 902 ms together, confirmed on the shipped
+   * build before phase 2 touched it — and required them to move into the
+   * build. They did, and the same instrument now reads 1 ms.
+   *
+   * 250 ms is therefore not a target, it is a tripwire: it is two orders below
+   * the sweeps this replaced and two orders above what the reads cost, so
+   * nothing but a venue-wide pass reappearing can trip it. This gate runs
+   * unthrottled; `tools/perf/setup-cost.mjs` is where the phone is asked.
+   */
+  maxSetupMs: 250,
   /**
    * Fewest controls that make a race. Mirrors `MIN_CONTROLS_FOR_A_RACE` in
    * src/race/courseSetup.ts: below this the terrain has refused, and a sprint
@@ -683,12 +698,32 @@ class WaterBounds {
  * crossing, and neither an uncrossable barrier nor the class under it may close
  * it. Water off the deck still does.
  */
-function blockedAtOf(col, wb, rasterAt, useRaster = true) {
-  return (x, z) =>
-    col.inBuilding(x, z) ||
-    (col.inBarrier(x, z) && !wb.onDeck(x, z)) ||
-    (useRaster && rasterAt(x, z) === IMPASSABLE) ||
-    wb.blocks(x, z);
+function blockedAtOf(col, wb, rasterAt, useRaster = true, authoritativeR = null) {
+  return (x, z) => {
+    if (col.inBuilding(x, z)) return true;
+    if (col.inBarrier(x, z) && !wb.onDeck(x, z)) return true;
+    if (wb.blocks(x, z)) return true;
+    if (!useRaster) return false;
+    /**
+     * Inside the model's own square the raster no longer answers, because in
+     * the game it no longer answers either.
+     *
+     * `Race.step` used to collide against `FieldTerrain.runnabilityAt`, which
+     * was the model *or* the 1 m class raster, so phase 1's exact colliders
+     * were read through a lattice whose `Impassable` cells are 1 m squares of
+     * world and whose class widens anything narrower than a cell out to half a
+     * cell diagonal. `tools/terrain/quantisation.mjs` measured the bill on the
+     * town's own centrelines: the median ≤3 m alley ran 1.80 m against the
+     * model and 1.52 m through the raster, and **12.8 % of alley centreline was
+     * ground the athlete could not stand on**. Phase 2 made the model the whole
+     * answer inside `authoritativeR`; this follows it, because a gate that
+     * keeps the old predicate is measuring a game nobody is playing.
+     */
+    if (authoritativeR !== null && Math.abs(x) <= authoritativeR && Math.abs(z) <= authoritativeR) {
+      return false;
+    }
+    return rasterAt(x, z) === IMPASSABLE;
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -942,6 +977,169 @@ function agreement(venue, bin) {
 }
 
 // ---------------------------------------------------------------------------
+// Phase 0b — the shipped passable space
+// ---------------------------------------------------------------------------
+
+/**
+ * Is the venue connected, and does the file that says so tell the truth?
+ *
+ * This is PLAN-KRUMLOV-V2 §2 rule 4 asserted where it belongs: *"passable space
+ * is derived, then asserted connected, **before any course exists**"*. Every
+ * other phase in this file runs against a course. This one does not — it runs
+ * against the venue, and it would fail on a Krumlov that had never had a
+ * control sited in it.
+ *
+ * Two claims, and the first is what makes the second worth anything.
+ *
+ * **The file is the model.** `passable.bin` is re-derived here from the shipped
+ * `townmodel.bin` and compared **cell for cell** — 5.76 M of them, both planes
+ * — rather than sampled. A scatter of probes is how every fault in §1's table
+ * stayed hidden: each was small in area and total in consequence.
+ *
+ * **The venue is connected.** Not "mostly": every component that is not the
+ * arena's is enumerated with its area and its centre, and classified by the
+ * only question that matters to a player — *can they get into it, and if so can
+ * they get back out?* Krumlov is supposed to have shut ground in it (the
+ * zámecká zahrada is 0.9 ha of walled parterre) and shut ground strands nobody.
+ * What strands somebody is ground you can enter and not leave.
+ */
+function passableSpacePhase(venue) {
+  const dir = venueDir(venue);
+  const metaPath = join(dir, 'passable.json');
+  if (!existsSync(join(dir, 'townmodel.bin'))) return null;
+  if (!existsSync(metaPath)) {
+    return { bad: true, why: 'passable.json missing — run node tools/terrain/passable.mjs' };
+  }
+
+  const meta = JSON.parse(readFileSync(metaPath, 'utf8'));
+  const buf = readFileSync(join(dir, 'passable.bin'));
+  const bits = new Uint8Array(buf.buffer, buf.byteOffset, buf.length);
+  const { header, model } = readModel(dir);
+  const col = colliders(model);
+
+  const errors = [];
+  if (meta.modelBytes !== header.bytes) {
+    errors.push(
+      `passable.bin was derived from a ${meta.modelBytes}-byte townmodel.bin and the shipped one ` +
+        `is ${header.bytes} bytes — re-run tools/terrain/passable.mjs`,
+    );
+  }
+
+  const space = derivePassable(col, {
+    res: meta.resM,
+    playableR: header.playableR,
+    arena: meta.arena ?? ARENA,
+  });
+
+  // --- the file against the derivation, cell for cell ----------------------
+  const n = space.w * space.h;
+  const bytes = Math.ceil(n / 8);
+  const readBit = (base, k) => (bits[base + (k >> 3)] >> (k & 7)) & 1;
+  let openDiff = 0;
+  let reachDiff = 0;
+  let reachNotOpen = 0;
+  if (space.w !== meta.width || space.h !== meta.height) {
+    errors.push(
+      `passable.bin is ${meta.width}×${meta.height} and the model derives ${space.w}×${space.h}`,
+    );
+  } else {
+    for (let k = 0; k < n; k++) {
+      const o = readBit(meta.sections.open.offset, k);
+      const rr = readBit(meta.sections.reach.offset, k);
+      if (o !== space.open[k]) openDiff++;
+      if (rr !== space.reach[k]) reachDiff++;
+      // Reachable ground that is not open ground is not a rounding error, it
+      // is a mask that has stopped meaning anything.
+      if (rr && !o) reachNotOpen++;
+    }
+  }
+
+  const cellM2 = meta.resM * meta.resM;
+  const sealed = space.pockets.filter((p) => !p.reallyConnected && !p.enterable);
+  const artifacts = space.pockets.filter((p) => p.reallyConnected);
+  const porous = space.pockets.filter((p) => !p.reallyConnected && p.enterable && !p.trap);
+  const traps = space.pockets.filter((p) => p.trap);
+
+  console.log(
+    `\n· ${venue} passable space · passable.bin (${meta.resM} m, every tier) · ` +
+      `derived from townmodel.bin, ${bytes * 2} bytes packed\n`,
+  );
+  console.log(
+    `  open ground          ${(space.openM2 / 1e4).toFixed(1)} ha of the ` +
+      `${(((2 * header.playableR) ** 2) / 1e4).toFixed(0)} ha playable square`,
+  );
+  console.log(
+    `  reachable from arena ${(space.fraction * 100).toFixed(1)} %  (${(space.reachM2 / 1e4).toFixed(1)} ha)`,
+  );
+  console.log(
+    `  ${space.components} components · ${space.pockets.length} pockets over 6 m² ` +
+      `(${sealed.length} sealed · ${porous.length} porous · ${artifacts.length} grid artifacts · ` +
+      `${traps.length} traps)`,
+  );
+  console.log(
+    `  8-connected, every edge swept at ${meta.sweepM} m — Race.step's own step test`,
+  );
+  for (const p of space.pockets.slice(0, 6)) {
+    const how = p.reallyConnected
+      ? 'GRID ARTIFACT — a clear way in the lattice cannot express'
+      : p.trap
+        ? 'TRAP — enterable and not escapable'
+        : p.enterable
+          ? `porous — ${p.minJumpM} m either way`
+          : 'sealed — the athlete cannot get in either';
+    console.log(`    ${String(p.m2).padStart(7)} m²  near (${p.at.x}, ${p.at.z})  ${how}`);
+  }
+  console.log(
+    `  file vs derivation over ${n} cells: ${openDiff} open, ${reachDiff} reachable differ`,
+  );
+
+  if (openDiff || reachDiff) {
+    errors.push(
+      `passable.bin disagrees with the model it claims to be derived from — ` +
+        `${Math.round(openDiff * cellM2)} m² of open, ${Math.round(reachDiff * cellM2)} m² of reachable`,
+    );
+  }
+  if (reachNotOpen) {
+    errors.push(`${reachNotOpen} cells are marked reachable and not open`);
+  }
+  // Ground the player can get into and not out of. A fault at any size.
+  for (const p of traps) {
+    errors.push(
+      `a ${p.m2} m² pocket near (${p.at.x}, ${p.at.z}) can be entered and not left`,
+    );
+  }
+  /**
+   * A porous pocket is not a trap and is still a fault of this artefact.
+   *
+   * It means there is a way in and out that the component labelling does not
+   * have an edge for — so the shipped `reach` plane says unreachable about
+   * ground the athlete can stand on, and the course generator will refuse to
+   * site a control there for a reason that is not true. Same for a grid
+   * artifact, which is the same defect with nothing at all in the way.
+   */
+  for (const p of [...porous, ...artifacts]) {
+    errors.push(
+      `a ${p.m2} m² pocket near (${p.at.x}, ${p.at.z}) is reachable on foot and the shipped ` +
+        `component labelling says it is not`,
+    );
+  }
+  const worstSealed = sealed[0];
+  if (worstSealed && worstSealed.m2 > LIMITS.maxPocketM2) {
+    errors.push(
+      `a ${(worstSealed.m2 / 1e4).toFixed(1)} ha pocket near (${worstSealed.at.x}, ` +
+        `${worstSealed.at.z}) is sealed off from the arena`,
+    );
+  }
+  if (space.fraction < LIMITS.minReachable) {
+    errors.push(
+      `only ${(space.fraction * 100).toFixed(1)} % of open ground is reachable from the arena`,
+    );
+  }
+
+  return { bad: errors.length > 0, errors, space, meta };
+}
+
+// ---------------------------------------------------------------------------
 // Phase 1 — flood-fill one raster
 // ---------------------------------------------------------------------------
 
@@ -957,7 +1155,10 @@ function floodFill(venue, bin, step) {
     return r[j * rMeta.width + i];
   };
 
-  const blocked = blockedAtOf(col, wb, rasterAt);
+  // Where there is a model it is the whole answer inside its own square, which
+  // is what `FieldTerrain.blockedAt` now does and therefore what this must
+  // measure. The forest has no model and keeps the raster, as it always has.
+  const blocked = blockedAtOf(col, wb, rasterAt, true, town.modelHeader?.playableR ?? null);
 
   const R = PLAYABLE_R;
   const w = Math.floor((2 * R) / step) + 1;
@@ -2255,6 +2456,39 @@ const PROBE = (limits) => `(async () => {
     rulesKey = fnv(hs.join(','));
   }
 
+  /**
+   * The passable space, as the running game holds it.
+   *
+   * Tier independence is meant to be true *by construction* here — the loader
+   * takes no tier and there is no second file to pick from — but D-027 and
+   * D-029 were both meant to be true by argument too, and both shipped a phone
+   * running a different race. So the property is also measured, on the object
+   * the game is using rather than on the manifest: 90 000 samples of the
+   * reachable and open planes at 4 m over the playable square, after the
+   * hand-registered structures have been punched in, plus the fraction the
+   * course generator was handed. If a tier ever gets its own space, this moves.
+   */
+  let passableKey = 'absent';
+  let passableInfo = null;
+  const wp = window.__world && window.__world.passable;
+  if (wp) {
+    const bits = [];
+    for (let j = 0; j < 300; j++) {
+      const z = -598 + j * 4;
+      for (let i = 0; i < 300; i++) {
+        const x = -598 + i * 4;
+        bits.push((wp.reachableAt(x, z) ? 1 : 0) + (wp.openAt(x, z) ? 2 : 0));
+      }
+    }
+    passableKey = fnv([wp.resM, wp.reachableFraction, wp.punchedPoints.length, bits.join('')].join('|'));
+    passableInfo = {
+      resM: wp.resM,
+      fraction: wp.reachableFraction,
+      punched: wp.punchedPoints.length / 2,
+      census: wp.census,
+    };
+  }
+
   return JSON.stringify({
     faults,
     controls: c.controls.length,
@@ -2263,6 +2497,10 @@ const PROBE = (limits) => `(async () => {
     courseId: c.id,
     courseKey,
     rulesKey,
+    passableKey,
+    passableInfo,
+    /** What the venue-wide passes cost this load, ms. See tools/perf/setup-cost.mjs. */
+    setupMs: r.terrain && r.terrain.costMs ? { ...r.terrain.costMs } : null,
     wetness,
     // Every sited point, so the caller can route the legs over the same
     // collision the game enforces and ask whether they run in the streets.
@@ -2309,6 +2547,10 @@ async function runtimePhase(venue, port) {
   const wetnessAll = [];
   /** How much of each course's legs ran on the street network. */
   const legsAll = [];
+  /** The passable space each load actually held, for the tier-independence claim. */
+  const passableSeen = [];
+  /** What the venue-wide passes cost each load. Phase 0's budget, instrumented. */
+  const setupSeen = [];
   /** Which raster each tier reads, so the leg router uses the same one. */
   const tierBin = new Map();
   {
@@ -2389,7 +2631,10 @@ async function runtimePhase(venue, port) {
           courseId: res.courseId,
           courseKey: res.courseKey,
           rulesKey: res.rulesKey,
+          passableKey: res.passableKey,
         });
+        if (res.passableInfo) passableSeen.push({ tier, seed, ...res.passableInfo });
+        if (res.setupMs) setupSeen.push({ tier, seed, ms: res.setupMs });
         wetnessAll.push(...res.wetness.map((x) => ({ ...x, tier, seed })));
         legsAll.push({ tier, seed, ...routed });
         const ok = res.faults.length === 0 && res.renderErrors.length === 0;
@@ -2490,6 +2735,68 @@ async function runtimePhase(venue, port) {
     console.log(
       `  every seed gives the same course, on the same rules surface, on every tier`,
     );
+  }
+
+  // --- one passable space, every tier --------------------------------------
+  //
+  // PLAN-KRUMLOV-V2 §6 phase 2: *"tier independence by construction, not by
+  // assertion."* The construction is that `loadPassable` takes no tier and
+  // there is no `passable-low.bin` to generate. This is the assertion anyway,
+  // because D-027 and D-029 were both true by construction in somebody's head.
+  if (passableSeen.length) {
+    const keys = [...courseByTierSeed.values()].map((v) => v.passableKey);
+    const same = keys.every((k) => k === keys[0]);
+    const p = passableSeen[0];
+    console.log(
+      `  passable space: ${p.resM} m, ${(p.fraction * 100).toFixed(1)} % reachable, ` +
+        `${p.census.pockets} pockets (${p.census.sealed} sealed · ${p.census.porous} porous · ` +
+        `${p.census.gridArtifacts} grid artifacts · ${p.census.traps} traps), ` +
+        `${p.punched} cells punched for hand-modelled structures`,
+    );
+    if (!same || keys[0] === 'absent') {
+      console.error(
+        keys[0] === 'absent'
+          ? '  ✗ the running game holds no passable space — run tools/terrain/passable.mjs'
+          : '  ✗ the tiers are not holding the same passable space: ' +
+            [...new Set(keys)].join(' · '),
+      );
+      bad = true;
+    } else {
+      console.log(`  every tier holds the identical passable space (${keys[0]})`);
+    }
+    if (p.census.traps > 0 || p.census.porous > 0 || p.census.gridArtifacts > 0) {
+      console.error(
+        `  ✗ the shipped census is not clean: ${p.census.traps} traps, ${p.census.porous} porous, ` +
+          `${p.census.gridArtifacts} grid artifacts`,
+      );
+      bad = true;
+    }
+  }
+
+  // --- what the venue cost to open -----------------------------------------
+  //
+  // Phase 0: *"any venue-wide sweep of the vector model belongs in the build,
+  // not in the loading screen"*, measured at 2.6 s for the bake and 2.9 s for
+  // the reachability fill on the 4×-throttled Android proxy. This gate is not
+  // throttled, so the number here is a desk number and the budget is set
+  // accordingly — it exists to catch a sweep coming *back*, which is a factor
+  // of a thousand, not a factor of two. `tools/perf/setup-cost.mjs` is where
+  // the phone figure is measured.
+  if (setupSeen.length) {
+    const total = (m) => Object.values(m).reduce((a, b) => a + b, 0);
+    const worst = setupSeen.reduce((a, b) => (total(a.ms) > total(b.ms) ? a : b));
+    console.log(
+      `  venue setup, worst of ${setupSeen.length} loads: ` +
+        Object.entries(worst.ms).map(([k, v]) => `${k} ${v.toFixed(0)} ms`).join(' · '),
+    );
+    if (total(worst.ms) > LIMITS.maxSetupMs) {
+      console.error(
+        `  ✗ opening the venue cost ${total(worst.ms).toFixed(0)} ms of venue-wide passes on an ` +
+          `unthrottled desktop, against a ${LIMITS.maxSetupMs} ms budget — something is sweeping ` +
+          'the model at load again',
+      );
+      bad = true;
+    }
   }
 
   // --- how close to the water did anything get? --------------------------
@@ -2809,6 +3116,18 @@ async function main() {
       bad = true;
     }
     console.log('');
+  }
+
+  // --- phase 0b: the venue, before any course exists ------------------------
+  {
+    const p = passableSpacePhase(venue);
+    if (p?.why) {
+      console.error(`✗ ${p.why}`);
+      bad = true;
+    } else if (p?.bad) {
+      for (const e of p.errors) console.error(`✗ ${e}`);
+      bad = true;
+    }
   }
 
   // --- phase 1 -------------------------------------------------------------
