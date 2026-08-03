@@ -26,6 +26,7 @@ import { Runnability } from '@/core/types';
 import { dist2 } from '@/core/geo';
 import { GROUND_FOR_RUNNABILITY } from '@/world/terrain';
 import type { TerrainField } from '@/world/terrain';
+import type { PassableSpace } from '@/world/passable';
 import type { BearingAim } from '@/world/bearingBand';
 import type { ControlMarker, ControlMarkerState } from '@/world/controlMarkers';
 import { getSettings } from '@/core/settings';
@@ -92,6 +93,12 @@ export interface RaceSceneHost {
    * further.
    */
   readonly authoritativeR?: number;
+  /**
+   * Where the athlete can get to, derived offline and asserted connected before
+   * any course existed. Optional: a venue that ships no `passable.bin` — the
+   * forest — keeps the load-time flood it has always had.
+   */
+  readonly passable?: PassableSpace;
   resize(width: number, height: number): void;
 }
 
@@ -231,6 +238,7 @@ export class RaceController {
     this.terrain = new FieldTerrain(host.field, {
       ...(host.blockedAt ? { blocked: (x: number, z: number) => host.blockedAt!(x, z) } : {}),
       ...(host.authoritativeR !== undefined ? { authoritativeR: host.authoritativeR } : {}),
+      ...(host.passable ? { passable: host.passable } : {}),
       urban,
       ...(urban && setup.townscape
         ? { features: buildUrbanFeatures(setup.townscape) }

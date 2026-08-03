@@ -1,0 +1,226 @@
+{
+  "venue": "krumlov",
+  "generatedAt": "2026-08-03T23:09:48.994Z",
+  "from": "townmodel.bin",
+  "modelBytes": 137228,
+  "resM": 0.5,
+  "playableR": 600,
+  "width": 2401,
+  "height": 2401,
+  "originX": -600,
+  "originZ": -600,
+  "arena": {
+    "x": 1,
+    "z": 24
+  },
+  "sweepM": 0.2,
+  "connectivity": 8,
+  "sections": {
+    "open": {
+      "offset": 0,
+      "bits": 5764801
+    },
+    "reach": {
+      "offset": 720601,
+      "bits": 5764801
+    }
+  },
+  "openM2": 1115015,
+  "reachM2": 1058741,
+  "reachableFraction": 0.94953,
+  "components": 645,
+  "census": {
+    "overM2": 6,
+    "pockets": 145,
+    "sealed": 143,
+    "porous": 0,
+    "gridArtifacts": 2,
+    "traps": 0,
+    "largestPocketM2": 9319,
+    "pocketM2": 56105
+  },
+  "pocketList": [
+    {
+      "m2": 9319,
+      "at": {
+        "x": -236,
+        "z": -15
+      },
+      "kind": "sealed",
+      "minJumpM": null
+    },
+    {
+      "m2": 8172,
+      "at": {
+        "x": 302,
+        "z": -106
+      },
+      "kind": "sealed",
+      "minJumpM": null
+    },
+    {
+      "m2": 5483,
+      "at": {
+        "x": 294,
+        "z": -194
+      },
+      "kind": "sealed",
+      "minJumpM": null
+    },
+    {
+      "m2": 4019,
+      "at": {
+        "x": -62,
+        "z": 251
+      },
+      "kind": "sealed",
+      "minJumpM": null
+    },
+    {
+      "m2": 2718,
+      "at": {
+        "x": 218,
+        "z": -80
+      },
+      "kind": "sealed",
+      "minJumpM": null
+    },
+    {
+      "m2": 2704,
+      "at": {
+        "x": 374,
+        "z": -192
+      },
+      "kind": "sealed",
+      "minJumpM": null
+    },
+    {
+      "m2": 2641,
+      "at": {
+        "x": 247,
+        "z": -225
+      },
+      "kind": "sealed",
+      "minJumpM": null
+    },
+    {
+      "m2": 2156,
+      "at": {
+        "x": 21,
+        "z": -205
+      },
+      "kind": "sealed",
+      "minJumpM": null
+    },
+    {
+      "m2": 1583,
+      "at": {
+        "x": 85,
+        "z": 112
+      },
+      "kind": "sealed",
+      "minJumpM": null
+    },
+    {
+      "m2": 1161,
+      "at": {
+        "x": 3,
+        "z": -249
+      },
+      "kind": "sealed",
+      "minJumpM": null
+    },
+    {
+      "m2": 834,
+      "at": {
+        "x": -248,
+        "z": -133
+      },
+      "kind": "sealed",
+      "minJumpM": null
+    },
+    {
+      "m2": 563,
+      "at": {
+        "x": -300,
+        "z": -51
+      },
+      "kind": "sealed",
+      "minJumpM": null
+    },
+    {
+      "m2": 522,
+      "at": {
+        "x": 105,
+        "z": 7
+      },
+      "kind": "sealed",
+      "minJumpM": null
+    },
+    {
+      "m2": 428,
+      "at": {
+        "x": 173,
+        "z": 12
+      },
+      "kind": "sealed",
+      "minJumpM": null
+    },
+    {
+      "m2": 409,
+      "at": {
+        "x": 335,
+        "z": 100
+      },
+      "kind": "sealed",
+      "minJumpM": null
+    },
+    {
+      "m2": 392,
+      "at": {
+        "x": 66,
+        "z": -232
+      },
+      "kind": "sealed",
+      "minJumpM": null
+    },
+    {
+      "m2": 388,
+      "at": {
+        "x": 166,
+        "z": 87
+      },
+      "kind": "sealed",
+      "minJumpM": null
+    },
+    {
+      "m2": 317,
+      "at": {
+        "x": -118,
+        "z": 311
+      },
+      "kind": "sealed",
+      "minJumpM": null
+    },
+    {
+      "m2": 301,
+      "at": {
+        "x": -25,
+        "z": -56
+      },
+      "kind": "sealed",
+      "minJumpM": null
+    },
+    {
+      "m2": 293,
+      "at": {
+        "x": 21,
+        "z": -146
+      },
+      "kind": "sealed",
+      "minJumpM": null
+    }
+  ],
+  "bytes": 1441202,
+  "buildMs": 18040
+}

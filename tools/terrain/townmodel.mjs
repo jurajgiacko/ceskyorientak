@@ -535,15 +535,38 @@ function deriveRaster(dataDir, col, playableR) {
   const inPlay = (x, z) => Math.abs(x) <= playableR && Math.abs(z) <= playableR;
 
   let sealed = 0;
+  let sealedOutside = 0;
   let freed = 0;
   const freedIdx = [];
   for (let j = 0; j < height; j++) {
     const z = originZ + j * resM;
     for (let i = 0; i < width; i++) {
       const x = originX + i * resM;
-      if (!inPlay(x, z)) continue;
       const k = j * width + i;
       const solid = col.drawnInCell(x, z, resM * CELL_DIAGONAL_HALF);
+      /**
+       * Outside the playable square the two directions are not symmetric, and
+       * that asymmetry is the point.
+       *
+       * The model is built over the playable square but its ways run on past
+       * it — the extract's bounding box is ±706 m — so there is real geometry
+       * out there that the map must draw, and `bakedRaster` used to sweep the
+       * whole raster at load precisely to catch it. Sealing it here is what
+       * lets that sweep go.
+       *
+       * *Freeing* is a different claim and is not made out there. Inside the
+       * square the model is complete, so `Impassable` may be replaced by it
+       * outright; outside, ZABAGED still carries water bodies and buildings the
+       * model has never seen, and taking those away would open the Vltava
+       * upstream of the town.
+       */
+      if (!inPlay(x, z)) {
+        if (solid && r[k] !== IMPASSABLE) {
+          r[k] = IMPASSABLE;
+          sealedOutside++;
+        }
+        continue;
+      }
       if (solid && r[k] !== IMPASSABLE) {
         r[k] = IMPASSABLE;
         sealed++;
@@ -622,7 +645,7 @@ function deriveRaster(dataDir, col, playableR) {
 
   writeFileSync(binPath, buf);
   writeFileSync(metaPath, `${JSON.stringify(meta, null, 2)}\n`);
-  return { sealed, freed, residual, playableR };
+  return { sealed, sealedOutside, freed, residual, playableR };
 }
 
 // ---------------------------------------------------------------------------
@@ -906,7 +929,8 @@ function main() {
   );
   if (!raster.skipped) {
     console.log(
-      `  runnability.bin: Impassable derived from the model — ${raster.sealed} cells sealed, ${raster.freed} freed`,
+      `  runnability.bin: Impassable derived from the model — ${raster.sealed} cells sealed, ` +
+        `${raster.freed} freed, ${raster.sealedOutside} sealed outside the playable square`,
     );
   }
   console.log(`  ${(bin.length / 1024).toFixed(0)} kB  (gzip ${(gz / 1024).toFixed(0)} kB)  built in ${Date.now() - t0} ms`);

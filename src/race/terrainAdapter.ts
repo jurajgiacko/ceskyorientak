@@ -34,6 +34,7 @@ import type { ControlSite, CourseTerrain } from '@/sim/courseGen';
 import type { RaceTerrain } from '@/sim/race';
 import { columnDFor } from './urbanFeatures';
 import type { UrbanFeatureIndex } from './urbanFeatures';
+import type { PassableSpace } from '@/world/passable';
 
 /** Extra out-of-bounds test the raster does not carry. */
 export type Blocker = (x: number, z: number) => boolean;
@@ -132,6 +133,15 @@ export interface FieldTerrainOptions {
    * the raster is the answer everywhere and always was.
    */
   authoritativeR?: number;
+  /**
+   * The venue's passable space, derived and labelled offline.
+   *
+   * With it, `buildReachability` reads a bit instead of flooding 2.56 M cells,
+   * and `reachableAt` answers off a 0.5 m lattice instead of a 1 m one. Absent
+   * for a venue that ships no `passable.bin` — the forest — which keeps the
+   * fill it has always had. See `src/world/passable.ts`.
+   */
+  passable?: PassableSpace;
 }
 
 export class FieldTerrain implements CourseTerrain, RaceTerrain {
@@ -141,6 +151,8 @@ export class FieldTerrain implements CourseTerrain, RaceTerrain {
   private readonly features: UrbanFeatureIndex | null;
   /** See `FieldTerrainOptions.authoritativeR`. */
   private readonly authoritativeR: number | null;
+  /** See `FieldTerrainOptions.passable`. */
+  private readonly passable: PassableSpace | null;
 
   /**
    * Direction of travel, radians.
@@ -178,6 +190,7 @@ export class FieldTerrain implements CourseTerrain, RaceTerrain {
     this.urban = opts.urban ?? false;
     this.features = opts.features ?? null;
     this.authoritativeR = opts.authoritativeR ?? null;
+    this.passable = opts.passable ?? null;
 
     const m = field.hMeta;
     this.rStride = Math.max(1, Math.round(RULES_CELL_M / m.resM));
@@ -387,6 +400,8 @@ export class FieldTerrain implements CourseTerrain, RaceTerrain {
   private maskH = 0;
   private maskX0 = 0;
   private maskZ0 = 0;
+  /** Where the reachability was asked from, for the lazy routing fill. */
+  private arena: { x: number; z: number } | null = null;
 
   /**
    * Flood-fill the ground the athlete can actually get to from the arena.
@@ -435,6 +450,33 @@ export class FieldTerrain implements CourseTerrain, RaceTerrain {
       this.costMs.baked = now() - t0;
       return this.baked;
     }
+    /**
+     * With a shipped passable space there is nothing left to bake, and that is
+     * a proved statement rather than an optimistic one.
+     *
+     * `tools/terrain/townmodel.mjs` writes the raster's `Impassable` class from
+     * the same model this would sweep, and `tools/ci/check-townmodel.mjs`
+     * asserts both directions of it over the playable square every run: 0 m² is
+     * solid and not on the map. The one thing the file cannot contain is what
+     * the scene registers by hand after it was written — the Marian column, the
+     * cloak bridge's piers, 94 m² of venue — and `PassableSpace.punch` has
+     * already found exactly those cells. So the bake is a copy plus a handful
+     * of stamps, instead of 2.56 M collision queries at 1452 ms on a phone.
+     */
+    if (this.passable) {
+      const rm = this.field.rMeta;
+      const out = new Uint8Array(this.field.runnability);
+      const pts = this.passable.punchedPoints;
+      for (let p = 0; p + 1 < pts.length; p += 2) {
+        const i = Math.round(((pts[p] as number) - rm.originX) / rm.resM);
+        const j = Math.round(((pts[p + 1] as number) - rm.originZ) / rm.resM);
+        if (i < 0 || j < 0 || i >= rm.width || j >= rm.height) continue;
+        out[j * rm.width + i] = Runnability.Impassable;
+      }
+      this.baked = out;
+      this.costMs.baked = now() - t0;
+      return out;
+    }
     const m = this.field.rMeta;
     const out = new Uint8Array(this.field.runnability);
     // One sample per cell, at its centre — no dilation. Krumlov's alleys are
@@ -465,8 +507,34 @@ export class FieldTerrain implements CourseTerrain, RaceTerrain {
     return this.blocked ? this.blocked(x, z) : false;
   }
 
+  /**
+   * Shipped, so there is nothing to fill.
+   *
+   * Connectivity is a global property of the venue, so establishing it costs a
+   * venue-wide flood however it is written — 4450 ms of one on the 4×-throttled
+   * Android proxy, measured, every time the venue opened, to recompute an
+   * answer that cannot change between one load and the next.
+   * `tools/terrain/passable.mjs` does it once, at 0.5 m rather than 1 m, over an
+   * 8-connected graph whose every edge is swept at `SWEEP_M` — the athlete's
+   * own step test — instead of a 4-connected one with a single midpoint probe.
+   * Better answer, and it is not in the loading screen.
+   *
+   * The routing lattice the autopilot wants is *not* built here (see
+   * `ensureRouting`): it is a test hook, it is the only thing left that still
+   * needs a sweep, and a test hook may not spend a player's loading time.
+   */
   buildReachability(from: { x: number; z: number }): { fraction: number } {
     const t0 = now();
+    this.arena = from;
+    const r = this.passable
+      ? { fraction: this.passable.reachableFraction }
+      : this.fillReachability(from);
+    this.costMs.reach = now() - t0;
+    return r;
+  }
+
+  /** The flood itself. Also what `ensureRouting` runs, off the loading path. */
+  private fillReachability(from: { x: number; z: number }): { fraction: number } {
     // 1 m where the venue is small enough to afford it: Krumlov's alleys are
     // 2–3 m wide and a 2 m grid disconnects them by aliasing alone.
     const span = Math.max(this.field.spanX, this.field.spanZ);
@@ -575,7 +643,6 @@ export class FieldTerrain implements CourseTerrain, RaceTerrain {
     this.maskH = h;
     this.maskX0 = x0;
     this.maskZ0 = z0;
-    this.costMs.reach = now() - t0;
     return { fraction: openN ? tail / openN : 0 };
   }
 
@@ -631,8 +698,25 @@ export class FieldTerrain implements CourseTerrain, RaceTerrain {
     return { m2: seen.size * cellM2, sealed: true };
   }
 
+  /**
+   * The routing lattice, built on demand.
+   *
+   * Only `routeField` and its three companions need it, and those exist for the
+   * autopilot — a test hook, because a player navigates by reading the map,
+   * which is the whole game. It is the last venue-wide sweep in the runtime and
+   * it stays out of the loading path: QA pays for it, once, on the first leg it
+   * plans, and nobody who is playing ever does.
+   */
+  private ensureRouting(): void {
+    if (this.mask || !this.arena) return;
+    const t0 = now();
+    this.fillReachability(this.arena);
+    this.costMs.routing = now() - t0;
+  }
+
   /** Is this point in the arena's connected component? True before the fill. */
   reachableAt(x: number, z: number): boolean {
+    if (this.passable) return this.passable.reachableAt(x, z);
     const m = this.mask;
     if (!m) return true;
     const i = Math.round((x - this.maskX0) / this.maskStep);
@@ -660,8 +744,13 @@ export class FieldTerrain implements CourseTerrain, RaceTerrain {
     const ok = (x: number, z: number): boolean =>
       this.reachableAt(x, z) && !this.isBlocked(x, z);
     if (ok(p.x, p.z)) return p;
-    for (let r = this.maskStep; r <= maxR; r += this.maskStep * 2) {
-      const n = Math.max(8, Math.round((2 * Math.PI * r) / (this.maskStep * 2)));
+    // The spiral steps by the lattice the *answer* comes off, which with a
+    // shipped passable space is 0.5 m and not the routing mask's 1 m — and the
+    // routing mask may not exist at all, because nothing but the autopilot
+    // builds it.
+    const step = this.passable ? this.passable.resM : this.maskStep;
+    for (let r = step; r <= maxR; r += step * 2) {
+      const n = Math.max(8, Math.round((2 * Math.PI * r) / (step * 2)));
       for (let i = 0; i < n; i++) {
         const a = (i / n) * Math.PI * 2;
         const q = { x: p.x + Math.sin(a) * r, z: p.z - Math.cos(a) * r };
@@ -688,6 +777,7 @@ export class FieldTerrain implements CourseTerrain, RaceTerrain {
      */
     avoid: readonly { x: number; z: number; r: number }[] = [],
   ): Int32Array | null {
+    this.ensureRouting();
     const m = this.mask;
     if (!m) return null;
     const w = this.maskW;

@@ -1,6 +1,6 @@
 {
   "venue": "krumlov",
-  "generatedAt": "2026-08-03T22:10:34.310Z",
+  "generatedAt": "2026-08-03T23:10:49.324Z",
   "from": "townscape.json",
   "source": {
     "footprints": "OpenStreetMap contributors, ODbL 1.0",
@@ -44,7 +44,8 @@
     "skinM": 0.25
   },
   "raster": {
-    "sealed": 4076,
+    "sealed": 0,
+    "sealedOutside": 581,
     "freed": 0,
     "residual": 0,
     "playableR": 600

@@ -35,6 +35,7 @@ import { Buildings, loadSurface, loadTownscape } from './buildings';
 import type { SurfaceTextures, TownscapeData } from './buildings';
 import { Townscape } from './townscape';
 import { TownModel, loadTownModel } from './townModel';
+import { PassableSpace, loadPassable } from './passable';
 import { Landmarks, KRUMLOV_LANDMARKS, KRUMLOV_OVERRIDES, KRUMLOV_SKIP } from './landmarks';
 import { Vegetation, disposeAsset, loadAsset } from './vegetation';
 import type { Asset } from './vegetation';
@@ -89,6 +90,12 @@ export class SprintScene {
    * answer would be checking its own arithmetic.
    */
   model!: TownModel;
+  /**
+   * Where the athlete can get to, derived from the model offline and asserted
+   * connected before any course existed. Public for the same reason `model` is
+   * — see `src/world/passable.ts`.
+   */
+  passable!: PassableSpace;
   /** `groundAt` behind the `GroundSurface` interface, for the pieces that stand on it. */
   private walkable!: GroundSurface;
   private terrain!: TerrainMesh;
@@ -168,8 +175,16 @@ export class SprintScene {
     // happens here is indexing, not deriving: phase 0 measured construction at
     // 14 ms on the 4×-throttled Android proxy, against 2.6 s for the venue-wide
     // sweep that now happens in the build.
-    this.model = new TownModel(await loadTownModel('krumlov'));
+    const modelData = await loadTownModel('krumlov');
+    this.model = new TownModel(modelData);
     this.warnings.push(...this.model.warnings);
+    // The passable space, likewise built offline: the flood that used to run
+    // here cost 4450 ms on the 4×-throttled Android proxy to recompute an
+    // answer that cannot change between one load and the next. No tier
+    // parameter, and there is no second file to pick from.
+    this.passable = new PassableSpace(await loadPassable('krumlov'));
+    this.passable.checkAgainst(this.model, modelData.buffer.byteLength);
+    this.warnings.push(...this.passable.warnings);
 
     step(0.4, 'textures');
     this.ground = await loadGroundTextures(this.tier, TOWN_GROUND);
@@ -316,6 +331,12 @@ export class SprintScene {
     // Nothing may register a collider after this point: a collider that can
     // appear once the venue has been built is a collider no gate has swept.
     this.model.seal();
+    // The eight footprints `landmarks.ts` registers by hand are the one thing
+    // the offline derivation could not have seen, because they did not exist
+    // when it ran. Bounded by their own bounding boxes — 94 m² of venue — not
+    // by the venue. That they only ever remove ground and never disconnect any
+    // is asserted in `tools/ci/check-passable.mjs`, not assumed here.
+    this.passable.punch(this.model);
     this.scene.add(this.landmarks.group);
 
     // --- the beginner's bearing aid ---------------------------------------
