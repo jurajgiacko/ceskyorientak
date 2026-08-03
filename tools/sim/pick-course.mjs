@@ -435,6 +435,31 @@ async function main() {
   // If a third of all candidates are being disqualified for detour, the answer
   // is upstream in src/sim/courseGen.ts and not here.
   const allRouted = rows.filter((r) => r.routed).map((r) => r.routed);
+
+  // **The worst leg of every candidate, viable or not.**
+  //
+  // This is the number that answers "can this venue hold a course of this
+  // shape at all", and it is a different question from "which seed is best".
+  // If the whole distribution sits above the limit then no amount of picking
+  // will help and the answer is fewer controls or a different threshold — see
+  // D-037. Printed always, so that conclusion is available without a re-run.
+  const worsts = rows
+    .filter((r) => r.routed && r.routed.legs.length)
+    .map((r) => Math.max(...r.routed.legs.filter((l) => l.routed).map((l) => l.detour)))
+    .filter((v) => Number.isFinite(v))
+    .sort((a, b) => a - b);
+  if (worsts.length) {
+    const at = (p) => worsts[Math.min(worsts.length - 1, Math.floor(p * worsts.length))];
+    const under = (t) => worsts.filter((v) => v <= t).length;
+    console.log(
+      `\n  worst leg per candidate, all ${worsts.length} of them:` +
+        ` best ${worsts[0].toFixed(2)}× · p10 ${at(0.1).toFixed(2)}×` +
+        ` · median ${at(0.5).toFixed(2)}× · max ${worsts[worsts.length - 1].toFixed(2)}×` +
+        `\n    ${under(2)} candidate(s) keep every leg under 2.0×,` +
+        ` ${under(2.5)} under 2.5×, ${under(3)} under 3.0×`,
+    );
+  }
+
   const st = detourStats(allRouted);
   if (st) {
     console.log(
