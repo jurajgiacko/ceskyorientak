@@ -1620,8 +1620,16 @@ export function makeCourseAudit(venue, bin, opts = {}) {
     return [c, k];
   };
 
-  /** Shortest walking distance in metres from `src` to every cell, or -1. */
-  const fieldFrom = (src) => {
+  /**
+   * Shortest walking distance in metres from `src` to every cell, or -1.
+   *
+   * `goal` stops the search as soon as that cell is settled, which is what
+   * makes the per-leg pass affordable: a full field over the forest's four
+   * million cells costs seconds, and a 300 m leg only ever needed the disc
+   * around it. Omit `goal` for the reachability pass, which genuinely wants
+   * everything.
+   */
+  const fieldFrom = (src, goal = -1) => {
     visit++;
     heapN = 0;
     dist[src] = 0;
@@ -1630,6 +1638,7 @@ export function makeCourseAudit(venue, bin, opts = {}) {
     while (heapN) {
       const [c, k0] = pop();
       if (c > dist[k0]) continue;
+      if (k0 === goal) break;
       const i0 = k0 % w;
       const j0 = (k0 / w) | 0;
       for (const [di, dj, d] of NB) {
@@ -1683,7 +1692,7 @@ export function makeCourseAudit(venue, bin, opts = {}) {
         });
         continue;
       }
-      const f = fieldFrom(cells[k]);
+      const f = fieldFrom(cells[k], cells[k + 1]);
       const walkedM = f(cells[k + 1]);
       if (walkedM < 0) {
         rows.push({ leg: k, name, straightM, walkedM: -1, detour: 0, status: 'UNREACHABLE' });
