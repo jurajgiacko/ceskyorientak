@@ -265,6 +265,37 @@ const LIMITS = {
    */
   minLegsOnNetwork: 0.75,
   /**
+   * Must the start and the finish **stand on** the street network, rather than
+   * merely near it? **Fault 8, docs/PLAN-KRUMLOV-V2.md §1.**
+   *
+   * `minLegsOnNetwork` above scores the course as a whole and gave the shipped
+   * Krumlov course 96 %. It is silent about its single most-looked-at point,
+   * and that silence is what let the start walk into the woods: measured at
+   * `krumlov-sprint-30814554`, the start stands in **ForestOpen**, on the edge
+   * of the built-up area, with a `town.blocks` barrier 11 m ahead on the
+   * bearing to control 1. Run out of the start and there is a wall — the
+   * client's own sentence, and a regression introduced by re-picking the seed
+   * to kill D-037's 12× leg.
+   *
+   * **Why this is a class test and not a distance test**, which is the whole
+   * design of it. The shipped start is **1.4 m** from the nearest Road cell —
+   * one diagonal cell of the 1 m raster. *Any* distance tolerance large enough
+   * to absorb raster quantisation is large enough to pass the exact fault it
+   * exists to catch, so there is no tolerance to tune and the rule is the plain
+   * one: the cell the start is sited in is Road or Path, or it is not on the
+   * network. Measured on the shipped course, the finish and 11 of 17 controls
+   * already satisfy it, and Náměstí Svornosti — the arena, and where a start
+   * belongs — is stamped Road for 1629 of the 1681 cells around it, so a start
+   * on the square passes comfortably.
+   *
+   * Only the start and the finish. Controls are deliberately exempt: a sprint
+   * control legitimately sits on the corner of a building or at the foot of a
+   * stairway, off the carriageway by a metre — the shipped course's controls
+   * run a median of 0.0 m and a p90 of 4.2 m off the network, and forbidding
+   * that would be setting a worse course than the one it rejected.
+   */
+  endsOnNetwork: true,
+  /**
    * How far a leg may run compared with the straight line between its ends —
    * `routedM / straightM`, per leg. **D-037.**
    *
@@ -1301,6 +1332,48 @@ export function makeLegRouter(venue, bin, opts = {}) {
   const stamp = new Int32Array(w * h);
   let visit = 0;
 
+  /** Road and Path — the two classes that are "the street network" everywhere
+   * else in this file, including `paved` in the lattice above. */
+  const onNetwork = (cls) => cls === 0 || cls === 1;
+
+  /**
+   * How far to the nearest Road or Path cell, in metres, searched outward in
+   * rings. Diagnostic only — see `ends` on the returned object.
+   */
+  const nearestNet = (x, z, maxM = 60) => {
+    if (onNetwork(rasterAt(x, z))) return 0;
+    const res = rMeta.resM;
+    for (let rad = 1; rad * res <= maxM; rad++) {
+      let best = Infinity;
+      for (let dj = -rad; dj <= rad; dj++) {
+        for (let di = -rad; di <= rad; di++) {
+          if (Math.max(Math.abs(di), Math.abs(dj)) !== rad) continue;
+          if (!onNetwork(rasterAt(x + di * res, z + dj * res))) continue;
+          const d = Math.hypot(di, dj) * res;
+          if (d < best) best = d;
+        }
+      }
+      if (best < Infinity) return best;
+    }
+    return Infinity;
+  };
+
+  const endOf = (name, p) => {
+    const cls = rasterAt(p.x, p.z);
+    return {
+      name,
+      cls,
+      className: rMeta.classes?.[cls] ?? String(cls),
+      onNetwork: onNetwork(cls),
+      nearestNetM: nearestNet(p.x, p.z),
+    };
+  };
+
+  const ends = (points) =>
+    points.length >= 2
+      ? [endOf('start', points[0]), endOf('finish', points[points.length - 1])]
+      : [];
+
   const route = function route(points) {
   const legs = [];
   for (let k = 0; k + 1 < points.length; k++) {
@@ -1386,6 +1459,18 @@ export function makeLegRouter(venue, bin, opts = {}) {
     totalM: Math.round(total),
     fraction: total > 0 ? onNet / total : 0,
     /**
+     * The start and the finish, each read at its **own coordinates** rather
+     * than at a lattice cell. `LIMITS.endsOnNetwork` explains why this cannot
+     * be a distance test; reading it off the 2 m routing lattice would smuggle
+     * a 2 m tolerance back in through the snap in `cellOf`, which is exactly
+     * the tolerance that lets the fault through.
+     *
+     * `nearestNetM` is reported and never asserted. It is the number that makes
+     * a failure legible — "in the woods, 1.4 m from the street" says which way
+     * to move the start; "not on the network" does not.
+     */
+    ends: ends(points),
+    /**
      * The whole course's detour factor — run distance over the length printed
      * on the description sheet. RESEARCH-SPORT §8.6 calls this `D` and puts it
      * at ≈1.05 for a sprint; it is the one number here that is directly
@@ -1432,6 +1517,36 @@ export function detourFaults(routed, limits = LIMITS) {
       `leg ${l.leg} runs ${l.lengthM} m for a ${Math.round(l.straightM)} m straight line — ` +
         `${l.detour.toFixed(1)}× the direct distance, over ${limits.maxLegDetour.toFixed(1)}×. ` +
         `The flag is in sight across an uncrossable feature and the way to it is a lap of the venue.`,
+    );
+  }
+  return out;
+}
+
+/**
+ * The start and the finish, asserted onto the street network. **Fault 8.**
+ *
+ * Separate from `detourFaults` because it is a different kind of statement.
+ * Every other course measure in this file scores the course as a *whole* — 96 %
+ * of the running on the network, a median leg detour, a reachable fraction —
+ * and the shipped Krumlov course passed all of them with its start in the
+ * woods. An aggregate cannot fail on one point, and the start is one point that
+ * every single player looks at before anything else.
+ *
+ * `LIMITS.endsOnNetwork` carries the reasoning and the measurements behind it.
+ */
+export function endpointFaults(routed, limits = LIMITS) {
+  const out = [];
+  if (!routed || !limits.endsOnNetwork) return out;
+  for (const e of routed.ends ?? []) {
+    if (e.onNetwork) continue;
+    const near =
+      e.nearestNetM === Infinity
+        ? 'no Road or Path within 60 m'
+        : `the nearest Road or Path is ${e.nearestNetM.toFixed(1)} m away`;
+    out.push(
+      `the ${e.name} is sited on ${e.className}, not on the street network — ${near}. ` +
+        `A sprint ${e.name === 'start' ? 'starts' : 'finishes'} on the street; ` +
+        `this is the fault the client reported as "you run out and there's a wall straight away".`,
     );
   }
   return out;
@@ -2144,6 +2259,12 @@ async function runtimePhase(venue, port) {
         for (const l of unroutable) {
           res.faults.push(`leg ${l.leg} cannot be run at all — no route between its ends`);
         }
+        // The start and the finish, on the network rather than near it. Asserted
+        // on every sampled seed and not only on the one that ships, unlike the
+        // per-leg detour below: a start in the woods is not a matter of degree
+        // that a generous seed might get away with, and if the generator can
+        // produce one at all we want to know from the first seed that does.
+        for (const f of endpointFaults(routed, LIMITS)) res.faults.push(f);
         // Routable is not the same as runnable — but on a *sampled* seed the
         // per-leg limit is reported rather than asserted, and the reason is in
         // `LIMITS.maxMedianLegDetour`. The assertion lives on the course that
@@ -2447,6 +2568,16 @@ async function stabilityPhase(venue, port, runs = 4) {
       faults.push(
         `the legs run ${(routed.fraction * 100).toFixed(0)} % on the street network, ` +
           `under ${(LIMITS.minLegsOnNetwork * 100).toFixed(0)} %`,
+      );
+    }
+    for (const f of endpointFaults(routed, LIMITS)) faults.push(f);
+    // Printed whether or not it fails, because "the start is on Road" is the
+    // line that says the course begins where the client's acceptance test says
+    // it does — *"it starts at the start and runs through the alleys"*.
+    for (const e of routed.ends ?? []) {
+      console.log(
+        `  the ${e.name} stands on ${e.className}` +
+          (e.onNetwork ? '' : ` — ${e.nearestNetM.toFixed(1)} m off the street network`),
       );
     }
     console.log(
