@@ -264,6 +264,65 @@ const LIMITS = {
    * ground with streets merely nearby.
    */
   minLegsOnNetwork: 0.75,
+  /**
+   * How far a leg may run compared with the straight line between its ends —
+   * `routedM / straightM`, per leg. **D-037.**
+   *
+   * The bug class this closes, stated once. Every leg measure in this file
+   * before it was a *boolean*: `routed` says the leg can be run and
+   * `pavedFraction` says what it is run on, and a course all of whose legs are
+   * routable and paved can still be unplayable. The shipped Krumlov course had
+   * controls 1 and 2 **58 m apart on opposite banks of the Vltava with no
+   * bridge between them**: routable, 99 % street, and 810 m of running — 14×.
+   * The player sees the flag across the water and runs a lap of the town. This
+   * is the same shape as D-019 and D-023: the check could say connected or
+   * not-connected and had no way to say *connected and absurd*. `route()`
+   * already computed `lengthM` per leg and threw the comparison away.
+   *
+   * **Why 3.0, from the sport rather than from what passes.**
+   *
+   *  - A detour is *legitimate*. IOF Rule 16.3 measures a course as the
+   *    straight line "deviating for, and only for, physically impassable
+   *    obstructions" — so the rules positively expect legs to go round things,
+   *    and Appendix 6 §1.1 makes the choice of *which* way round the point of
+   *    the sprint format. A gate at 1.2 would forbid sprint orienteering.
+   *  - But it is *small*. RESEARCH-SPORT §8.6 derives the whole-course detour
+   *    factor `D` — run distance over stated length — as **1.05 for sprint**
+   *    and 1.18 for forest, and notes the sprint figure is low precisely
+   *    because the stated length already deviates round the impassables. Route
+   *    efficiency (100 × straight / actual) is classed "high" above 90 and
+   *    "low" below 50, i.e. elites live between **1.1× and 2.0×**, and 2.0 is
+   *    the bottom of the published scale.
+   *  - So 3.0 is half again beyond the worst leg the literature has a word
+   *    for, and it is deliberately permissive: this is a floor under
+   *    indefensible, not a definition of good. The two faults the client found
+   *    ran 14.0× and 10.3×. A course that has to be defended at 2.9× should be
+   *    rejected by `tools/sim/pick-course.mjs` on score long before it reaches
+   *    here.
+   *
+   * The ratio is also what the course *description sheet* is lying about. Rule
+   * 16.3 makes the stated length the deviated length, and `measureLength` in
+   * src/sim/courseGen.ts sums straight lines — so a 14× leg is 750 m of running
+   * that the printed 1558 m does not contain.
+   */
+  maxLegDetour: 3.0,
+  /**
+   * Metres of excess (`routedM − straightM`) below which the ratio is not
+   * asked at all.
+   *
+   * Two reasons, and both are about the measurement rather than the sport.
+   * The router walks a 2 m lattice with eight neighbours, which overstates a
+   * true path by up to 8 %, and it snaps each end onto the nearest open cell,
+   * which can move a control up to 3 m. On a 47 m sprint leg — legal at 25 m
+   * running distance under Rule 19.4 — that noise alone is worth about 0.2 in
+   * the ratio, and a leg that steps round one 20 m building block reads 1.6×
+   * while costing the player thirty metres.
+   *
+   * 40 m is about eight seconds of a sprinter's race. Below it there is no
+   * complaint to make: nobody has ever reported "I could see it across the
+   * street". The two real faults carried 752 m and 455 m of excess.
+   */
+  minDetourExcessM: 40,
 };
 
 /**
@@ -1197,10 +1256,16 @@ export function makeLegRouter(venue, bin) {
   const route = function route(points) {
   const legs = [];
   for (let k = 0; k + 1 < points.length; k++) {
+    // The straight line between the two ends, which is what the description
+    // sheet prints and what the player sees when they look up. Kept for every
+    // leg including the ones that cannot be routed, so a failure report can
+    // still say how far apart the two flags were.
+    const straightM =
+      Math.hypot(points[k + 1].x - points[k].x, points[k + 1].z - points[k].z);
     const a = cellOf(points[k]);
     const b = cellOf(points[k + 1]);
     if (!a || !b) {
-      legs.push({ leg: k, routed: false, pavedFraction: 0, lengthM: 0 });
+      legs.push({ leg: k, routed: false, pavedFraction: 0, lengthM: 0, straightM, detour: 0 });
       continue;
     }
     const goal = idx(b[0], b[1]);
@@ -1239,7 +1304,7 @@ export function makeLegRouter(venue, bin) {
     }
 
     if (!found) {
-      legs.push({ leg: k, routed: false, pavedFraction: 0, lengthM: 0 });
+      legs.push({ leg: k, routed: false, pavedFraction: 0, lengthM: 0, straightM, detour: 0 });
       continue;
     }
     let lengthM = 0;
@@ -1258,12 +1323,31 @@ export function makeLegRouter(venue, bin) {
       routed: true,
       lengthM: Math.round(lengthM),
       pavedFraction: lengthM > 0 ? pavedM / lengthM : 0,
+      straightM,
+      // Never below 1: a route cannot be shorter than the straight line, and a
+      // lattice that says otherwise on a two-metre leg is quantisation rather
+      // than a shortcut.
+      detour: straightM > 0 ? Math.max(1, lengthM / straightM) : 1,
     });
   }
 
   const total = legs.reduce((a, l) => a + l.lengthM, 0);
   const onNet = legs.reduce((a, l) => a + l.lengthM * l.pavedFraction, 0);
-  return { legs, totalM: Math.round(total), fraction: total > 0 ? onNet / total : 0 };
+  return {
+    legs,
+    totalM: Math.round(total),
+    fraction: total > 0 ? onNet / total : 0,
+    /**
+     * The whole course's detour factor — run distance over the length printed
+     * on the description sheet. RESEARCH-SPORT §8.6 calls this `D` and puts it
+     * at ≈1.05 for a sprint; it is the one number here that is directly
+     * comparable with a real race.
+     */
+    courseDetour: (() => {
+      const s = legs.reduce((a, l) => a + l.straightM, 0);
+      return s > 0 ? total / s : 1;
+    })(),
+  };
   };
   // Diagnostics: how much of the lattice the router can stand on at all. If this
   // collapses, every leg comes back unroutable and the cause is the collision
@@ -1273,6 +1357,54 @@ export function makeLegRouter(venue, bin) {
   route.openCells = openCells;
   route.latticeCells = w * h;
   return route;
+}
+
+/**
+ * The detour limit, applied. **D-037.**
+ *
+ * Exported and shared so that the gate and `tools/sim/pick-course.mjs` cannot
+ * drift: a course this rejects must be one the picker could never have chosen,
+ * and the only way to guarantee that is for both to call the same function.
+ * The picker uses it as a **hard filter** rather than a score term — a course
+ * with a 14× leg has to be unable to win, not merely to score badly, because a
+ * score term is something the other seventy points can outvote.
+ *
+ * Named legs (`leg 0` is start→1) so the message is the thing the player would
+ * say: "I could see it and I couldn't get to it".
+ */
+export function detourFaults(routed, limits = LIMITS) {
+  const out = [];
+  if (!routed) return out;
+  for (const l of routed.legs) {
+    if (!l.routed) continue;
+    const excess = l.lengthM - l.straightM;
+    if (excess < limits.minDetourExcessM) continue;
+    if (l.detour <= limits.maxLegDetour) continue;
+    out.push(
+      `leg ${l.leg} runs ${l.lengthM} m for a ${Math.round(l.straightM)} m straight line — ` +
+        `${l.detour.toFixed(1)}× the direct distance, over ${limits.maxLegDetour.toFixed(1)}×. ` +
+        `The flag is in sight across an uncrossable feature and the way to it is a lap of the venue.`,
+    );
+  }
+  return out;
+}
+
+/** Percentiles of the per-leg detour ratio, for reporting the whole distribution. */
+export function detourStats(legRuns) {
+  const rs = [];
+  for (const r of legRuns) for (const l of r.legs) if (l.routed) rs.push(l.detour);
+  rs.sort((a, b) => a - b);
+  if (!rs.length) return null;
+  const at = (p) => rs[Math.min(rs.length - 1, Math.floor(p * rs.length))];
+  return {
+    n: rs.length,
+    min: rs[0],
+    median: at(0.5),
+    p90: at(0.9),
+    p99: at(0.99),
+    max: rs[rs.length - 1],
+    over: (t) => rs.filter((v) => v > t).length,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -1593,6 +1725,8 @@ async function runtimePhase(venue, port) {
         for (const l of unroutable) {
           res.faults.push(`leg ${l.leg} cannot be run at all — no route between its ends`);
         }
+        // Routable is not the same as runnable. See `LIMITS.maxLegDetour`.
+        for (const f of detourFaults(routed, LIMITS)) res.faults.push(f);
 
         courseByTierSeed.set(`${tier}|${seed}`, {
           controls: res.controls,
@@ -1731,6 +1865,28 @@ async function runtimePhase(venue, port) {
     );
   }
 
+  // --- and is any of them a lap of the town? -----------------------------
+  //
+  // The whole distribution, not just the failures, for the same reason the
+  // freeboard distribution above is printed: the number that says whether this
+  // is fixed is *how bad the worst leg was*, not *did the assertion pass*. The
+  // course that shipped ran a median of 1.4× with a worst leg of 14.0×, and a
+  // gate reporting only "pass" would have hidden the second fault at 10.3×
+  // behind the first.
+  const st = detourStats(legsAll);
+  if (st) {
+    const cd = legsAll.map((l) => l.courseDetour).sort((a, b) => a - b);
+    console.log(
+      `  leg detour (run distance ÷ straight line), ${st.n} legs:` +
+        ` min ${st.min.toFixed(2)}× · median ${st.median.toFixed(2)}×` +
+        ` · p90 ${st.p90.toFixed(2)}× · max ${st.max.toFixed(2)}×` +
+        `\n    ${st.over(2)} leg(s) over 2.0× (the bottom of the published route-efficiency` +
+        ` scale), ${st.over(LIMITS.maxLegDetour)} over ${LIMITS.maxLegDetour.toFixed(1)}×` +
+        `\n    whole-course detour factor D: ${cd[0].toFixed(2)}–${cd[cd.length - 1].toFixed(2)}` +
+        ` against ≈1.05 for a real sprint (RESEARCH-SPORT §8.6)`,
+    );
+  }
+
   return bad;
 }
 
@@ -1749,10 +1905,18 @@ async function runtimePhase(venue, port) {
  * the course id and the full course fingerprint to be identical every time. Two
  * loads would catch a clock-derived seed; four also catch one that changes
  * every few minutes rather than every minute.
+ *
+ * **And it is the only phase that sees the course that ships.** `SEEDS` above
+ * are menu-shaped samples of the generator, chosen so the gate is deterministic
+ * and broad; none of them is `COURSE_SEED`. So the leg measures — the street
+ * fraction and, since D-037, the detour ratio — are asserted here as well,
+ * against the course the client actually plays. Both faults he reported were in
+ * this course and in none of the four sampled seeds.
  */
 async function stabilityPhase(venue, port, runs = 4) {
   let bad = false;
   const seen = [];
+  let shipped = null;
   await withChrome(async (cdpPort) => {
     for (let i = 0; i < runs; i++) {
       const url = `http://127.0.0.1:${port}/?scene=sprint&race=1&debug=0&tier=high`;
@@ -1767,6 +1931,7 @@ async function stabilityPhase(venue, port, runs = 4) {
       const raw = await tab.evaluate(PROBE(LIMITS));
       const res = JSON.parse(raw);
       seen.push({ id: res.courseId, key: res.courseKey, n: res.controls, m: res.lengthM });
+      if (!shipped) shipped = res;
       await tab.close();
       // A minute apart would be the honest test of a per-minute seed, and this
       // gate cannot afford four minutes. It does not need to: the seed is now a
@@ -1791,6 +1956,32 @@ async function stabilityPhase(venue, port, runs = 4) {
     console.log(
       `  ${seen.length} separate loads all gave course ${ref.id} — ${ref.n} controls, ${ref.m} m`,
     );
+  }
+
+  // --- the shipped course's own legs, measured -----------------------------
+  if (shipped) {
+    const bins = [...new Set(tierRasters(venue).map((t) => t.bin))];
+    const routed = makeLegRouter(venue, bins[0] ?? 'runnability.bin')(shipped.points);
+    const faults = [];
+    for (const l of routed.legs.filter((l) => !l.routed)) {
+      faults.push(`leg ${l.leg} cannot be run at all — no route between its ends`);
+    }
+    if (routed.fraction < LIMITS.minLegsOnNetwork) {
+      faults.push(
+        `the legs run ${(routed.fraction * 100).toFixed(0)} % on the street network, ` +
+          `under ${(LIMITS.minLegsOnNetwork * 100).toFixed(0)} %`,
+      );
+    }
+    faults.push(...detourFaults(routed, LIMITS));
+    const worst = routed.legs.reduce((a, l) => (l.detour > a.detour ? l : a), routed.legs[0]);
+    console.log(
+      `  the shipped course runs ${routed.totalM} m for a printed ${ref.m} m — ` +
+        `D ${routed.courseDetour.toFixed(2)}, ` +
+        `${(routed.fraction * 100).toFixed(0)} % of it street; ` +
+        `worst leg ${worst.leg} at ${worst.detour.toFixed(1)}×`,
+    );
+    for (const f of faults) console.error(`  ✗ ${f}`);
+    if (faults.length) bad = true;
   }
   return bad;
 }
