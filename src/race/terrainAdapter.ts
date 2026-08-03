@@ -699,19 +699,83 @@ export class FieldTerrain implements CourseTerrain, RaceTerrain {
   }
 
   /**
-   * The routing lattice, built on demand.
+   * The routing lattice.
    *
-   * Only `routeField` and its three companions need it, and those exist for the
-   * autopilot — a test hook, because a player navigates by reading the map,
-   * which is the whole game. It is the last venue-wide sweep in the runtime and
-   * it stays out of the loading path: QA pays for it, once, on the first leg it
-   * plans, and nobody who is playing ever does.
+   * **With a shipped passable space this is that space and nothing else**, and
+   * that is not an optimisation — it is the fault `check-race` found when it was
+   * not. `reachableAt` answered off the 0.5 m shipped plane while `routeField`
+   * floods its own 1 m one, so the course setter sited a control on ground the
+   * router then called unroutable: *two reachability answers in one runtime*,
+   * which is the second-opinion failure this whole phase exists to delete,
+   * reintroduced by me in the one place I left a flood behind.
+   *
+   * So there is one graph. Its cells are the shipped `reach` plane and its edges
+   * are plain 8-adjacency between them — a **superset** of the swept graph the
+   * components were labelled with, so anything the strict graph joins this joins
+   * too, and `tools/terrain/passable.mjs` measures the converse and ships it as
+   * `looseUnreachable`, which the gate asserts is zero. Reachable therefore
+   * means routable, by construction rather than by hope.
+   *
+   * Without a space — the forest — this is the fill it has always had, built on
+   * demand rather than at load, because the autopilot is a test hook and a test
+   * hook may not spend a player's loading time.
    */
   private ensureRouting(): void {
     if (this.mask || !this.arena) return;
     const t0 = now();
-    this.fillReachability(this.arena);
+    if (this.passable) {
+      const p = this.passable;
+      this.maskStep = p.resM;
+      this.maskW = p.width;
+      this.maskH = p.height;
+      this.maskX0 = p.originX;
+      this.maskZ0 = p.originZ;
+      const m = new Uint8Array(p.width * p.height);
+      for (let j = 0; j < p.height; j++) {
+        const z = p.originZ + j * p.resM;
+        for (let i = 0; i < p.width; i++) {
+          m[j * p.width + i] = p.reachableAt(p.originX + i * p.resM, z) ? 1 : 0;
+        }
+      }
+      this.mask = m;
+      this.eastOk = null;
+      this.southOk = null;
+    } else {
+      this.fillReachability(this.arena);
+    }
     this.costMs.routing = now() - t0;
+  }
+
+  /**
+   * Every cell the athlete can step to from `k`, on whichever graph is in use.
+   *
+   * Eight-connected over the shipped space; four-connected over the fill's own
+   * edge planes, which carry a midpoint test the plain adjacency does not need
+   * because the shipped space was swept when it was built.
+   */
+  private eachNeighbour(k: number, visit: (n: number) => void): void {
+    const w = this.maskW;
+    const x = k % w;
+    const y = (k / w) | 0;
+    if (this.eastOk && this.southOk) {
+      if (x < w - 1 && this.eastOk[k]) visit(k + 1);
+      if (x > 0 && this.eastOk[k - 1]) visit(k - 1);
+      if (y < this.maskH - 1 && this.southOk[k]) visit(k + w);
+      if (y > 0 && this.southOk[k - w]) visit(k - w);
+      return;
+    }
+    const m = this.mask;
+    if (!m) return;
+    for (let dy = -1; dy <= 1; dy++) {
+      const yy = y + dy;
+      if (yy < 0 || yy >= this.maskH) continue;
+      for (let dx = -1; dx <= 1; dx++) {
+        const xx = x + dx;
+        if (xx < 0 || xx >= w || (dx === 0 && dy === 0)) continue;
+        const n = yy * w + xx;
+        if (m[n] === 1) visit(n);
+      }
+    }
   }
 
   /** Is this point in the arena's connected component? True before the fill. */
@@ -811,20 +875,15 @@ export class FieldTerrain implements CourseTerrain, RaceTerrain {
     while (head < tail) {
       const k = queue[head++]!;
       const d = dist[k]! + 1;
-      const x = k % w;
-      const y = (k / w) | 0;
-      const push = (n: number): void => {
+      // The graph the mask was built on, and only that one — see
+      // `eachNeighbour`. Routing on a rule the reachability was not established
+      // with is how a sited control becomes an unroutable leg.
+      this.eachNeighbour(k, (n) => {
         if (m[n] === 1 && dist[n] === -1) {
           dist[n] = d;
           queue[tail++] = n;
         }
-      };
-      // Same edge rule the reachability fill used, so the route the pilot is
-      // handed is one the athlete can actually run.
-      if (x > 0 && this.eastOk?.[k - 1]) push(k - 1);
-      if (x < w - 1 && this.eastOk?.[k]) push(k + 1);
-      if (y > 0 && this.southOk?.[k - w]) push(k - w);
-      if (y < h - 1 && this.southOk?.[k]) push(k + w);
+      });
     }
     return dist;
   }
@@ -851,26 +910,26 @@ export class FieldTerrain implements CourseTerrain, RaceTerrain {
   routeWaypoint(
     from: { x: number; z: number },
     dist: Int32Array,
-    lookahead = 6,
+    /**
+     * How far to look, **metres**. It used to be cells, which was the same
+     * thing while the lattice was always 1 m; on the shipped 0.5 m space it
+     * would have quietly halved the pilot's lookahead and made its heading
+     * twitch. The pilot's behaviour is a distance, so it is written as one.
+     */
+    lookaheadM = 6,
   ): { x: number; z: number } | null {
     let k = this.cellOf(from);
     if (k < 0 || dist[k]! < 0) return null;
     const w = this.maskW;
+    const lookahead = Math.max(1, Math.round(lookaheadM / this.maskStep));
     for (let step = 0; step < lookahead; step++) {
       const d = dist[k]!;
       if (d === 0) break;
       let next = -1;
-      const x = k % w;
-      const y = (k / w) | 0;
-      const consider = (n: number, ok: boolean): void => {
-        if (!ok) return;
+      this.eachNeighbour(k, (n) => {
         const nd = dist[n];
         if (nd !== undefined && nd >= 0 && nd < d && (next < 0 || nd < dist[next]!)) next = n;
-      };
-      consider(k + 1, x < w - 1 && this.eastOk?.[k] === 1);
-      consider(k - 1, x > 0 && this.eastOk?.[k - 1] === 1);
-      consider(k + w, y < this.maskH - 1 && this.southOk?.[k] === 1);
-      consider(k - w, y > 0 && this.southOk?.[k - w] === 1);
+      });
       if (next < 0) break;
       k = next;
     }
@@ -888,9 +947,11 @@ export class FieldTerrain implements CourseTerrain, RaceTerrain {
     let best = dist[here]!;
     let bestK = -1;
     // A wider stencil than 4-connectivity so the heading is not quantised to
-    // the axes, which would make the pilot run in staircases.
-    for (let dy = -3; dy <= 3; dy++) {
-      for (let dx = -3; dx <= 3; dx++) {
+    // the axes, which would make the pilot run in staircases. Three metres of
+    // it, not three cells — see `routeWaypoint`'s `lookaheadM`.
+    const r = Math.max(1, Math.round(3 / this.maskStep));
+    for (let dy = -r; dy <= r; dy++) {
+      for (let dx = -r; dx <= r; dx++) {
         if (dx === 0 && dy === 0) continue;
         const k = here + dy * w + dx;
         if (k < 0 || k >= dist.length) continue;

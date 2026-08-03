@@ -1,6 +1,6 @@
 {
   "venue": "krumlov",
-  "generatedAt": "2026-08-03T23:19:04.063Z",
+  "generatedAt": "2026-08-03T23:45:10.253Z",
   "from": "townmodel.bin",
   "modelBytes": 137228,
   "resM": 0.5,
@@ -33,6 +33,7 @@
     "components": 10,
     "m2": 282
   },
+  "looseUnreachable": 0,
   "census": {
     "overM2": 6,
     "pockets": 143,
@@ -226,5 +227,5 @@
     }
   ],
   "bytes": 1441202,
-  "buildMs": 17227
+  "buildMs": 17113
 }

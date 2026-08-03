@@ -428,6 +428,53 @@ export function derivePassable(col, { res, playableR, arena, sweepM = SWEEP_M })
   let reachN = 0;
   for (let k = 0; k < reach.length; k++) reachN += reach[k];
 
+  /**
+   * Is *reachable* the same set as *routable*?
+   *
+   * The runtime routes the autopilot over the shipped `reach` plane by plain
+   * 8-adjacency, because a second flood with its own edge rules is a second
+   * opinion — and this venue has paid for four of those. Plain adjacency is a
+   * **superset** of the swept graph above, so everything the strict graph joins
+   * it joins too; the one thing that could escape it is a cell the entry probe
+   * reconciled in across a gap wider than one lattice step.
+   *
+   * Measured rather than assumed, and shipped as a number the gate asserts is
+   * zero. If it is ever not zero, a control can be sited on ground the router
+   * then calls unroutable, which is exactly the failure this measurement exists
+   * to make impossible.
+   */
+  let looseUnreachable = 0;
+  {
+    const seen = new Uint8Array(w * h);
+    const q = new Int32Array(w * h);
+    let head = 0;
+    let tail = 0;
+    for (let k = 0; k < reach.length && tail === 0; k++) {
+      if (reach[k]) {
+        seen[k] = 1;
+        q[tail++] = k;
+      }
+    }
+    while (head < tail) {
+      const k = q[head++];
+      const i = k % w;
+      const j = (k / w) | 0;
+      for (let dj = -1; dj <= 1; dj++) {
+        const jj = j + dj;
+        if (jj < 0 || jj >= h) continue;
+        for (let di = -1; di <= 1; di++) {
+          const ii = i + di;
+          if (ii < 0 || ii >= w || (di === 0 && dj === 0)) continue;
+          const nk = jj * w + ii;
+          if (!reach[nk] || seen[nk]) continue;
+          seen[nk] = 1;
+          q[tail++] = nk;
+        }
+      }
+    }
+    for (let k = 0; k < reach.length; k++) if (reach[k] && !seen[k]) looseUnreachable++;
+  }
+
   // --- the census -----------------------------------------------------------
   //
   // The vocabulary is `check-passable`'s and is deliberately not reinvented:
@@ -489,6 +536,7 @@ export function derivePassable(col, { res, playableR, arena, sweepM = SWEEP_M })
     components: sizes.length,
     mergedComponents,
     mergedM2: mergedCells * cellM2,
+    looseUnreachable,
     pockets,
     probes,
   };
@@ -570,6 +618,12 @@ function main() {
     components: space.components,
     /** Components the lattice split and the entry probe put back. See `probe`. */
     reconciled: { components: space.mergedComponents, m2: Math.round(space.mergedM2) },
+    /**
+     * Reachable cells a plain 8-adjacency walk of the `reach` plane cannot
+     * find — i.e. ground the runtime's router would call unroutable while the
+     * course setter calls it sitable. Must be 0; the gate asserts it.
+     */
+    looseUnreachable: space.looseUnreachable,
     census: {
       overM2: MIN_POCKET_M2,
       pockets: space.pockets.length,
@@ -609,7 +663,8 @@ function main() {
     );
     console.log(
       `  ${space.mergedComponents} components (${Math.round(space.mergedM2)} m²) the lattice split ` +
-        'and the entry probe put back',
+        `and the entry probe put back · ${space.looseUnreachable} reachable cells the router ` +
+        'cannot walk to',
     );
     for (const p of space.pockets.slice(0, 6)) {
       const kind = p.reallyConnected

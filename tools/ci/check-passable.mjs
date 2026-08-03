@@ -1115,6 +1115,24 @@ function passableSpacePhase(venue) {
   if (reachNotOpen) {
     errors.push(`${reachNotOpen} cells are marked reachable and not open`);
   }
+  /**
+   * Reachable must mean routable.
+   *
+   * `FieldTerrain.routeField` walks the shipped `reach` plane by plain
+   * 8-adjacency rather than flooding a lattice of its own, because a second
+   * flood is a second opinion and `check-race` caught exactly that: the course
+   * setter sited a control off the 0.5 m plane and the router, on its own 1 m
+   * one, called the leg unroutable. Plain adjacency is a superset of the swept
+   * graph, so the only ground that can escape it is a cell the entry probe
+   * reconciled in across a gap wider than one lattice step. Measured, and it
+   * must be none.
+   */
+  if (space.looseUnreachable > 0) {
+    errors.push(
+      `${space.looseUnreachable} cells are reachable and the router cannot walk to them — ` +
+        'a control sited there is a leg with no route',
+    );
+  }
   // Ground the player can get into and not out of. A fault at any size.
   for (const p of traps) {
     errors.push(
