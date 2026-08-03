@@ -127,7 +127,7 @@ await withChrome(async (cdpPort) => {
     process.exit(2);
   }
 
-  await t.evaluate(`
+  await t.evaluate(`(async () => {
     window.__town = await (await fetch('/townscape.json')).json();
     window.__models = {
       v2: __bench.buildModel(__town, { cellM: 12, barriers: 'all' }),
@@ -136,10 +136,12 @@ await withChrome(async (cdpPort) => {
     window.__pts = {
       athlete: __bench.makePoints('athlete', 200000),
       scatter: __bench.makePoints('scatter', 200000),
-      scan: __bench.makePoints('scan', 200000),
+      // A point per square metre of the venue, which is the grid bakedRaster
+      // actually walks. Taking fewer would sample one corner of the map.
+      scan: __bench.makePoints('scan', 1201 * 1201),
     };
-    'ok'
-  `);
+    return 'ok';
+  })()`);
 
   console.log('\n═══ THROUGHPUT — headless Chrome, CPU throttled ═══\n');
   console.log(
@@ -154,7 +156,8 @@ await withChrome(async (cdpPort) => {
     out.rates[rate] = [];
     for (const model of ['v2', 'v1']) {
       for (const pattern of ['athlete', 'scatter', 'scan']) {
-        const reps = rate >= 8 ? 1 : rate >= 4 ? 2 : 4;
+        // The sweep is 1.44 M points; one pass of it at 8× is already seconds.
+        const reps = pattern === 'scan' ? 1 : rate >= 8 ? 1 : rate >= 4 ? 2 : 4;
         const r = await t.evaluate(`
           (() => {
             const m = __bench.benchMean(__models.${model}.blockedAt, __pts.${pattern}, ${reps});

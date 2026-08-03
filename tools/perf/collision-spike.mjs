@@ -100,7 +100,10 @@ for (const [label, m] of models) {
     console.log(
       `  ${pad(label, 22)} ${pad(p, 10)} ${pad(num(mean.nsPerQuery), 9)} ${pad(num(tail.p50Ns), 8)} ${pad(num(tail.p99Ns), 8)} ${pad(num(tail.p999Ns), 9)} ${num(tail.maxNs)}`,
     );
-    results.rows.push({ model: label, pattern: p, meanNs: mean.nsPerQuery, ...tail });
+    // `batchMeanNs` is the untimed-loop mean and is the number the budget uses;
+    // `tail.meanNs` is the block-timed mean and exists only to show how close
+    // the instrumented loop stays to the uninstrumented one.
+    results.rows.push({ model: label, pattern: p, ...tail, batchMeanNs: mean.nsPerQuery });
   }
 }
 console.log(
