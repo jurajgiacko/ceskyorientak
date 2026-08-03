@@ -85,6 +85,32 @@ for (const way of town.paved ?? []) {
 }
 const streetN = street.length / 2;
 
+/**
+ * The free width of the corridor at each street point, from the vector model.
+ *
+ * Eight rays, and the width is the *narrowest* opposing pair — so a point in a
+ * 2 m alley reads 2 m however long the alley is. This is what lets the table
+ * below report the alleys separately from the squares, which is the whole
+ * question: a raster that keeps 96% of the network and loses every 2 m passage
+ * has lost the town, and an average cannot see that.
+ */
+function corridorWidth(x, z) {
+  const MAX = 8;
+  const STEP = 0.25;
+  const d = new Float64Array(8);
+  for (let k = 0; k < 8; k++) {
+    const a = (k / 8) * Math.PI * 2;
+    const cx = Math.cos(a) * STEP;
+    const cz = Math.sin(a) * STEP;
+    let t = 0;
+    while (t < MAX && !model.blockedAt(x + cx * (t / STEP + 1), z + cz * (t / STEP + 1))) t += STEP;
+    d[k] = t;
+  }
+  let w = Infinity;
+  for (let k = 0; k < 4; k++) w = Math.min(w, d[k] + d[k + 4]);
+  return w;
+}
+
 // The vector model's own verdict on those points, which is the target every
 // raster is trying to reproduce. A street point the vector model itself calls
 // blocked is a data fault, not a resolution fault, and must not be charged to
@@ -98,7 +124,32 @@ console.log('\n═══ DERIVED RASTER — what resolution a 2 m alley needs �
 console.log(`  street centreline points sampled at 1 m: ${streetN.toLocaleString()}`);
 console.log(
   `  of those, open in the vector model: ${streetOpenVec.toLocaleString()} ` +
-    `(${((streetOpenVec / streetN) * 100).toFixed(1)}%) — the ceiling any raster can reach\n`,
+    `(${((streetOpenVec / streetN) * 100).toFixed(1)}%) — the ceiling any raster can reach`,
+);
+
+// Width every open street point, and keep the narrow ones as their own cohort.
+const widthT0 = process.hrtime.bigint();
+const narrow = [];
+const widths = [];
+for (let n = 0; n < streetN; n++) {
+  const x = street[n * 2];
+  const z = street[n * 2 + 1];
+  if (model.blockedAt(x, z)) continue;
+  const w = corridorWidth(x, z);
+  widths.push(w);
+  if (w <= 3) narrow.push(x, z);
+}
+const narrowN = narrow.length / 2;
+widths.sort((a, b) => a - b);
+const wq = (p) => widths[Math.min(widths.length - 1, Math.floor(widths.length * p))];
+console.log(
+  `\n  corridor width at those points (8 rays, narrowest opposing pair, capped 16 m):\n` +
+    `    p1 ${wq(0.01).toFixed(2)} m · p5 ${wq(0.05).toFixed(2)} m · p25 ${wq(0.25).toFixed(2)} m · ` +
+    `median ${wq(0.5).toFixed(2)} m`,
+);
+console.log(
+  `    ≤ 3 m wide: ${narrowN.toLocaleString()} points (${((narrowN / widths.length) * 100).toFixed(1)}%)` +
+    ` — the alleys, measured in ${(Number(process.hrtime.bigint() - widthT0) / 1e9).toFixed(1)} s\n`,
 );
 
 // ---------------------------------------------------------------------------
@@ -107,8 +158,8 @@ console.log(
 
 const rows = [];
 console.log(
-  `  ${pad('cell m', 8)} ${pad('grid', 12)} ${pad('open %', 8)} ${pad('street open %', 14)} ` +
-    `${pad('street reachable %', 19)} ${pad('1-bit kB', 9)} ${pad('gz kB', 7)} derive ms`,
+  `  ${pad('cell m', 8)} ${pad('grid', 12)} ${pad('open %', 8)} ${pad('alleys kept %', 14)} ` +
+    `${pad('false-open %', 13)} ${pad('reachable %', 12)} ${pad('1-bit kB', 9)} ${pad('gz kB', 7)} derive ms`,
 );
 
 for (const c of CELLS) {
@@ -153,20 +204,48 @@ for (const c of CELLS) {
     }
   }
 
-  // Score the streets against this raster.
+  // Score the streets against this raster. The error has two halves and they
+  // point in opposite directions, which is why a single "% reachable" column
+  // was actively misleading and is split here:
+  //
+  //  - **false-blocked** — the vector model says open, the raster says wall.
+  //    This is D-027's fault, an alley eaten by the grid, and it is the one
+  //    that made half the centre impassable.
+  //  - **false-open** — the vector model says wall, the raster says open. This
+  //    is a coarse grid stepping straight over a thin barrier: a 0.1 m railing
+  //    sampled every 4 m is almost never seen, so the raster deletes it. It
+  //    reads as *better* connectivity while being wrong in the direction that
+  //    puts a runner through a fence.
   let streetOpen = 0;
   let streetReach = 0;
-  let disagree = 0;
+  let falseOpen = 0;
+  let falseBlocked = 0;
+  const cellOpen = (x, z) => {
+    const i = Math.round((x + HALF) / c);
+    const j = Math.round((z + HALF) / c);
+    if (i < 0 || i >= w || j < 0 || j >= h) return { open: false, k: -1 };
+    const k = j * w + i;
+    return { open: open[k] === 1, k };
+  };
   for (let n = 0; n < streetN; n++) {
     const x = street[n * 2];
     const z = street[n * 2 + 1];
-    const i = Math.round((x + HALF) / c);
-    const j = Math.round((z + HALF) / c);
-    const k = j * w + i;
-    const rOpen = i >= 0 && i < w && j >= 0 && j < h && open[k] === 1;
-    if (rOpen) streetOpen++;
-    if (rOpen && seen[k]) streetReach++;
-    if (rOpen === model.blockedAt(x, z)) disagree++;
+    const r = cellOpen(x, z);
+    const vBlocked = model.blockedAt(x, z);
+    if (r.open) streetOpen++;
+    if (r.open && r.k >= 0 && seen[r.k]) streetReach++;
+    if (r.open && vBlocked) falseOpen++;
+    if (!r.open && !vBlocked) falseBlocked++;
+  }
+
+  // The alleys as their own cohort: of the ≤3 m street points the vector model
+  // calls open, how many survive this grid, and how many stay connected.
+  let alleyKept = 0;
+  let alleyReach = 0;
+  for (let n = 0; n < narrowN; n++) {
+    const r = cellOpen(narrow[n * 2], narrow[n * 2 + 1]);
+    if (r.open) alleyKept++;
+    if (r.open && r.k >= 0 && seen[r.k]) alleyReach++;
   }
 
   const bits = Math.ceil((w * h) / 8);
@@ -184,7 +263,10 @@ for (const c of CELLS) {
     streetOpenPct: (streetOpen / streetN) * 100,
     streetReachPct: (streetReach / streetN) * 100,
     reachCells: reachN,
-    disagreePct: (disagree / streetN) * 100,
+    falseOpenPct: (falseOpen / streetN) * 100,
+    falseBlockedPct: (falseBlocked / streetN) * 100,
+    alleyKeptPct: narrowN ? (alleyKept / narrowN) * 100 : 0,
+    alleyReachPct: narrowN ? (alleyReach / narrowN) * 100 : 0,
     bitKb: bits / 1024,
     byteKb: (w * h) / 1024,
     gzKb: gz / 1024,
@@ -193,16 +275,20 @@ for (const c of CELLS) {
   rows.push(row);
   console.log(
     `  ${pad(c, 8)} ${pad(`${w}×${h}`, 12)} ${pad(row.openPct.toFixed(1), 8)} ` +
-      `${pad(row.streetOpenPct.toFixed(1), 14)} ${pad(row.streetReachPct.toFixed(1), 19)} ` +
+      `${pad(row.alleyKeptPct.toFixed(1), 14)} ${pad(row.falseOpenPct.toFixed(2), 13)} ` +
+      `${pad(row.streetReachPct.toFixed(1), 12)} ` +
       `${pad(row.bitKb.toFixed(0), 9)} ${pad(row.gzKb.toFixed(0), 7)} ${deriveMs.toFixed(0)}`,
   );
 }
 
-console.log('\n  street reachable % is the D-027 measurement: of the town\'s own street');
-console.log('  centrelines, how many can a runner actually get to from the arena.');
+console.log(`\n  alleys kept % — of the ${narrowN.toLocaleString()} street points in a corridor ≤ 3 m wide,`);
+console.log('  how many the derived raster still calls open. This is D-027\'s quantity.');
+console.log('  false-open % — where the raster says open and the vector model says wall. It');
+console.log('  RISES as the grid coarsens, because a coarse grid steps over thin barriers');
+console.log('  entirely, and it is why "reachable %" alone flatters a bad resolution.');
 console.log(
-  `  The vector model reaches ${((streetOpenVec / streetN) * 100).toFixed(1)}% open; ` +
-    'anything a raster loses below that, it lost to its own resolution.',
+  `  open % barely moves with resolution because area converges and topology does not —` +
+    `\n  which is the whole reason D-027 was invisible to an area measurement.`,
 );
 
 // ---------------------------------------------------------------------------
