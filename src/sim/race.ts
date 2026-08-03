@@ -212,7 +212,16 @@ export class Race {
     // --- speed ------------------------------------------------------------
     // Base pace for an elite orienteer on good going, before terrain and
     // physiology. Calibrated against real winning times in athlete.ts.
-    const BASE_MS = 4.6;
+    /**
+ * How finely a step is swept for obstacles, metres.
+ *
+ * Under the narrowest collider either venue has — Krumlov's railings are
+ * 0.10 m of drawn steel and 0.60 m of collider — so no barrier can fall
+ * between two samples. Three samples on the longest step a sprinter takes.
+ */
+const SWEEP_M = 0.2;
+
+const BASE_MS = 4.6;
     const terrainMul = SPEED_BY_RUNNABILITY[here.runnability] ?? 0.5;
 
     // Gradient. Uphill costs sharply, downhill helps only a little and then
@@ -250,6 +259,31 @@ export class Race {
     const blocked = (x: number, z: number) =>
       this.terrain.sample(x, z).runnability === Runnability.Impassable;
 
+    /**
+     * Is the *path* from here to there blocked, not merely its far end?
+     *
+     * Testing the destination is what made a barrier thinner than one step
+     * crossable, and the vector model in `src/world/townModel.ts` has plenty of
+     * those: a railing's collider is 0.60 m across and a sprinter on a road
+     * moves 0.56 m in a 0.1 s frame. Worse, it was crossable *asymmetrically* —
+     * `check-passable` found a 142 m² pocket in Krumlov you could step into off
+     * fast ground and not step out of through Green2, because the step you
+     * leave with is shorter than the one you arrived on. A trap made of nothing
+     * but arithmetic.
+     *
+     * Sampled every `SWEEP_M`, which is under the narrowest collider in either
+     * venue, so nothing thinner than a step can be jumped and the test is
+     * symmetric: a gap you can enter by is a gap you can leave by.
+     */
+    const pathBlocked = (x: number, z: number, mx: number, mz: number): boolean => {
+      const steps = Math.max(1, Math.ceil(Math.hypot(mx, mz) / SWEEP_M));
+      for (let i = 1; i <= steps; i++) {
+        const t = i / steps;
+        if (blocked(x + mx * t, z + mz * t)) return true;
+      }
+      return false;
+    };
+
     // Impassable ground blocks. In sprint this is a rule, not a suggestion —
     // crossing an olive or a wall is a disqualification offence.
     //
@@ -258,16 +292,16 @@ export class Race {
     // which is both unplayable and wrong: a runner meeting an uncrossable wall
     // follows it. Resolving each axis separately gives that for free, and it is
     // what makes Krumlov's walls readable as geometry rather than as glue.
-    if (!blocked(a.position.x + dx, a.position.z + dz)) {
+    if (!pathBlocked(a.position.x, a.position.z, dx, dz)) {
       a.position.x += dx;
       a.position.z += dz;
     } else {
       let slid = false;
-      if (!blocked(a.position.x + dx, a.position.z)) {
+      if (!pathBlocked(a.position.x, a.position.z, dx, 0)) {
         a.position.x += dx;
         slid = true;
       }
-      if (!blocked(a.position.x, a.position.z + dz)) {
+      if (!pathBlocked(a.position.x, a.position.z, 0, dz)) {
         a.position.z += dz;
         slid = true;
       }

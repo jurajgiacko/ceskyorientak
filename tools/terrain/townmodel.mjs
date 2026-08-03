@@ -112,6 +112,17 @@ const CELL_M = 12;
 /** Half-width floor for a bridge carriageway, metres. See `DECK_HALF_MIN_M`. */
 const DECK_HALF_MIN_M = 1.4;
 
+/**
+ * Half a cell's diagonal, in cells.
+ *
+ * The floor a thin feature is widened to when it is drawn into the raster.
+ * Half a cell is not enough and the arithmetic says why: a barrier running at
+ * 45° across a 1 m lattice passes 0.71 m from the cell centres it goes between,
+ * so a 0.5 m band draws it as dots. Measured — 0.5 m leaves 2.8 % of the
+ * venue's uncrossable barrier length off the map, 0.71 m leaves 0.4 %.
+ */
+const CELL_DIAGONAL_HALF = Math.SQRT1_2;
+
 /** Runnability.Impassable — src/core/types.ts. */
 const IMPASSABLE = 10;
 
@@ -380,12 +391,13 @@ export function colliders(model) {
     }
   }
 
-  const hitSegs = (grid, data, x, z) => {
+  const hitSegs = (grid, data, x, z, minHalf = 0) => {
     const list = grid.at(x, z);
     if (!list) return false;
     for (const i of list) {
       const s = data[i];
-      if (segDist2(s[0], s[1], s[2], s[3], x, z) <= s[4] * s[4]) return true;
+      const h = s[4] > minHalf ? s[4] : minHalf;
+      if (segDist2(s[0], s[1], s[2], s[3], x, z) <= h * h) return true;
     }
     return false;
   };
@@ -420,8 +432,52 @@ export function colliders(model) {
     return inBarrier(x, z) || inWater(x, z);
   };
 
+  /**
+   * Does anything solid fall *within* this cell, rather than exactly on its
+   * centre?
+   *
+   * The raster is a 1 m lattice and a railing's collider is 0.6 m across, so
+   * sampling centres turns a diagonal fence into a dotted line: 4.4 % of the
+   * venue's uncrossable barrier length stopped the athlete without appearing on
+   * the map, which is the ISSprOM 515/518 unfairness D-002 exists to prevent.
+   * A cell is impassable if the barrier crosses it anywhere, which is what the
+   * old stamp's line rasteriser did and the one thing it was right about.
+   */
+  const blockedInCell = (x, z, halfCell) => {
+    if (inBuilding(x, z)) return true;
+    if (onDeck(x, z)) return false;
+    if (hitSegs(segGrid, segs, x, z, halfCell)) return true;
+    if (hitSegs(wcGrid, wcSegs, x, z, halfCell)) return true;
+    return inWater(x, z);
+  };
+  void blockedInCell;
+
+  /**
+   * The raster's view: a feature narrower than a cell is drawn one cell wide.
+   *
+   * A wall is 0.95 m of collider and lands on the lattice as a line. A railing
+   * is 0.60 m and lands as dots — 4.4 % of the venue's uncrossable barrier
+   * length stopped the athlete without appearing on the map, which is exactly
+   * the unfairness ISSprOM 515/518 exists to prevent and D-002 to structure.
+   *
+   * So thin features, and only thin features, are widened to the lattice they
+   * have to be drawn on. Everything already wider is untouched, which matters
+   * more than it sounds: widening *every* barrier by half a cell takes a 2.5 m
+   * alley down to 0.9 m, and the course generator — which reads this raster —
+   * responded by producing a course with five legs that could not be run.
+   */
+  const drawnInCell = (x, z, minHalf) => {
+    if (inBuilding(x, z)) return true;
+    if (onDeck(x, z)) return false;
+    if (hitSegs(segGrid, segs, x, z, minHalf)) return true;
+    if (hitSegs(wcGrid, wcSegs, x, z, minHalf)) return true;
+    return inWater(x, z);
+  };
+
   return {
     blockedAt,
+    blockedInCell,
+    drawnInCell,
     inBuilding,
     inBarrier,
     inWater,
@@ -457,6 +513,10 @@ export function colliders(model) {
  *    0. 19 674 m², 70.6 % of it within 2 m of something solid: stamp dilation
  *    and cell quantisation rather than a feature.
  *
+ * The band is the collider's own, floored at half a cell so that a feature
+ * narrower than the lattice is still drawn as a line on it. Collision itself is
+ * the model and is not widened by anything.
+ *
  * A cell freed this way needs a *speed* class, and the model does not carry
  * one — it describes edges, not surfaces. It takes the nearest non-impassable
  * class in the raster itself, breadth-first, which for a dilation halo is the
@@ -483,7 +543,7 @@ function deriveRaster(dataDir, col, playableR) {
       const x = originX + i * resM;
       if (!inPlay(x, z)) continue;
       const k = j * width + i;
-      const solid = col.blockedAt(x, z);
+      const solid = col.drawnInCell(x, z, resM * CELL_DIAGONAL_HALF);
       if (solid && r[k] !== IMPASSABLE) {
         r[k] = IMPASSABLE;
         sealed++;
@@ -541,7 +601,7 @@ function deriveRaster(dataDir, col, playableR) {
     for (let i = 0; i < width; i++) {
       const x = originX + i * resM;
       if (!inPlay(x, z)) continue;
-      if ((r[j * width + i] === IMPASSABLE) !== col.blockedAt(x, z)) residual++;
+      if ((r[j * width + i] === IMPASSABLE) !== col.drawnInCell(x, z, resM * CELL_DIAGONAL_HALF)) residual++;
     }
   }
 
