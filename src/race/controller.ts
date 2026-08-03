@@ -236,6 +236,9 @@ export class RaceController {
     });
     this.course = set.course;
     this.setup_ = set;
+    // The detour probe's scratch is a few megabytes over the venue mask and is
+    // only ever wanted while the course is being set. See `routeWithinM`.
+    this.terrain.releaseProbe();
 
     this.race = new Race({
       course: this.course,

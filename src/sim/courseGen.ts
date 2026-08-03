@@ -110,6 +110,24 @@ export interface CourseTerrain {
    * `ForestScene` has no `blockedAt`, so the whole question is empty there.
    */
   inWaterAt?(x: number, z: number): boolean;
+  /**
+   * Can the athlete get from `a` to `b` in `capM` metres? **D-037.**
+   *
+   * The general form of what `inWaterAt` catches one case of: a leg is
+   * unplayable when its ends are close and the way between them is long, and
+   * what is in the way does not matter. Measured on the four sampled Krumlov
+   * seeds after the water test landed, the legs still over the limit were
+   * blocked by a *building* (a straight line 74 % inside one, 999 m round) and
+   * by four metres of *garden wall* (a line 93 % open, 652 m round) — neither
+   * of which sampling the straight line can price.
+   *
+   * Expensive relative to everything else here, so `pickNextControl` asks it
+   * about the **best** candidate rather than about all ninety, in the same
+   * shape as `pickOpenSite`'s `verify`. Optional because a synthetic terrain in
+   * a harness has no lattice to search; absent, the offline filter in
+   * `tools/sim/pick-course.mjs` is the whole answer.
+   */
+  routeWithinM?(a: World2, b: World2, capM: number): boolean;
 }
 
 /** Target shape per discipline. Winning times are the IOF-specified quantity. */
@@ -811,8 +829,63 @@ function countCrossings(from: World2, to: World2, placed: World2[]): number {
  * repeated direction, then scores the survivors on how good a control site they
  * are and how interesting the leg to them is.
  */
+/**
+ * Longest straight line the load-time detour probe is run on, metres.
+ *
+ * The probe explores everything within `DETOUR_CAP × straight` of the start, so
+ * its cost grows with the *square* of the leg. Legs are screened up to 125 m,
+ * which bounds one probe at a 500 m radius — a couple of milliseconds on the
+ * 1 m mask — and leaves the long legs to the offline filter.
+ *
+ * That is not only a budget, it is where the fault lives. A leg is a fault when
+ * its ends are near and the way round is far, and every instance measured in
+ * this venue had a straight line of **50 to 92 m**: 58 m in the course the
+ * client played, 50 m in its second fault, 70, 72 and 92 m in the sampled
+ * seeds. A 300 m leg with a 3× detour is 900 m of running, which is a bad leg;
+ * a 60 m leg with a 3× detour is what makes a player think the game is broken.
+ */
+const DETOUR_PROBE_MAX_M = 125;
+
+/**
+ * How far round the load-time probe will let a leg go, as a multiple of the
+ * straight line.
+ *
+ * Deliberately looser than the 3.0× that `tools/ci/check-passable.mjs` asserts,
+ * and for a measurement reason rather than a sporting one: the probe is
+ * four-connected, so the distance it counts is Manhattan and overstates a real
+ * route by up to √2. 4.0 Manhattan is about 2.8 true, so nothing this rejects
+ * can be inside the gate's limit — the screen is conservative in the direction
+ * that matters. It is meant to stop the generator handing the picker courses
+ * with 10× legs in them, not to replace the picker.
+ */
+const DETOUR_PROBE_CAP = 4;
+
+/** How many of the best candidates the detour probe will look at. */
+const DETOUR_PROBE_TRIES = 5;
+
 function pickNextControl(o: PickOptions): World2 | null {
-  let best: { p: World2; score: number } | null = null;
+  /**
+   * The best few candidates rather than the single best.
+   *
+   * Kept as a shortlist because the detour probe below is too expensive to run
+   * on all ninety and a candidate it rejects has to be replaceable — the same
+   * shape as the `verify` band in `pickOpenSite`. Five deep: measured over the
+   * sampled seeds, a rejected best candidate is almost always replaced by the
+   * runner-up, and a leg where five in a row are laps of the town is a leg the
+   * terrain has genuinely refused.
+   */
+  const shortlist: { p: World2; score: number }[] = [];
+  const remember = (p: World2, score: number): void => {
+    if (shortlist.length < DETOUR_PROBE_TRIES) {
+      shortlist.push({ p, score });
+    } else {
+      let worst = 0;
+      for (let i = 1; i < shortlist.length; i++) {
+        if (shortlist[i]!.score < shortlist[worst]!.score) worst = i;
+      }
+      if (score > shortlist[worst]!.score) shortlist[worst] = { p, score };
+    }
+  };
 
   for (let attempt = 0; attempt < 90; attempt++) {
     // Turn away from the incoming direction. A change of at least ~40° keeps
@@ -947,10 +1020,48 @@ function pickNextControl(o: PickOptions): World2 | null {
       climbPenalty * 1.15 -
       crossings * 0.9 +
       o.rng.next() * 0.15;
-    if (!best || score > best.score) best = { p: sited, score };
+    remember(sited, score);
   }
 
-  return best?.p ?? null;
+  if (!shortlist.length) return null;
+  shortlist.sort((a, b) => b.score - a.score);
+
+  /**
+   * The last test, and the only one that searches rather than samples.
+   *
+   * Run here, on the ranked shortlist, because it is two or three orders of
+   * magnitude more expensive than anything in the loop above and because it
+   * only ever *rejects* — nothing about the ordering depends on it. Note that
+   * it consumes no RNG: the stream in this function is what makes one seed one
+   * course on every tier (`FieldTerrain.rulesHeightAt`), and a probe drawing
+   * from it would diverge two phones on the first blocked leg.
+   */
+  if (o.terrain.routeWithinM) {
+    for (const c of shortlist) {
+      const straight = dist2(o.from, c.p);
+      if (straight > DETOUR_PROBE_MAX_M) return c.p;
+      if (!o.terrain.routeWithinM(o.from, c.p, straight * DETOUR_PROBE_CAP)) continue;
+      // The run-in is the one leg that is never a candidate; see `runInTo`.
+      if (o.runInTo) {
+        const home = dist2(c.p, o.runInTo);
+        if (
+          home <= DETOUR_PROBE_MAX_M &&
+          !o.terrain.routeWithinM(c.p, o.runInTo, home * DETOUR_PROBE_CAP)
+        ) {
+          continue;
+        }
+      }
+      return c.p;
+    }
+    // Every candidate on the shortlist is a lap of the venue. Returning the
+    // best of them anyway is deliberate: a leg is better than no leg, the
+    // course would otherwise end here — `generateCourse` breaks out of its loop
+    // on a null — and the offline filter in tools/sim/pick-course.mjs will
+    // refuse the whole course rather than ship it.
+    return shortlist[0]!.p;
+  }
+
+  return shortlist[0]!.p;
 }
 
 /**

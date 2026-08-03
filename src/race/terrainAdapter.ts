@@ -549,6 +549,112 @@ export class FieldTerrain implements CourseTerrain, RaceTerrain {
     return { m2: seen.size * cellM2, sealed: true };
   }
 
+  /**
+   * Scratch for `routeWithinM`, allocated on first use and dropped by
+   * `releaseProbe` once the course is set.
+   *
+   * One `Int32Array` over the mask holding `generation << 16 | distance`, so a
+   * probe needs no clearing pass — the generation makes a stale entry read as
+   * unvisited. Distance is in cells and the cap keeps it under 2¹⁶ by a wide
+   * margin. Two arrays (a stamp and a distance) would be a third more memory
+   * for no gain; a `Map` would be an order of magnitude slower in the inner
+   * loop, which is the whole cost of this.
+   */
+  private probeSeen: Int32Array | null = null;
+  private probeQueue: Int32Array | null = null;
+  private probeGen = 0;
+
+  /**
+   * Can the athlete get from `a` to `b` in `capM` metres of running?
+   *
+   * **The general form of the fault behind D-037**, and the reason
+   * `CourseTerrain.inWaterAt` is only half a fix. A leg is unplayable when its
+   * two ends are close together and the way between them is long, and *what* is
+   * in the way is beside the point: it was the Vltava in the course the client
+   * played, and it is a building block or a garden wall in the ones the gate
+   * caught next. Sampling the straight line can see that something is in the
+   * way; only a search can see how far round it is.
+   *
+   * Breadth-first over the same 1 m mask and the same edge tests
+   * `buildReachability` built, so a route this finds is a route the athlete can
+   * actually run — the edge rule is what stops it walking through Krumlov's
+   * railings.
+   *
+   * **Four-connected, so the distance it returns is Manhattan** and overstates
+   * a real route by up to √2. That is why the caller's cap is generous: this is
+   * a screen against the gross fault, not the measurement. The measurement is
+   * `makeLegRouter` in tools/ci/check-passable.mjs, which walks eight
+   * neighbours at the athlete's own class speeds and costs a Dijkstra per leg —
+   * affordable in a gate, not at load time on a phone.
+   *
+   * Returns **true when it cannot tell**: no mask, an end off the component, or
+   * the visit cap reached. A screen that guesses is worse than no screen, and
+   * the offline filter is behind it either way.
+   */
+  routeWithinM(a: { x: number; z: number }, b: { x: number; z: number }, capM: number): boolean {
+    const m = this.mask;
+    if (!m) return true;
+    const w = this.maskW;
+    const h = this.maskH;
+    const from = this.cellOf(a);
+    const goal = this.cellOf(b);
+    if (from < 0 || goal < 0) return true;
+    if (from === goal) return true;
+
+    const capCells = Math.ceil(capM / this.maskStep);
+    /**
+     * Ceiling on cells visited, so one probe can never become the load time.
+     *
+     * A failing probe explores everything within `capCells` of the start, which
+     * for the 90 m legs this is aimed at is a diamond of about 65 000 open
+     * cells in this town — a couple of milliseconds. The cap is four times that
+     * and exists for the case nobody has thought of, not for the expected one.
+     */
+    const visitCap = 250_000;
+
+    if (!this.probeSeen) this.probeSeen = new Int32Array(w * h);
+    if (!this.probeQueue) this.probeQueue = new Int32Array(visitCap);
+    const seen = this.probeSeen;
+    const queue = this.probeQueue;
+    const gen = ++this.probeGen << 16;
+
+    let head = 0;
+    let tail = 0;
+    seen[from] = gen;
+    queue[tail++] = from;
+    while (head < tail) {
+      const k = queue[head++]!;
+      const d = (seen[k]! & 0xffff) + 1;
+      if (d > capCells) return false;
+      const x = k % w;
+      const y = (k / w) | 0;
+      // Inlined rather than a closure: this is the only hot loop the course
+      // setter adds, and a per-neighbour allocation would be four per cell.
+      for (let n = 0; n < 4; n++) {
+        let nk = -1;
+        if (n === 0) nk = x > 0 && this.eastOk?.[k - 1] ? k - 1 : -1;
+        else if (n === 1) nk = x < w - 1 && this.eastOk?.[k] ? k + 1 : -1;
+        else if (n === 2) nk = y > 0 && this.southOk?.[k - w] ? k - w : -1;
+        else nk = y < h - 1 && this.southOk?.[k] ? k + w : -1;
+        if (nk < 0 || m[nk] !== 1) continue;
+        if ((seen[nk]! & ~0xffff) === gen) continue;
+        if (nk === goal) return true;
+        seen[nk] = gen | d;
+        if (tail >= visitCap) return true;
+        queue[tail++] = nk;
+      }
+    }
+    // The frontier ran out inside the budget: there is no way there at all
+    // within `capM`, which for a leg of a few tens of metres is the fault.
+    return false;
+  }
+
+  /** Drop the probe scratch once the course is set. See `routeWithinM`. */
+  releaseProbe(): void {
+    this.probeSeen = null;
+    this.probeQueue = null;
+  }
+
   /** Is this point in the arena's connected component? True before the fill. */
   reachableAt(x: number, z: number): boolean {
     const m = this.mask;

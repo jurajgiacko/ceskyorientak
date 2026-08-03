@@ -1409,6 +1409,34 @@ export function detourFaults(routed, limits = LIMITS) {
   return out;
 }
 
+/**
+ * Why a point is out of bounds, named rather than as a boolean.
+ *
+ * `blockedAtOf` answers yes or no, which is what the athlete needs and useless
+ * for diagnosing a course fault: "the leg is 10× its straight line" and "there
+ * is a river in the way" are different sentences, and only the second one tells
+ * anybody what to change. Used by tools/sim/leg-diag.mjs.
+ */
+export function probeBlockers(venue, bin) {
+  const { rMeta, r, town } = loadVenue(venue, bin);
+  const col = new Colliders(town);
+  const wb = new WaterBounds(town);
+  const rasterAt = (x, z) => {
+    const i = Math.round((x - rMeta.originX) / rMeta.resM);
+    const j = Math.round((z - rMeta.originZ) / rMeta.resM);
+    if (i < 0 || j < 0 || i >= rMeta.width || j >= rMeta.height) return IMPASSABLE;
+    return r[j * rMeta.width + i];
+  };
+  return (x, z) => {
+    const out = [];
+    if (col.inBuilding(x, z)) out.push('building');
+    if (col.inBarrier(x, z) && !wb.onDeck(x, z)) out.push('barrier');
+    if (wb.blocks(x, z)) out.push('water');
+    if (rasterAt(x, z) === IMPASSABLE) out.push('raster');
+    return out;
+  };
+}
+
 /** Percentiles of the per-leg detour ratio, for reporting the whole distribution. */
 export function detourStats(legRuns) {
   const rs = [];
