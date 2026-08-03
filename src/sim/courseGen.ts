@@ -1053,12 +1053,19 @@ function pickNextControl(o: PickOptions): World2 | null {
       }
       return c.p;
     }
-    // Every candidate on the shortlist is a lap of the venue. Returning the
-    // best of them anyway is deliberate: a leg is better than no leg, the
-    // course would otherwise end here — `generateCourse` breaks out of its loop
-    // on a null — and the offline filter in tools/sim/pick-course.mjs will
-    // refuse the whole course rather than ship it.
-    return shortlist[0]!.p;
+    // Every one of the best five is a lap of the venue, on a leg short enough
+    // that we know it. **Refuse, rather than ship the best of a bad set.**
+    //
+    // This is the only backtracking the generator has. It places controls
+    // greedily and cannot revisit an earlier one, so a leg where every
+    // candidate is across the obstacle usually means the *previous* control was
+    // the mistake — and measured on seed 28803419, the fault survived the probe
+    // entirely for exactly that reason: all five candidates failed and the best
+    // of them was returned unchanged. Returning null ends the course here,
+    // `setCourse` shops for another seed, and a seed that had to be shopped
+    // away from is one `tools/sim/pick-course.mjs` disqualifies outright. So a
+    // bad seed becomes visibly bad instead of quietly producing a bad course.
+    return null;
   }
 
   return shortlist[0]!.p;
