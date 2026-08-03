@@ -338,8 +338,8 @@ one that can save the rest.
 
 1. **TownModel + colliders.** Vector, one source. Assert: drawn ≡ solid, everywhere. **Done —
    see below.**
-2. **Passable space + connectivity.** One component, asserted before any course exists.
-   Tier-independent by construction.
+2. **Passable space + connectivity.** Derived from the model, asserted before any course
+   exists, tier-independent by construction. **Done — see below.**
 3. **Street graph + course setting on it.** Detour ratio and start run-out known at
    generation time.
 4. **Dress the town** — shopfronts, arcades, furniture — with furniture doubling as control
@@ -414,6 +414,71 @@ controls, 1740 m, D 1.16, worst leg 1.9× — better than the 1.48 that was chos
 and still starting and finishing on Road. It is a *generated* course that happens
 to be good, not a chosen one; **phase 3 must re-run `pick-course.mjs` on the
 street graph**, which it was going to do anyway.
+
+### Answered: the space is shipped, and phase 1's colliders were not reaching the athlete
+
+**Phase 2 is done. D-039 has the whole record; this is what changes the plan.**
+
+`tools/terrain/passable.mjs` derives the passable space from the shipped
+`townmodel.bin` at **0.5 m**, labels its components over an 8-connected graph
+whose every edge is swept at `SWEEP_M`, and writes `passable.bin` — two
+bit-planes over 5 764 801 cells, 1407 kB raw, **224 kB gzip**, 1.41 MB resident
+against `runnability.bin`'s 2.56 MB. One artefact, a loader that takes no tier,
+and no second file to pick from.
+
+**The load-time budget, honoured literally and measured both ways.**
+`FieldTerrain.costMs` and `tools/perf/setup-cost.mjs` read the running game at
+the 4× throttle:
+
+| | before | after |
+|---|---|---|
+| reachability fill | 4450 ms | **0 ms** |
+| `bakedRaster` | 1452 ms | **1 ms** |
+| venue setup | **5902 ms** | **1 ms** |
+
+**The census**, over 144 ha: 111.5 ha open, 105.9 ha reachable — **95.0 %** — in
+645 components. 143 pockets over 6 m², **all sealed**; 0 porous, 0 grid
+artifacts, 0 traps. `check-passable` re-derives the file cell for cell (5 764 801
+cells, 0 differ) and enforces that census **before any course exists**, which is
+the one phase in that file that does not need a course to exist.
+
+**Three corrections to this plan, and the first one is why phase 1 was not yet
+finished.**
+
+- **§6 phase 2's own sentence could not be executed as written.** *"Derive the
+  passable space from `TownModel`"* presumes the model is what stops the
+  athlete. It was not: `Race.step` collided against `FieldTerrain.runnabilityAt`,
+  the model **or** the 1 m class raster, and that raster is the model drawn at
+  ISSprOM line widths — anything narrower than a cell widened to half a cell
+  diagonal. `tools/terrain/quantisation.mjs` measured the bill on the town's own
+  62 741 paved centreline points: the median ≤3 m alley ran **1.80 m against the
+  model and 1.52 m as the athlete met it**, and **12.8 % of alley centreline was
+  ground you could not stand on**. D-027 is this fault at 4 m and 49 %. It
+  survived at 1 m because every measure applied to it was an *area*, which phase
+  0 had already written down could never catch it. Fixed by
+  `FieldTerrain.blockedAt`, and it is cheaper as well as exact.
+
+- **"One connected component" is not achievable and should not be.** Krumlov has
+  5.6 ha of genuinely sealed ground — the zámecká zahrada behind its wall, block
+  interiors reached through `tunnel=building_passage` arches. Sealing is what a
+  walled garden *is*. The assertion that means something is **no pocket anyone
+  can enter**, plus a ceiling on the largest sealed one so the severed-bridge
+  failure cannot hide inside the exemption.
+
+- **A lattice cannot express every doorway, at any resolution.** Even 8-connected
+  and swept, the graph split **10 components, 282 m²**, off the arena's: a clear
+  line exists between two points inside adjacent cells while the line between
+  their *centres* is blocked, so no edge can join them. Halving the cell shrinks
+  each instance and makes new ones at the new scale — phase 0's resolution table
+  has no column for it, because it measured corridors and not connectivity. The
+  derivation reconciles to a fixed point with the same entry probe the census
+  uses: **where the lattice and the athlete disagree, the athlete wins.**
+
+**What it cost.** +224 kB gzip on the wire; device fetch 17.4 MB of 25, now that
+`check-payload` counts `townmodel.*`, `passable.*` and `townscape.json` at all —
+phase 1 shipped 134 kB nobody was counting. And the course re-rolled again for
+D-029's reason, 13 controls/1740 m to **17/1788 m**; still a generated course
+rather than a chosen one, and still phase 3's to re-pick.
 
 **Do not re-enable the menu entry until phase 5 passes.** That is the client's sequencing and
 it is the correct one: every Krumlov fault so far reached him because something shipped on a

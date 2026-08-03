@@ -1805,3 +1805,225 @@ its 90th-percentile control 10.4 m off a runnable way against an 8 m limit.
 which is D-037's own distinction applied to the other sprint measure it fits:
 the samples are the *generator's* output space and nobody plays them, and the
 median across them is 2.5 m. The per-seed maximum stays a per-seed failure.
+
+---
+
+## D-039 — Phase 2: the passable space, and the 1 m drawing the athlete was colliding with
+
+PLAN-KRUMLOV-V2 §2 rule 4: *"Passable space is derived, then asserted connected,
+before any course exists. Not flood-filled afterwards to see what broke."*
+
+That is what phase 2 shipped. But the first thing it found is that the sentence
+could not be executed as written, because the model was not what stopped the
+athlete — and that is the finding worth reading first.
+
+### The thing phase 1 built and the athlete never met
+
+D-038 made `SprintScene.blockedAt` one call into `TownModel`, and it is. But
+`Race.step` does not call it. Its own `blocked` was
+
+```ts
+(x, z) => this.terrain.sample(x, z).runnability === Runnability.Impassable
+```
+
+and `FieldTerrain.runnabilityAt` was `blocked?.(x, z) ? Impassable : <the 1 m
+class raster, nearest cell>`. So the athlete's bound was the model **or** the
+raster, and the raster is the model *drawn at map line widths*: `townmodel.mjs`
+widens any feature narrower than the lattice out to half a cell diagonal so a
+0.10 m railing appears as a line rather than as dots. D-038 recorded that
+widening and called it a real asymmetry. It did not measure it.
+
+A derived raster cannot *disagree* with its source — D-038's point, and it
+holds. It is a weaker property than being the same shape, and the difference is
+measured in alley widths. `tools/terrain/quantisation.mjs` measures it, on the
+town's own **62 741 paved centreline points**, casting perpendicular to each
+centreline, which is what alley width means:
+
+| | vector model | as the athlete met it |
+|---|---|---|
+| median corridor, whole network | 19.64 m | 19.14 m |
+| median **≤3 m alley** | **1.80 m** | **1.52 m** |
+| alley centreline you cannot stand on | 0 % | **12.8 %** (140 of 1096 points) |
+| whole network, centreline you cannot stand on | 0 % | 1.1 % |
+
+**D-027 is this fault at 4 m and 49 % of the centre. It was still here at 1 m
+and 12.8 %.** It survived because every measure anyone had applied to it was an
+*area* — reachable fraction, open hectares — and phase 0 had already written
+down that an area measurement can never catch it: "Open *area* is 77.0 % at
+every resolution tested, which is precisely why an area measurement could never
+have caught D-027." Nobody had measured the alleys.
+
+The fix is `FieldTerrain.blockedAt`, and `Race.step` now asks it. Inside
+`authoritativeR` — `TownModel.playableR`, ±600 m — the vector model is the whole
+answer and the class raster decides nothing. Outside it the raster still
+answers, because the heightfield runs 200 m past the model and nothing else out
+there knows where the Vltava is. **The forest is untouched by construction:**
+with no model, `blockedAt` is the raster, which is what it has always been and
+is right there — Lachovice has no vector geometry and its lakes and cliffs live
+in the class raster.
+
+It is also *cheaper*. `pathBlocked` sweeps a step every 0.20 m and each sample
+was running `sample()`, which computes a central-difference gradient — four
+bilinear height lookups — and throws all of it away. It is now one 217 ns model
+query.
+
+One consequence had to be handled rather than discovered. `Impassable` carries a
+speed of zero, so the widening halo — 0.24 m either side of a wall, 0.41 m
+either side of a railing, about 1.5 ha of Krumlov — became ground the athlete
+can walk into and never leave, frozen. `runnabilityAt` gives those cells the
+nearest real class instead, which is the rule `deriveRaster` already applies
+offline to the cells it frees.
+
+### The artefact
+
+`tools/terrain/passable.mjs` reads the **shipped** `townmodel.bin` and writes
+`public/data/krumlov/passable.bin`: two bit-planes — open, and the arena's
+component — at **0.5 m** over the playable square, 2401 × 2401 = 5 764 801 cells,
+1407 kB raw and **224 kB gzipped**.
+
+**Why 0.5 m**, on phase 0's own evidence and one argument phase 0 did not make:
+
+| cell | ≤3 m alleys kept | false-open | 1-bit RAM |
+|---|---|---|---|
+| 4 m | 62.8 % | 1.30 % | 11 kB |
+| 1 m | 89.2 % | 0.70 % | 176 kB |
+| **0.5 m** | **93.9 %** | **0.51 %** | **704 kB** |
+| 0.25 m | 96.0 % | 0.43 % | 2814 kB |
+
+0.25 m buys two points of alley for four times the memory, against a 96.1 %
+ceiling the vector model sets anyway. The argument phase 0 did not make is the
+decisive one: **the game was flooding at 1 m and the gate at 0.5 m.** A gate
+finer than the thing it judges is exactly D-027's shape — the gate read
+`runnability.bin` and the phone read `runnability-low.bin`. Shipping the space
+makes them the same array.
+
+**What it costs.** 1.41 MB resident for both planes, against `runnability.bin`'s
+2.56 MB, and it *removes* roughly 25 MB of transient allocation the 1 m fill
+used to make (six 2.56 M-cell arrays and a 10 MB `Int32Array` queue). On the
+wire, 224 kB gzip inside a 25 MB device budget.
+
+**The graph is the athlete's, not the lattice's.** 8-connected, and every edge
+swept at `SWEEP_M` = 0.20 m, which is `Race.step`'s own step test precomputed.
+4-connectivity calls two diagonally adjacent open cells disconnected when their
+shared orthogonal neighbours are blocked — a 0.5 m diagonal doorway the athlete
+walks straight through, which `check-passable` had been reporting as "grid
+artifacts" and excusing.
+
+### The census
+
+Over the 144 ha playable square: **111.5 ha open, 105.9 ha reachable from the
+arena — 95.0 %**, in 645 components.
+
+| | |
+|---|---|
+| pockets over 6 m² that are not the arena's | **143** |
+| sealed — the athlete cannot get in either | **143** |
+| porous · grid artifacts · traps | **0 · 0 · 0** |
+| largest sealed pocket | 9319 m² |
+| components the lattice split and the entry probe put back | 10, 282 m² |
+
+The vocabulary is `check-passable`'s and is deliberately not reinvented. Two of
+its four words are now **arithmetically** empty rather than merely unobserved,
+which is worth stating: a swept step is symmetric (D-038), so nothing enterable
+can fail to be escapable and there is no asymmetry left to make a trap out of;
+and the reconciliation below has already merged every grid artifact there was.
+The census still reports all four, for the day one appears.
+
+### The gate, and what it is allowed to assert
+
+`tools/ci/check-passable.mjs` gained a phase that runs **before any course
+exists** — every other phase in that file runs against a course, and this one
+would fail on a Krumlov that had never had a control sited in it.
+
+It re-derives `passable.bin` from the shipped model and compares it **cell for
+cell**: 5 764 801 cells, both planes, **0 differ**. Not sampled — a scatter of
+probes is how every fault in §1's table stayed hidden, each small in area and
+total in consequence.
+
+Then it enforces the census: traps and porous pockets fail at any size, and so
+do grid artifacts. In the running game it asserts that every tier holds the
+**identical** passable space, fingerprinted over 90 000 samples of the object the
+game is using rather than of the manifest; and that opening the venue stays
+under a 250 ms tripwire.
+
+### Load time, measured before and after
+
+`FieldTerrain.costMs` records what each venue-wide pass costs and
+`tools/perf/setup-cost.mjs` reads it out of the running game at
+`Emulation.setCPUThrottlingRate: 4` — this project's Android proxy, the throttle
+every timing here is stated against.
+
+| | before | after |
+|---|---|---|
+| reachability fill | 4450 ms | **0 ms** |
+| `bakedRaster` | 1452 ms | **1 ms** |
+| **venue setup, total** | **5902 ms** | **1 ms** |
+
+Phase 0 predicted 2.6 s and 2.9 s for these two and was right.
+`buildReachability` now reads `reachableFraction` out of the file.
+`bakedRaster` is a copy of the class raster plus the eight footprints
+`landmarks.ts` registers by hand — 94 m², punched in from their own bounding
+boxes, bounded by the structures rather than by the venue.
+
+The routing lattice the autopilot needs is the one venue-wide sweep left, and it
+is built on first use rather than at load: a test hook may not spend a player's
+loading time.
+
+### Three contradictions with the plan
+
+**1. Phase 2's own sentence was not executable.** *"Derive the passable space
+from `TownModel`"* presumes the model is what stops the athlete. It was not, and
+phase 2's first commit had to make it so. This is the same shape as D-038's
+second contradiction — the raster kept a second opinion — one layer further
+down, and it means phase 1's headline property was true of `SprintScene` and not
+of the race. **Anything that asserts a property of `blockedAt` should say whose
+`blockedAt` it means.**
+
+**2. "Assert one connected component" is not achievable and should not be.**
+Krumlov has 143 sealed pockets over 6 m², 5.6 ha of them, and they are the town:
+the Baroque zámecká zahrada behind its garden wall, block interiors reached only
+through arches OSM maps as `tunnel=building_passage`. Sealing is what a walled
+garden *is*. The assertion that means something is **no pocket anyone can
+enter**, plus a ceiling on the largest sealed one so the severed-bridge failure
+(54 ha) cannot hide inside the exemption. The plan's phrasing already offered
+this alternative and the alternative is the whole of it.
+
+**3. A lattice cannot express every doorway, at any resolution — and this is not
+a resolution problem.** 8-connectivity with swept edges still split **10
+components, 282 m²**, off the arena's. The reason is structural: a component
+graph joins *cell centres*, and Krumlov has doorways where a clear line exists
+between two points inside adjacent cells while the line between their centres is
+blocked. Halving the cell shrinks each instance and creates new ones at the new
+scale; phase 0's resolution table has no column for it because it measured
+corridors, not connectivity. What is available is to let the continuous probe
+overrule the lattice: `derivePassable` reconciles to a fixed point with the same
+32-bearing entry probe the census uses, and those 10 components go back where
+they belong. **Where the lattice and the athlete disagree, the athlete wins** —
+otherwise the shipped mask says unreachable about ground you can stand on, and
+the course generator refuses to site a control there for a reason that is not
+true.
+
+### Two smaller things found on the way
+
+**`bakedRaster` had been almost entirely redundant since phase 1.** It swept
+2.56 M cells at 1452 ms a load to discover 94 m² of hand-registered structure
+and 581 m² of model geometry that runs past the playable square — because
+D-038's `deriveRaster` had already written everything else into the class raster
+and clipped itself at ±600 m. `deriveRaster` now seals outside the square too
+(freeing stays inside it, or ZABAGED's water upstream of the town would be
+opened), and the sweep is gone.
+
+**`check-payload` was under-counting the device fetch.** `LOW_TIER_TERRAIN`
+never listed `townscape.json`, and phase 1 added `townmodel.*` without adding it
+either. With `passable.*` that would have been 1.5 MB of a 25 MB budget going
+unmeasured. Now counted: **17.4 MB of 25**.
+
+### And one thing that moved without being asked to
+
+`COURSE_SEED` is untouched and the course changed again, for D-029's reason:
+the generator's RNG is drawn inside geometry-dependent branches and the
+reachable set is now a 0.5 m 8-connected one rather than a 1 m 4-connected one.
+Krumlov went from 13 controls / 1740 m to **17 controls / 1788 m**. As in D-038
+this is a *generated* course that happens to be sound, not a chosen one, and
+**phase 3 must re-run `pick-course.mjs` on the street graph** — which it was
+always going to do.

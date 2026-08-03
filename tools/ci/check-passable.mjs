@@ -475,6 +475,19 @@ function loadVenue(venue, bin) {
   return { rMeta, r, town };
 }
 
+/**
+ * The lattice the venue's shipped passable space is on, or null if it has none.
+ *
+ * Read rather than assumed, so that the audit and the artefact cannot end up on
+ * different grids — which is the D-027 shape (the gate read one file, the phone
+ * read another) applied to a measurement instead of to a rule.
+ */
+function venuePassableRes(venue) {
+  const p = join(venueDir(venue), 'passable.json');
+  if (!existsSync(p)) return null;
+  return JSON.parse(readFileSync(p, 'utf8')).resM ?? null;
+}
+
 function pointInFlatRing(p, x, z) {
   let inside = false;
   const n = p.length / 2;
@@ -1919,7 +1932,19 @@ export function makeCourseAudit(venue, bin, opts = {}) {
   // lattice finer than a cell should ask the finer thing. See `makeLegRouter`.
   const blocked = blockedAtOf(col, wb, rasterAt, !town.model);
 
-  const step = 1;
+  /**
+   * The audit's lattice, metres.
+   *
+   * Was 1 m, "the resolution the runtime's own reachability fill uses" — and
+   * since phase 2 the runtime's own reachability is a **0.5 m** artefact, so
+   * the sentence now points at 0.5. It is not a free refinement: a lattice
+   * coarser than the alley it is measuring does not merely round the answer, it
+   * *lengthens* it, because the shortest chain of open cells through a 2.5 m
+   * passage is not the shortest path through the passage. D-037 recorded the
+   * same effect in the other direction at 2 m, where six unroutable legs came
+   * back routable.
+   */
+  const step = opts.stepM ?? (venuePassableRes(venue) ?? 1);
   const R = opts.radiusM ?? PLAYABLE_R;
   const w = Math.floor((2 * R) / step) + 1;
   const h = w;
