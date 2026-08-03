@@ -84,50 +84,6 @@ export interface CourseTerrain {
    * `FieldTerrain.pavedDistanceAt`.
    */
   pavedDistanceAt?(x: number, z: number): number;
-  /**
-   * Is (x, z) uncrossable water — ISSprOM 301, the Vltava — with no bridge
-   * carrying you over it?
-   *
-   * **The one thing `routeCost` structurally cannot see.** D-037. `routeCost`
-   * samples the straight line between two controls; a straight line across a
-   * river reports Impassable, `legInterest` scores the leg 0, and 0 is a
-   * *deduction* competing against the feature score and the RNG jitter rather
-   * than a refusal. Nothing anywhere told the generator how far round the fault
-   * was, and it cannot find out by sampling a line: the answer is 800 m away
-   * and off the line entirely.
-   *
-   * Water is separated out from the rest of `runnabilityAt`'s Impassable
-   * because the two mean opposite things to a course setter. A building in the
-   * way is the *best* leg a sprint can have — you pick a side, at speed, off
-   * the map, and `legInterest` rightly rewards it — because Krumlov's blocks
-   * are twenty to thirty metres across and either way round costs you seconds.
-   * A river in the way is not a route choice at all: this town has one channel
-   * with bridges hundreds of metres apart, so the leg has exactly one route and
-   * it is a lap of the town. Rejecting every blocked leg would forbid sprint
-   * orienteering; rejecting the ones blocked by water forbids only the fault.
-   *
-   * Optional, and absent in the forest — Lachovice has no drawn water and
-   * `ForestScene` has no `blockedAt`, so the whole question is empty there.
-   */
-  inWaterAt?(x: number, z: number): boolean;
-  /**
-   * Can the athlete get from `a` to `b` in `capM` metres? **D-037.**
-   *
-   * The general form of what `inWaterAt` catches one case of: a leg is
-   * unplayable when its ends are close and the way between them is long, and
-   * what is in the way does not matter. Measured on the four sampled Krumlov
-   * seeds after the water test landed, the legs still over the limit were
-   * blocked by a *building* (a straight line 74 % inside one, 999 m round) and
-   * by four metres of *garden wall* (a line 93 % open, 652 m round) — neither
-   * of which sampling the straight line can price.
-   *
-   * Expensive relative to everything else here, so `pickNextControl` asks it
-   * about the **best** candidate rather than about all ninety, in the same
-   * shape as `pickOpenSite`'s `verify`. Optional because a synthetic terrain in
-   * a harness has no lattice to search; absent, the offline filter in
-   * `tools/sim/pick-course.mjs` is the whole answer.
-   */
-  routeWithinM?(a: World2, b: World2, capM: number): boolean;
 }
 
 /** Target shape per discipline. Winning times are the IOF-specified quantity. */
@@ -627,9 +583,6 @@ export function generateCourse(o: GenerateOptions): Course {
       clearOf: { p: finish, m: finishClearanceM },
       // Leg 1 only: leave the arena, do not run back through it.
       ...(i === 0 ? { awayFrom: { p: finish, rad: FIRST_LEG_AWAY_RAD } } : {}),
-      // Last control only: the run-in is a leg too, and the only one that is
-      // never a candidate. See `PickOptions.runInTo`.
-      ...(i === targetLegs - 1 ? { runInTo: finish } : {}),
       // A floor, so an exhausted budget does not reject every candidate and
       // strand the course — but a floor proportional to the budget rather than
       // a flat 25 m, which on a sprint's 19 m allowance *is* the whole budget
@@ -735,56 +688,6 @@ interface PickOptions {
    * the first leg only — see `FIRST_LEG_AWAY_RAD`.
    */
   awayFrom?: { p: World2; rad: number };
-  /**
-   * Where the run-in goes, on the last control only.
-   *
-   * The finish is sited before the loop starts, so the leg from the last
-   * control to it is the one leg no candidate is ever scored on. Passing the
-   * finish here lets the last control be rejected for a run-in that crosses
-   * the river — see the water test in `pickNextControl`.
-   */
-  runInTo?: World2;
-}
-
-/**
- * How finely the water test below walks a leg, metres.
- *
- * The Vltava is about thirty metres across in Krumlov and its narrowest mill
- * race a few, so 2 m cannot step over the channel. It is deliberately not
- * `Spec.routeStepM`: that is a *cost* sample, where a missed cell shifts a
- * score, and this is a *rejection*, where a missed cell ships the bug.
- */
-const WATER_STEP_M = 2;
-
-/**
- * Does the straight line from `a` to `b` cross uncrossable water? **D-037.**
- *
- * The cheap half of the fix, and it is cheap on purpose. The expensive and
- * complete answer — route the leg and compare with the straight line — is what
- * `tools/ci/check-passable.mjs` and `tools/sim/pick-course.mjs` do offline, and
- * it costs a Dijkstra over a lattice of several hundred thousand cells per leg.
- * `generateCourse` runs at load time on a phone and considers ninety candidates
- * for each of fifteen legs, so it cannot have that. What it can have is the one
- * feature in this venue that turns a blocked leg into a lap of the town.
- *
- * That asymmetry is the point. A building blocks a leg for twenty metres and
- * the way round is twenty metres; a river blocks it for the length of the town.
- * `routeCost` cannot tell those apart, because both read Impassable along the
- * straight line and neither says how far round the way round is — and the way
- * round is not on the line to be sampled.
- *
- * `null` where the terrain does not answer, which is the forest, where there is
- * no drawn water and the question is empty.
- */
-function crossesWater(a: World2, b: World2, terrain: CourseTerrain): boolean {
-  if (!terrain.inWaterAt) return false;
-  const legM = dist2(a, b);
-  const steps = Math.max(2, Math.ceil(legM / WATER_STEP_M));
-  for (let i = 0; i <= steps; i++) {
-    const t = i / steps;
-    if (terrain.inWaterAt(a.x + (b.x - a.x) * t, a.z + (b.z - a.z) * t)) return true;
-  }
-  return false;
 }
 
 /** Perpendicular distance from `p` to the segment `a`–`b`, metres. */
@@ -829,75 +732,8 @@ function countCrossings(from: World2, to: World2, placed: World2[]): number {
  * repeated direction, then scores the survivors on how good a control site they
  * are and how interesting the leg to them is.
  */
-/**
- * Longest straight line the load-time detour probe is run on, metres.
- *
- * The probe explores everything within `DETOUR_CAP × straight` of the start, so
- * its cost grows with the *square* of the leg. Legs are screened up to 125 m,
- * which bounds one probe at a 500 m radius — a couple of milliseconds on the
- * 1 m mask — and leaves the long legs to the offline filter.
- *
- * That is not only a budget, it is where the fault lives. A leg is a fault when
- * its ends are near and the way round is far, and every instance measured in
- * this venue had a straight line of **50 to 92 m**: 58 m in the course the
- * client played, 50 m in its second fault, 70, 72 and 92 m in the sampled
- * seeds. A 300 m leg with a 3× detour is 900 m of running, which is a bad leg;
- * a 60 m leg with a 3× detour is what makes a player think the game is broken.
- */
-const DETOUR_PROBE_MAX_M = 125;
-
-/**
- * What a leg across uncrossable water costs itself in the candidate score.
- *
- * Larger than everything else in that score put together — feature 1.0 plus
- * interest 1.3 plus jitter 0.15, against penalties that only subtract — so a
- * wet candidate can never outscore a dry one and never survives in the
- * shortlist while a dry one exists. It is a preference rather than a rejection
- * for the reason set out at the call site: a rejection starves the pool and
- * ends the course early.
- */
-const WET_PENALTY = 100;
-
-/**
- * How far round the load-time probe will let a leg go, as a multiple of the
- * straight line.
- *
- * Deliberately looser than the 3.0× that `tools/ci/check-passable.mjs` asserts,
- * and for a measurement reason rather than a sporting one: the probe is
- * four-connected, so the distance it counts is Manhattan and overstates a real
- * route by up to √2. 4.0 Manhattan is about 2.8 true, so nothing this rejects
- * can be inside the gate's limit — the screen is conservative in the direction
- * that matters. It is meant to stop the generator handing the picker courses
- * with 10× legs in them, not to replace the picker.
- */
-const DETOUR_PROBE_CAP = 4;
-
-/** How many of the best candidates the detour probe will look at. */
-const DETOUR_PROBE_TRIES = 5;
-
 function pickNextControl(o: PickOptions): World2 | null {
-  /**
-   * The best few candidates rather than the single best.
-   *
-   * Kept as a shortlist because the detour probe below is too expensive to run
-   * on all ninety and a candidate it rejects has to be replaceable — the same
-   * shape as the `verify` band in `pickOpenSite`. Five deep: measured over the
-   * sampled seeds, a rejected best candidate is almost always replaced by the
-   * runner-up, and a leg where five in a row are laps of the town is a leg the
-   * terrain has genuinely refused.
-   */
-  const shortlist: { p: World2; score: number }[] = [];
-  const remember = (p: World2, score: number): void => {
-    if (shortlist.length < DETOUR_PROBE_TRIES) {
-      shortlist.push({ p, score });
-    } else {
-      let worst = 0;
-      for (let i = 1; i < shortlist.length; i++) {
-        if (shortlist[i]!.score < shortlist[worst]!.score) worst = i;
-      }
-      if (score > shortlist[worst]!.score) shortlist[worst] = { p, score };
-    }
-  };
+  let best: { p: World2; score: number } | null = null;
 
   for (let attempt = 0; attempt < 90; attempt++) {
     // Turn away from the incoming direction. A change of at least ~40° keeps
@@ -1008,101 +844,17 @@ function pickNextControl(o: PickOptions): World2 | null {
     if (overBudget > o.maxLegClimbOverM) continue;
     const climbPenalty = legClimb / Math.max(30, o.climbLeftM);
 
-    // **Not across the river.** See `crossesWater` and D-037.
-    //
-    // The client's report — *"I can see it across the water but I can't get
-    // across"* — was two controls 58 m apart on opposite banks with 810 m of
-    // running between them, and nothing in the score below could see it:
-    // `legInterest` returned 0, which is a deduction of 1.3 against a feature
-    // score of up to 1.0 and 0.15 of RNG jitter, and 0 is also what it returns
-    // for a leg into a courtyard.
-    //
-    // **A dominating preference and not a refusal**, which is the second thing
-    // this was tried as. A `continue` here starves the candidate pool: on a leg
-    // where the river takes most of the ninety samples, none survives, the loop
-    // in `generateCourse` breaks, and the course simply ends — measured, that
-    // took Krumlov from fifteen controls to twelve, under the fourteen a sprint
-    // is specified at. `WET_PENALTY` is larger than the whole rest of the score
-    // can reach, so a wet candidate loses to any dry one and is evicted from
-    // the shortlist the moment five dry ones exist; it is chosen only when the
-    // alternative is no leg at all.
-    //
-    // The run-in is priced here too, on the last control only, because it is
-    // the one leg `pickNextControl` never gets asked about: the finish was
-    // sited before the loop began, so a last control across the river from it
-    // would put the fault in the one leg no candidate test covers.
-    const wet =
-      crossesWater(o.from, sited, o.terrain) ||
-      (o.runInTo ? crossesWater(sited, o.runInTo, o.terrain) : false);
-
     const interest = legInterest(o.from, sited, o.terrain, o.routeStepM);
     const score =
       feature * 1.0 +
       interest * 1.3 -
       climbPenalty * 1.15 -
       crossings * 0.9 +
-      o.rng.next() * 0.15 -
-      (wet ? WET_PENALTY : 0);
-    remember(sited, score);
+      o.rng.next() * 0.15;
+    if (!best || score > best.score) best = { p: sited, score };
   }
 
-  if (!shortlist.length) return null;
-  shortlist.sort((a, b) => b.score - a.score);
-
-  /**
-   * The last test, and the only one that searches rather than samples.
-   *
-   * Run here, on the ranked shortlist, because it is two or three orders of
-   * magnitude more expensive than anything in the loop above and because it
-   * only ever *rejects* — nothing about the ordering depends on it. Note that
-   * it consumes no RNG: the stream in this function is what makes one seed one
-   * course on every tier (`FieldTerrain.rulesHeightAt`), and a probe drawing
-   * from it would diverge two phones on the first blocked leg.
-   */
-  if (o.terrain.routeWithinM) {
-    for (const c of shortlist) {
-      const straight = dist2(o.from, c.p);
-      if (straight > DETOUR_PROBE_MAX_M) return c.p;
-      if (!o.terrain.routeWithinM(o.from, c.p, straight * DETOUR_PROBE_CAP)) continue;
-      // The run-in is the one leg that is never a candidate; see `runInTo`.
-      if (o.runInTo) {
-        const home = dist2(c.p, o.runInTo);
-        if (
-          home <= DETOUR_PROBE_MAX_M &&
-          !o.terrain.routeWithinM(c.p, o.runInTo, home * DETOUR_PROBE_CAP)
-        ) {
-          continue;
-        }
-      }
-      return c.p;
-    }
-    // Every one of the best five is a lap of the venue, and the best of them is
-    // returned anyway. **This was tried the other way and the other way was
-    // worse.**
-    //
-    // Returning null looks obviously right: the leg is a fault, refuse it, let
-    // `generateCourse` end the course there and `setCourse` shop for another
-    // seed. Measured over six consecutive menu-shaped seeds it truncated
-    // Krumlov from fifteen or eighteen controls to **twelve** — under the
-    // fourteen a sprint is specified at — and made two seeds in three shop,
-    // which `tools/sim/pick-course.mjs` disqualifies outright. Nought
-    // candidates in twenty survived. A generator that refuses every hard leg
-    // does not produce better courses, it produces short ones.
-    //
-    // The cause is that this generator is greedy and cannot revisit an earlier
-    // control. A leg where every candidate is across the obstacle usually means
-    // the *previous* control was the mistake, so refusing here punishes the
-    // wrong leg. Real backtracking would be the fix and it is not a small
-    // change.
-    //
-    // So the probe stays what it is: it moves the choice down the shortlist,
-    // which is where nearly all of its value is, and where it cannot help, the
-    // offline filter refuses the whole course rather than shipping it. That
-    // division of labour is D-037's, and it is the honest one.
-    return shortlist[0]!.p;
-  }
-
-  return shortlist[0]!.p;
+  return best?.p ?? null;
 }
 
 /**
