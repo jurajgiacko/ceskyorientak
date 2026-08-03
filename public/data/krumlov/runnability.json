@@ -19,16 +19,18 @@
     "10": "Impassable"
   },
   "histogram": {
-    "Road": 267463,
-    "Path": 45825,
-    "OpenFast": 737676,
-    "OpenRough": 138430,
-    "ForestOpen": 108185,
-    "Green1": 116943,
-    "Green2": 481129,
-    "Green3": 205444,
-    "Marsh": 2821,
-    "Rock": 14558,
-    "Impassable": 444727
-  }
+    "Green3": 197681,
+    "Green2": 444829,
+    "Impassable": 472700,
+    "OpenFast": 562841,
+    "Green1": 114354,
+    "Rock": 14521,
+    "ForestOpen": 106296,
+    "Path": 36308,
+    "Road": 511788,
+    "OpenRough": 99239,
+    "Marsh": 2644
+  },
+  "impassableFrom": "townmodel",
+  "playableR": 600
 }

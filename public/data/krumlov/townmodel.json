@@ -1,0 +1,130 @@
+{
+  "venue": "krumlov",
+  "generatedAt": "2026-08-03T21:22:15.393Z",
+  "from": "townscape.json",
+  "source": {
+    "footprints": "OpenStreetMap contributors, ODbL 1.0",
+    "heights": "ČÚZK DMR 5G + DMP 1G (CC BY 4.0) — DMP1G − DMR5G per footprint",
+    "note": "No Google Maps/Earth/Elevation data was used at any point — see DECISIONS.md D-016.4."
+  },
+  "crossableMaxH": 0.9,
+  "thicknessByKind": [
+    0.45,
+    1.15,
+    0.6,
+    0.1,
+    0.95
+  ],
+  "skinM": 0.25,
+  "cellM": 12,
+  "deckHalfMinM": 1.4,
+  "playableR": 600,
+  "counts": {
+    "buildings": 1739,
+    "barriers": 619,
+    "barriersSolid": 405,
+    "waterAreas": 8,
+    "waterCourses": 17,
+    "decks": 47,
+    "buildingRings": 1739,
+    "buildingVerts": 10843,
+    "barrierSegments": 1885,
+    "waterCourseSegments": 149,
+    "deckSegments": 71,
+    "solidLengthM": 17047,
+    "crossableLengthM": 13495,
+    "primitives": 3852
+  },
+  "checks": {
+    "step": 0.5,
+    "cells": 5764801,
+    "drawnNotSolidM2": 0,
+    "solidNotDrawnM2": 7483,
+    "worstGapM": 0.25,
+    "skinM": 0.25
+  },
+  "raster": {
+    "sealed": 5385,
+    "freed": 19670,
+    "residual": 0,
+    "playableR": 600
+  },
+  "sections": {
+    "buildingOffset": {
+      "type": "i32",
+      "offset": 0,
+      "count": 1740
+    },
+    "buildingPts": {
+      "type": "f32",
+      "offset": 6960,
+      "count": 21686
+    },
+    "barrierOffset": {
+      "type": "i32",
+      "offset": 93704,
+      "count": 620
+    },
+    "barrierPts": {
+      "type": "f32",
+      "offset": 96184,
+      "count": 7208
+    },
+    "barrierKind": {
+      "type": "i32",
+      "offset": 125016,
+      "count": 619
+    },
+    "barrierHeight": {
+      "type": "f32",
+      "offset": 127492,
+      "count": 619
+    },
+    "waterAreaOffset": {
+      "type": "i32",
+      "offset": 129968,
+      "count": 9
+    },
+    "waterAreaPts": {
+      "type": "f32",
+      "offset": 130004,
+      "count": 1100
+    },
+    "waterAreaLevel": {
+      "type": "f32",
+      "offset": 134404,
+      "count": 8
+    },
+    "waterCourseOffset": {
+      "type": "i32",
+      "offset": 134436,
+      "count": 18
+    },
+    "waterCoursePts": {
+      "type": "f32",
+      "offset": 134508,
+      "count": 332
+    },
+    "waterCourseWidth": {
+      "type": "f32",
+      "offset": 135836,
+      "count": 17
+    },
+    "deckOffset": {
+      "type": "i32",
+      "offset": 135904,
+      "count": 48
+    },
+    "deckPts": {
+      "type": "f32",
+      "offset": 136096,
+      "count": 236
+    },
+    "deckWidth": {
+      "type": "f32",
+      "offset": 137040,
+      "count": 47
+    }
+  },
+  "bytes": 137228
+}
