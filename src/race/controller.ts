@@ -374,27 +374,42 @@ export class RaceController {
   private showPrestart(): void {
     const c = this.course;
     this.panel.hidden = false;
+    /*
+     * The briefing, and the one guarantee it has to make: START is reachable.
+     *
+     * Everything above the button lives in `racepanel__body`, which is the only
+     * part allowed to scroll; the button is the card's second grid row and
+     * never moves. Previously the whole card was one flow inside a
+     * `place-items: center` grid with no scroll container, so once the content
+     * outgrew the viewport it overflowed *both* ends and START simply left the
+     * screen — measured at 800 × 434 (a phone in landscape, the device class
+     * the brief targets) as a 64 px button spanning y 474–538 in a 434 px
+     * viewport. Not clipped-but-scrollable: unreachable. The coaching block is
+     * open by default, so this was the first thing a new player met.
+     */
     this.panel.innerHTML = `
-      <div class="racepanel__card">
-        <p class="racepanel__kicker">${esc(t('race.startOfNav'))}</p>
-        <h2 class="racepanel__title">${esc(t(`discipline.${c.discipline}`))} · ${esc(
-          t(`venue.${c.venue}`),
-        )}</h2>
-        <dl class="racepanel__facts">
-          <div><dt>${esc(t('race.length'))}</dt><dd>${esc(formatDistance(c.lengthM))}</dd></div>
-          <div><dt>${esc(t('race.climb'))}</dt><dd>${c.climbM} m</dd></div>
-          <div><dt>${esc(t('race.controls'))}</dt><dd>${c.controls.length}</dd></div>
-          <div><dt>${esc(t('race.scale'))}</dt><dd>1:${this.setup.anchor.mapScale}</dd></div>
-        </dl>
-        <p class="racepanel__note">${esc(t('race.prestartHint'))}</p>
-        <!--
-          Says out loud what the meter measures, before the meter is on screen.
-          The causes named here — pace, climb, heat — are the only causes there
-          are (see depleteStats), and stating them is what stops an emptying bar
-          being read as a consequence of not taking a product. Art. 12(a).
-        -->
-        <p class="racepanel__note">${esc(t('hud.energyCause'))}</p>
-        ${this.beginnerAid ? this.coachBlock() : ''}
+      <div class="racepanel__card racepanel__card--prestart">
+        <div class="racepanel__body">
+          <p class="racepanel__kicker">${esc(t('race.startOfNav'))}</p>
+          <h2 class="racepanel__title">${esc(t(`discipline.${c.discipline}`))} · ${esc(
+            t(`venue.${c.venue}`),
+          )}</h2>
+          <dl class="racepanel__facts">
+            <div><dt>${esc(t('race.length'))}</dt><dd>${esc(formatDistance(c.lengthM))}</dd></div>
+            <div><dt>${esc(t('race.climb'))}</dt><dd>${c.climbM} m</dd></div>
+            <div><dt>${esc(t('race.controls'))}</dt><dd>${c.controls.length}</dd></div>
+            <div><dt>${esc(t('race.scale'))}</dt><dd>1:${this.setup.anchor.mapScale}</dd></div>
+          </dl>
+          <p class="racepanel__note">${esc(t('race.prestartHint'))}</p>
+          <!--
+            Says out loud what the meter measures, before the meter is on screen.
+            The causes named here — pace, climb, heat — are the only causes there
+            are (see depleteStats), and stating them is what stops an emptying bar
+            being read as a consequence of not taking a product. Art. 12(a).
+          -->
+          <p class="racepanel__note">${esc(t('hud.energyCause'))}</p>
+          ${this.beginnerAid ? this.coachBlock() : ''}
+        </div>
         <button class="racepanel__go" data-act="begin">${esc(t('race.goStart'))}</button>
       </div>`;
     const go = this.panel.querySelector('[data-act="begin"]');
@@ -416,6 +431,13 @@ export class RaceController {
    * `<details>` rather than a paragraph so it is skippable in one click, and
    * open first time because a player who has never seen it cannot know to open
    * it. It disappears entirely with the beginner aid switched off.
+   *
+   * It no longer carries a `max-height` of its own. The list used to be its own
+   * scroller, on the reasoning that capping it stopped it "pushing START off the
+   * screen" — but a nested scroller inside a card that could not scroll did not
+   * stop that, it only hid how far the card had overflowed. The card now scrolls
+   * as one region with START pinned outside it, which is the actual guarantee,
+   * and one scroller is easier to use than two.
    */
   private coachBlock(): string {
     const lines = ['race.coachBearing', 'race.coachHandrail', 'race.coachAttack', 'race.coachDescription'];

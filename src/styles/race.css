@@ -1047,6 +1047,14 @@
   inset: 0;
   z-index: 5;
   display: grid;
+  /* The explicit `minmax(0, 1fr)` track is load-bearing, not tidying. With the
+     implicit `auto` track this grid had before, the card's grid area was sized
+     *to the card*, so the card's own `max-height: 100%` resolved to its own
+     height and constrained nothing — it silently did nothing at every viewport.
+     A 1fr track takes the panel's definite height instead, which is what the
+     percentage has to resolve against for the card to be capped and scroll. */
+  grid-template-rows: minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
   place-items: center;
   padding: 1.2rem;
   background: rgba(6, 12, 8, 0.72);
@@ -1058,12 +1066,35 @@
 
 .racepanel__card {
   width: min(94vw, 30rem);
+  /* Never taller than the space it is centred in. Without this the card grew
+     past the viewport and, being centred, overflowed at both ends into a
+     container with no scroll — which is how START came to sit 104 px below the
+     fold at 800 × 434 with no way to reach it. */
+  max-height: 100%;
   padding: 1.4rem 1.3rem calc(1.3rem + var(--safe-b));
   border-radius: var(--r-lg);
   background: var(--c-ink-2);
   border-top: 4px solid var(--c-event);
   display: grid;
   gap: 0.7rem;
+}
+
+/* Two rows: a scrollable briefing, and the button, which is never in the
+   scrolling region. The modifier scopes this to the prestart card — the
+   "really quit?" card is a plain flow of three short blocks and must keep
+   `grid-auto-rows`, or its heading would be handed the 1fr. */
+.racepanel__card--prestart {
+  grid-template-rows: minmax(0, 1fr) auto;
+  gap: 0.9rem;
+}
+
+.racepanel__body {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  display: grid;
+  gap: 0.7rem;
+  align-content: start;
 }
 
 .racepanel__kicker {
@@ -1117,8 +1148,13 @@
  *
  * Four sentences on how to run a leg, collapsible in one tap. Marked out in the
  * aid's own pale blue rather than the event orange, because it is help rather
- * than the race — and the card is already vertically tight on a phone, so the
- * list is capped and scrolls rather than pushing START off the screen. */
+ * than the race.
+ *
+ * The list used to carry `max-height: 30vh; overflow-y: auto` to stop it
+ * "pushing START off the screen". It did not: the card around it could not
+ * scroll, so the overflow just moved. The card now scrolls as one region with
+ * START pinned outside it (see .racepanel__card--prestart), so the inner cap is
+ * gone — nested scrollers are worse to use, and this one was buying nothing. */
 
 .racepanel__coach {
   border-left: 2px solid var(--c-aid);
@@ -1138,9 +1174,6 @@
   padding-left: 1rem;
   display: grid;
   gap: 0.35rem;
-  max-height: 30vh;
-  overflow-y: auto;
-  overscroll-behavior: contain;
   font-size: 0.78rem;
   line-height: 1.4;
   color: var(--c-paper-dim);
@@ -1218,11 +1251,49 @@
 
 .before {
   grid-row: 1 / -1;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr);
+  overflow: hidden;
+  background: var(--c-ink);
+}
+
+.before__scroll {
+  min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
-  padding: calc(0.8rem + var(--safe-t)) calc(1rem + var(--safe-r))
-    calc(1.4rem + var(--safe-b)) calc(1rem + var(--safe-l));
+  padding: calc(0.8rem + var(--safe-t)) calc(1rem + var(--safe-r)) 1rem
+    calc(1rem + var(--safe-l));
+}
+
+/* The pinned decision bar. Verdict and running total on the left, START on the
+   right, so the whole thing costs about 90 px of height on a landscape phone
+   instead of the ~200 px a stacked version would. */
+.before__action {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 0.3rem 1.2rem;
+  padding: 0.7rem calc(1rem + var(--safe-r)) calc(0.8rem + var(--safe-b))
+    calc(1rem + var(--safe-l));
+  border-top: 1px solid var(--c-line);
   background: var(--c-ink);
+}
+
+.before__action .before__verdict {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.before__action .before__sum {
+  grid-column: 1;
+  grid-row: 2;
+}
+
+.before__action .before__go {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  min-width: 11rem;
 }
 
 .before__head {
@@ -1384,6 +1455,8 @@
   min-width: 1ch;
 }
 
+/* What is left in the scroll once the decision bar is pinned: the composition
+   note and the partner credit. Both belong to the reading, not to the action. */
 .before__foot {
   display: grid;
   gap: 0.6rem;
@@ -1436,37 +1509,38 @@
   color: var(--c-paper-dim);
 }
 
-.before__partner {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.8rem;
+/* The partner credit is the shared `.partnercredit` component now (see
+   src/ui/lockup.ts): the old rule set `height: 26px` on the raw enervit.png,
+   which — the file being 58 % empty alpha by height — drew a red rectangle
+   10.9 px tall. This only sets the surface it sits on. */
+.before__foot .partnercredit {
   padding: 0.7rem 1rem;
   border-radius: var(--r-sm);
-  background: var(--c-beige);
-}
-
-.before__partner span {
-  font-size: 0.56rem;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  color: #6b6b60;
-}
-
-.before__partner img {
-  height: 26px;
-  width: auto;
 }
 
 /* --- results -------------------------------------------------------------- */
 
 .results {
   grid-row: 1 / -1;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr);
+  overflow: hidden;
+  background: var(--c-ink);
+}
+
+.results__scroll {
+  min-height: 0;
   overflow-y: auto;
+  overscroll-behavior: contain;
+  /* The card is centred inside the scroller and the action bar is centred
+     outside it, so a scrollbar on one and not the other put the two 7.5 px out
+     of line. Reserving the gutter on both edges keeps them on the same axis.
+     Where it is unsupported the layout is exactly what it was. */
+  scrollbar-gutter: stable both-edges;
   display: grid;
   place-items: start center;
-  padding: calc(1rem + var(--safe-t)) 1rem calc(1.4rem + var(--safe-b));
-  background: var(--c-ink);
+  padding: calc(1rem + var(--safe-t)) 1rem 1rem;
 }
 
 .results__card {
@@ -1557,11 +1631,17 @@
   color: var(--c-lime);
 }
 
+/* Pinned below the scroll, and held to the card's own measure so it still reads
+   as the foot of the result rather than a browser chrome bar. */
 .results__actions {
+  width: min(94vw, 32rem);
+  justify-self: center;
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 0.6rem;
-  margin-top: 1rem;
+  padding: 0.7rem 0 calc(0.8rem + var(--safe-b));
+  border-top: 1px solid var(--c-line);
+  background: var(--c-ink);
 }
 
 .results__actions button {
@@ -1649,5 +1729,23 @@
   }
   .before__grid {
     grid-template-columns: repeat(auto-fill, minmax(8rem, 1fr));
+  }
+}
+
+/* Portrait phones: there is no width for a side-by-side decision bar, so it
+   stacks. Height is the plentiful axis here, which is why it can. */
+@media (max-width: 560px) {
+  .before__action {
+    grid-template-columns: 1fr;
+    gap: 0.45rem;
+  }
+  .before__action .before__verdict,
+  .before__action .before__sum,
+  .before__action .before__go {
+    grid-column: 1;
+    grid-row: auto;
+  }
+  .before__action .before__go {
+    min-width: 0;
   }
 }

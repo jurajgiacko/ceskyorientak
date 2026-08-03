@@ -212,13 +212,154 @@
   z-index: 3;
 }
 
+/* --- brand marks and the partner lockup ---------------------------------
+ *
+ * The reasoning — why both marks are real files, why the Enervit crop exists,
+ * and where the cap-height ratio comes from — is in src/ui/lockup.ts. This is
+ * the arithmetic only.
+ *
+ * `--lockup-c` is the ČSOS mark's box height and the one knob a caller turns;
+ * everything else is derived from it, so the lockup can never drift out of
+ * proportion by being tuned in two places. */
+
+.mark-enervit {
+  /* Measured geometry of the supplied enervit.png: a 3897 × 947 red rectangle
+     at (45, 666) inside a 4001 × 2251 canvas — 58 % of the file's height is
+     empty alpha. Sizing the raw <img> sizes the canvas, so this box is made to
+     *be* the rectangle: scale by the rectangle's height, pull by the measured
+     offsets, clip the transparent margin. Proportions are carried through
+     exactly; nothing is recoloured or stretched. */
+  --e-h: var(--enervit-h, 30px);
+  display: block;
+  height: var(--e-h);
+  width: calc(var(--e-h) * 3897 / 947);
+  overflow: hidden;
+  flex: none;
+}
+
+.mark-enervit img {
+  display: block;
+  width: calc(var(--e-h) * 4001 / 947);
+  height: calc(var(--e-h) * 2251 / 947);
+  margin-left: calc(var(--e-h) * -45 / 947);
+  margin-top: calc(var(--e-h) * -666 / 947);
+  max-width: none;
+}
+
+.lockup {
+  /* One row for the three marks so they share a centre line, and a second row
+     carrying the caption under the Enervit column alone. A caption spanning
+     both marks would claim Český orienťák is a partner of something. */
+  --lockup-c: 56px;
+  --enervit-h: calc(var(--lockup-c) * 0.512); /* cap-height parity — see lockup.ts */
+  display: grid;
+  grid-template-columns: auto auto auto;
+  grid-template-rows: auto auto;
+  align-items: center;
+  justify-content: center;
+  /* ≥ 1 clear-space unit (= the red rectangle's height) between the event
+     orange wordmark and the Enervit red. BRAND.md §5.5 rule 4. */
+  column-gap: calc(var(--enervit-h) * 0.75);
+  row-gap: 0.3rem;
+}
+
+.lockup__csos {
+  grid-column: 1;
+  grid-row: 1;
+  height: var(--lockup-c);
+  width: auto;
+  display: block;
+  /* Optical, not mathematical, spacing.
+     csos-hor.svg carries dead space inside its own viewBox — the ink runs from
+     x 43.0 to x 474.5 of 518, so 8.30 % of the box is empty at the left and
+     8.40 % at the right — while Enervit's rectangle is drawn edge to edge with
+     none. Laying the two out on their boxes therefore put 30.1 px between the
+     wordmark and the "×" against 16.0 px on the other side, and pushed the pair
+     7 px right of the band's centre. Measured on screen, not guessed at.
+     Cancelling the padding makes the element's box its ink, after which the
+     column gap means the same thing on both sides and `justify-content: center`
+     centres what the eye actually sees.
+     0.336 = 0.08301 × 518/128; 0.340 = 0.08398 × 518/128. */
+  margin-left: calc(var(--lockup-c) * -0.336);
+  margin-right: calc(var(--lockup-c) * -0.34);
+}
+
+/* Neutral, never orange and never red — it sits inside Enervit's clear space,
+   so it must not read as an adjacent brand element. Sized just under the shared
+   cap height (0.3145 × --lockup-c) so it joins the two marks rather than
+   competing with them. */
+.lockup__x {
+  grid-column: 2;
+  grid-row: 1;
+  font-size: calc(var(--lockup-c) * 0.42);
+  line-height: 1;
+  font-weight: 400;
+  color: #7a7a6e;
+  text-align: center;
+}
+
+.lockup .mark-enervit {
+  grid-column: 3;
+  grid-row: 1;
+}
+
+.lockup__caption {
+  grid-column: 3;
+  grid-row: 2;
+  justify-self: center;
+  font-size: 0.58rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #6b6b60;
+  font-weight: 500;
+}
+
+/* The quieter Enervit-only credit for screens away from the title. */
+.partnercredit {
+  --enervit-h: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.9rem;
+  background: var(--c-beige);
+}
+
+.partnercredit__label {
+  font-size: 0.56rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #6b6b60;
+  font-weight: 500;
+}
+
 /* --- main menu ---------------------------------------------------------- */
 
+/*
+ * Four rows: mark, body, settings, partner lockup.
+ *
+ * `minmax(0, 1fr)` on the body rather than `1fr` is the whole fix for a real
+ * bug. A bare `1fr` track has an automatic minimum size, so it refused to
+ * shrink below its content; the menu then grew past the viewport and `overflow:
+ * hidden` silently amputated whatever came last. At 800 × 434 — a phone in
+ * landscape, the device class the brief targets — that was the language
+ * switcher, both settings toggles and the entire Enervit partner band, sitting
+ * 151 px below the fold with no way to scroll to them. The one screen the
+ * client wanted branded was showing no partner branding at all.
+ *
+ * Now the body is the only track allowed to scroll and the other three are
+ * pinned, so the lockup is on screen at every supported size by construction.
+ */
 .menu {
   position: relative;
   grid-row: 1 / -1;
   display: grid;
-  grid-template-rows: auto 1fr auto auto;
+  grid-template-rows: auto minmax(0, 1fr) auto auto;
+  /* The same trap on the other axis, and it bit for the same reason. The
+     implicit `auto` column sized itself to the widest row's max-content, so on
+     a 320 px phone the partner band measured 401 px and `overflow: hidden` took
+     the Enervit mark's right-hand end off with it. A track that cannot exceed
+     the container is the fix; the lockup then shrinks to fit instead. */
+  grid-template-columns: minmax(0, 1fr);
   overflow: hidden;
 }
 
@@ -276,11 +417,22 @@
 }
 
 .menu__body {
-  align-self: center;
   justify-self: end;
   text-align: right;
   padding: 1rem calc(1.4rem + var(--safe-r)) 1rem 1.4rem;
   max-width: min(92vw, 30rem);
+  /* The only scrollable track. `min-height: 0` is what lets it actually take
+     the minmax(0, 1fr) it was given. */
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  display: grid;
+  align-content: center;
+  /* `safe center` degrades to the `center` above where it is not understood.
+     It matters here: centred content that outgrows its scroll box overflows
+     past the *start* edge, which is unreachable by scrolling, so the top of the
+     title would be the next thing to become unreadable. */
+  align-content: safe center;
 }
 
 .menu__title {
@@ -412,29 +564,83 @@
   color: var(--c-paper);
 }
 
+/* The partner band. Beige is not decoration: BRAND.md §5.5 requires partner
+   marks to sit on their own light surface, which is what lets Enervit's
+   mandatory red rectangle sit on the neutral ground its guidelines assume and
+   puts a physical band of beige between #E40521 and the event's #FE5900. */
 .menu__partners {
   position: relative;
   z-index: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 1rem;
-  padding: 0.8rem 1rem calc(0.8rem + var(--safe-b));
+  padding: 0.9rem 1rem calc(0.9rem + var(--safe-b));
   background: var(--c-beige);
 }
 
-.menu__partnerLabel {
-  font-size: 0.58rem;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  color: #6b6b60;
-  font-weight: 500;
+.menu__partners .lockup {
+  --lockup-c: clamp(44px, 6.5vw, 62px);
 }
 
-.menu__enervit {
-  height: 30px;
-  width: auto;
-  display: block;
+/* Short windows, in two steps.
+ *
+ * The body scrolls when it must, and since the fix above that is graceful
+ * rather than destructive — but a title screen being sent round to colleagues
+ * should not need scrolling to be read, and a scrollbar appearing for the sake
+ * of sixteen pixels looks like a mistake. So the fixed costs step down twice
+ * before that happens.
+ *
+ * Step one, ≤ 700 px: a laptop window or a large phone in landscape. Type and
+ * rows ease off; nothing is cramped. */
+@media (max-height: 700px) and (orientation: landscape) {
+  .menu__title {
+    font-size: clamp(1.4rem, 5.6vw, 2.1rem);
+  }
+  .menu__meta {
+    margin: 0.45rem 0 1rem;
+  }
+  .menu__item {
+    min-height: 52px;
+  }
+  .menu__partners .lockup {
+    --lockup-c: clamp(42px, 5.8vw, 52px);
+  }
+}
+
+/* Step two, ≤ 560 px: a phone in landscape — 800 × 434 is the case the brief
+   names. About 250 px of usable height between the mark and the partner band,
+   so the rows tighten to 46 px, still above the 44 px touch minimum. */
+@media (max-height: 560px) and (orientation: landscape) {
+  .menu__head {
+    padding-top: calc(0.5rem + var(--safe-t));
+  }
+  .menu__logo {
+    width: min(28vw, 152px);
+  }
+  .menu__body {
+    padding-top: 0.4rem;
+    padding-bottom: 0.4rem;
+  }
+  .menu__title {
+    font-size: clamp(1.15rem, 3.4vw, 1.75rem);
+  }
+  .menu__meta {
+    margin: 0.3rem 0 0.55rem;
+    font-size: 0.68rem;
+  }
+  .menu__nav {
+    gap: 0.35rem;
+  }
+  .menu__item {
+    min-height: 46px;
+    padding: 0.4rem 0.9rem;
+  }
+  .menu__foot {
+    padding-bottom: 0.5rem;
+  }
+  .menu__partners {
+    padding: 0.55rem 1rem calc(0.55rem + var(--safe-b));
+  }
+  .menu__partners .lockup {
+    --lockup-c: clamp(38px, 5.2vw, 46px);
+  }
 }
 
 /* Portrait phones: the backdrop's dark side is on the right, but there is not
@@ -454,8 +660,32 @@
   .menu__item.is-soon {
     border-bottom-color: var(--c-line);
   }
+  /* Two toggles and three language buttons do not fit one 320 px row, so the
+     row wraps. It used to overflow instead — the language switcher ran to
+     x = 388 in a 320 px viewport and CS was the only one you could reach. That
+     was always true; it was invisible only because the clipped column was
+     hiding it. `margin-right: auto` on the toggle is what spaces the row out
+     when it is a row, and has to go once it is two. */
   .menu__foot {
+    flex-wrap: wrap;
     justify-content: center;
+    gap: 0.4rem;
     padding-left: calc(1.2rem + var(--safe-l));
+  }
+  .menu__toggle {
+    margin-right: 0;
+  }
+
+  /* The lockup has to fit the narrowest phone we support. It is sized off the
+     viewport rather than clamped to a floor, because at 320 px the floor was
+     the thing that overflowed. The caption is trimmed with it: "HLAVNÍ
+     PARTNER" set at the full tracking is wider than the Enervit mark and was
+     therefore what actually sized the column. */
+  .menu__partners .lockup {
+    --lockup-c: clamp(34px, 11vw, 44px);
+  }
+  .lockup__caption {
+    font-size: 0.52rem;
+    letter-spacing: 0.14em;
   }
 }

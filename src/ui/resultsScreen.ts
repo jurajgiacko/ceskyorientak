@@ -55,7 +55,18 @@ export function makeResultsScreen(
         ? course.controls.findIndex((c) => c.id === result.mispunch?.expected) + 1
         : 0;
 
+      /*
+       * Same split as the BEFORE screen and the briefing card: the result
+       * scrolls, the two ways out of it do not.
+       *
+       * A full course puts fifteen split rows between the finish time and the
+       * buttons, which on a landscape phone left "retry" and "continue" a
+       * screen and a half down — reachable, but the player is looking at a
+       * table with no visible exit. Pinning them costs one row of height and
+       * removes the question.
+       */
       el.innerHTML = `
+        <div class="results__scroll">
         <div class="results__card" data-dsq="${dsq ? '1' : '0'}">
           <p class="results__kicker">${esc(t(`discipline.${course.discipline}`))} · ${esc(
             t(`venue.${course.venue}`),
@@ -93,10 +104,12 @@ export function makeResultsScreen(
               : ''
           }
 
-          <div class="results__actions">
-            <button data-act="retry">${esc(t('results.retry'))}</button>
-            <button data-act="menu">${esc(t('results.continue'))}</button>
-          </div>
+        </div>
+        </div>
+
+        <div class="results__actions">
+          <button data-act="retry">${esc(t('results.retry'))}</button>
+          <button data-act="menu">${esc(t('results.continue'))}</button>
         </div>`;
 
       const onClick = (ev: Event) => {

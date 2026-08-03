@@ -38,6 +38,7 @@ import { SKUS, skusForPhase } from '@/data/enervit';
 import type { Sku } from '@/data/enervit';
 import { FORMAT, applyPreRace, verdictKey, takeCostS } from '@/nutrition/protocol';
 import { TYPICAL_DURATION_S } from '@/sim/athlete';
+import { enervitCredit } from '@/ui/lockup';
 
 export interface RaceRequest {
   venue: VenueId;
@@ -106,7 +107,23 @@ export function makeBeforeScreen(req: RaceRequest): Screen {
         const carried = belt.map(pick).filter(isSku);
         const outcome = applyPreRace(chosen, req.discipline, { heat: req.heat });
 
+        /*
+         * The scrolling half and the pinned half.
+         *
+         * Everything informational scrolls; the verdict, the summary and START
+         * do not. This screen is a long one — at 800 × 434 it ran to 1135 px,
+         * so reaching START meant 701 px of scrolling past six product cards,
+         * and the primary action of the screen was three swipes below the thing
+         * the player had just decided. It was reachable, unlike the briefing
+         * card's, but "reachable" is not the bar for the one button the screen
+         * exists to lead to.
+         *
+         * The verdict rides along with the button because the two are one
+         * thought: it is the sentence that says whether the loadout you are
+         * about to start with is a sensible one.
+         */
         el.innerHTML = `
+        <div class="before__scroll">
           <header class="before__head">
             <button class="before__back" data-act="back">${esc(t('common.back'))}</button>
             <div>
@@ -147,22 +164,23 @@ export function makeBeforeScreen(req: RaceRequest): Screen {
           </section>
 
           <footer class="before__foot">
-            <p class="before__verdict" data-tone="${
-              outcome.gutLoad > 0 ? 'warn' : 'ok'
-            }">${esc(t(verdictKey(outcome, req.discipline)))}</p>
-            <p class="before__sum">${esc(
-              t('nutrition.summary', {
-                carbs: outcome.carbsG,
-                items: carried.length,
-              }),
-            )}</p>
-            <button class="before__go" data-act="go">${esc(t('menu.start'))}</button>
             <p class="before__legal">${esc(t('nutrition.dataNote'))}</p>
-            <div class="before__partner">
-              <span>${esc(t('brand.mainPartner'))}</span>
-              <img src="/brand/enervit.png" alt="Enervit" />
-            </div>
-          </footer>`;
+            ${enervitCredit()}
+          </footer>
+        </div>
+
+        <div class="before__action">
+          <p class="before__verdict" data-tone="${
+            outcome.gutLoad > 0 ? 'warn' : 'ok'
+          }">${esc(t(verdictKey(outcome, req.discipline)))}</p>
+          <p class="before__sum">${esc(
+            t('nutrition.summary', {
+              carbs: outcome.carbsG,
+              items: carried.length,
+            }),
+          )}</p>
+          <button class="before__go" data-act="go">${esc(t('menu.start'))}</button>
+        </div>`;
       };
 
       const card = (

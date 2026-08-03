@@ -10,6 +10,9 @@
  *  - No abrupt cuts — everything routes through `transitionTo`.
  *  - Partner marks sit in their own beige band and never share a surface with
  *    the event orange (see the colour-conflict note in styles/base.css).
+ *  - That band now carries the full ČESKÝ ORIENŤÁK × ENERVIT lockup rather than
+ *    a lone Enervit mark. Both sides are supplied files; see src/ui/lockup.ts
+ *    for why neither is typeset and how the two are balanced.
  */
 
 import type { Screen } from './shell';
@@ -19,6 +22,7 @@ import { LOCALES } from '@/core/types';
 import type { Locale } from '@/core/types';
 import { getSettings, setSetting } from '@/core/settings';
 import { courseSeed } from '@/core/venues';
+import { partnerLockup } from '@/ui/lockup';
 
 /*
  * On seeds.
@@ -101,12 +105,12 @@ export function makeMenuScreen(): Screen {
 
         <header class="menu__head">
           <img class="menu__logo" src="/brand/owcup26-hor.svg"
-               alt="Orienteering World Cup 2026" width="500" height="73" />
+               alt="${esc(t('brand.owcup'))}" width="500" height="73" />
         </header>
 
         <div class="menu__body">
-          <h1 class="menu__title">${t('app.title')}</h1>
-          <p class="menu__meta">Vyšší Brod &middot; Český Krumlov &middot; 5–9. 8. 2026</p>
+          <h1 class="menu__title">${esc(t('app.title'))}</h1>
+          <p class="menu__meta">${esc(t('menu.venues'))}</p>
 
           <nav class="menu__nav">
             ${ENTRIES.map(
@@ -114,10 +118,10 @@ export function makeMenuScreen(): Screen {
               <button class="menu__item${e.soon ? ' is-soon' : ''}"
                       data-go="${e.id}" ${e.soon ? 'disabled' : ''}
                       style="--i:${i}">
-                <span class="menu__itemLabel">${t(e.labelKey)}</span>
-                <span class="menu__itemSub">${
-                  e.soon ? t('menu.soon') : t(e.sublabelKey)
-                }</span>
+                <span class="menu__itemLabel">${esc(t(e.labelKey))}</span>
+                <span class="menu__itemSub">${esc(
+                  e.soon ? t('menu.soon') : t(e.sublabelKey),
+                )}</span>
               </button>`,
             ).join('')}
           </nav>
@@ -134,13 +138,14 @@ export function makeMenuScreen(): Screen {
           <button class="menu__toggle${getSettings().beginnerAid ? ' is-on' : ''}"
                   data-toggle="beginnerAid"
                   aria-pressed="${getSettings().beginnerAid ? 'true' : 'false'}"
-                  title="${t('settings.beginnerAidHelp')}">
-            ${t('settings.beginnerAid')}
-            <span class="menu__toggleState" data-role="state">${
-              getSettings().beginnerAid ? t('settings.on') : t('settings.off')
-            }</span>
+                  title="${esc(t('settings.beginnerAidHelp'))}">
+            ${esc(t('settings.beginnerAid'))}
+            <span class="menu__toggleState" data-role="state">${esc(
+              getSettings().beginnerAid ? t('settings.on') : t('settings.off'),
+            )}</span>
           </button>
-          <div class="menu__locales" role="group" aria-label="${t('menu.language')}">
+          <div class="menu__locales" role="group" aria-label="${esc(t('menu.language'))}">
+
             ${LOCALES.map(
               (l) =>
                 `<button class="menu__locale${l === getLocale() ? ' is-on' : ''}"
@@ -150,8 +155,7 @@ export function makeMenuScreen(): Screen {
         </footer>
 
         <div class="menu__partners">
-          <span class="menu__partnerLabel">${t('brand.mainPartner')}</span>
-          <img src="/brand/enervit.png" alt="Enervit" class="menu__enervit" />
+          ${partnerLockup()}
         </div>`;
 
       host.appendChild(el);
@@ -199,4 +203,10 @@ export function makeMenuScreen(): Screen {
       cleanup = null;
     },
   };
+}
+
+function esc(s: string): string {
+  return s.replace(/[&<>"]/g, (c) =>
+    c === '&' ? '&amp;' : c === '<' ? '&lt;' : c === '>' ? '&gt;' : '&quot;',
+  );
 }
