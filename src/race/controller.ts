@@ -145,7 +145,12 @@ export class RaceController {
   private readonly setup_: CourseSetupResult;
 
   private readonly race: Race;
-  private readonly terrain: FieldTerrain;
+  /**
+   * The rules surface, public for the same reason `SprintScene.model` is: the
+   * gates ask the running game rather than rebuilding its answers. `costMs` on
+   * it is what `tools/perf/setup-cost.mjs` reads.
+   */
+  readonly terrain: FieldTerrain;
   private readonly host: RaceSceneHost;
   private readonly setup: RaceSetup;
 

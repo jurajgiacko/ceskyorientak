@@ -141,6 +141,18 @@ export class FieldTerrain implements CourseTerrain, RaceTerrain {
    */
   heading = 0;
 
+  /**
+   * What the venue's setup cost, milliseconds, by phase.
+   *
+   * Reported rather than swallowed, and it is not decoration: PLAN-KRUMLOV-V2
+   * §6 phase 0 measured `bakedRaster`'s 2.56 M-cell sweep at 2.6 s and the
+   * reachability fill at another 2.9 s on the 4×-throttled Android proxy, and
+   * required phase 2 to honour "built offline, once" literally. A budget with
+   * no instrument is a budget nobody can tell has been broken —
+   * `tools/perf/setup-cost.mjs` reads this.
+   */
+  readonly costMs: Record<string, number> = {};
+
   /** Cells of `field` between rules-lattice nodes. See `rulesHeightAt`. */
   private readonly rStride: number;
   private readonly rW: number;
@@ -327,8 +339,10 @@ export class FieldTerrain implements CourseTerrain, RaceTerrain {
    */
   bakedRaster(): Uint8Array {
     if (this.baked) return this.baked;
+    const t0 = now();
     if (!this.blocked) {
       this.baked = this.field.runnability;
+      this.costMs.baked = now() - t0;
       return this.baked;
     }
     const m = this.field.rMeta;
@@ -350,6 +364,7 @@ export class FieldTerrain implements CourseTerrain, RaceTerrain {
       }
     }
     this.baked = out;
+    this.costMs.baked = now() - t0;
     return out;
   }
 
@@ -361,6 +376,7 @@ export class FieldTerrain implements CourseTerrain, RaceTerrain {
   }
 
   buildReachability(from: { x: number; z: number }): { fraction: number } {
+    const t0 = now();
     // 1 m where the venue is small enough to afford it: Krumlov's alleys are
     // 2–3 m wide and a 2 m grid disconnects them by aliasing alone.
     const span = Math.max(this.field.spanX, this.field.spanZ);
@@ -469,6 +485,7 @@ export class FieldTerrain implements CourseTerrain, RaceTerrain {
     this.maskH = h;
     this.maskX0 = x0;
     this.maskZ0 = z0;
+    this.costMs.reach = now() - t0;
     return { fraction: openN ? tail / openN : 0 };
   }
 
@@ -963,4 +980,9 @@ export class FieldTerrain implements CourseTerrain, RaceTerrain {
 
 function clamp01(v: number): number {
   return v < 0 ? 0 : v > 1 ? 1 : v;
+}
+
+/** `performance.now`, and `Date.now` where there is no `performance` (Node harnesses). */
+function now(): number {
+  return typeof performance === 'undefined' ? Date.now() : performance.now();
 }

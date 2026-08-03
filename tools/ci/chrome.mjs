@@ -187,6 +187,13 @@ export async function openTab(cdpPort, url) {
   await send('Runtime.enable');
   await send('Page.enable');
   return {
+    /**
+     * Raw CDP, for the gates that need a domain this wrapper does not model —
+     * `Emulation.setCPUThrottlingRate` above all, which is how every timing in
+     * this project is stated against the mid-range Android proxy rather than
+     * against the desk it was written on.
+     */
+    send,
     evaluate,
     waitFor,
     screenshot,
