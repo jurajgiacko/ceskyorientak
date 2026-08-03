@@ -66,6 +66,41 @@ Cost to find out: load v1, stand at the start, look at what is in front of the a
 which of those two lists it belongs to. Not an hour of forensics — a single observation. Do
 it, record the answer, then close v1.
 
+### Answered: fault 8 is on the KEPT side, and it is mine
+
+Measured at the shipped start of `krumlov-sprint-30814554`:
+
+| | |
+|---|---|
+| Start class | **4 — ForestOpen.** Woodland, not street |
+| 25 m around the start | 888 cells ForestOpen · 617 Road · 243 Green2 · 206 Impassable |
+| Facing at spawn | 303°, and the bearing to control 1 is 303° — **correct** |
+| First obstruction toward control 1 | **11 m**, a `town.blocks` barrier, class Impassable |
+| Open sectors (≥15 m clear, 24 sampled) | 17 — **not enclosed**, a detour exists |
+
+So: the athlete spawns facing the right way, standing in woodland on the edge of the
+built-up area, with an uncrossable feature 11 m ahead. That is exactly *"you run out and
+there's a wall straight away."*
+
+Two things follow, and the second is the uncomfortable one.
+
+**It is not an invisible-wall fault.** The obstruction is a `town.blocks` barrier — drawn
+*and* solid, the two agreeing. It is a real wall you must run around. So fault 8 is **not**
+fault 3's class and does not die with the raster pipeline: it is **start siting**, which is
+kept code, and it is what §3 fixes by siting on the street graph.
+
+**It is a regression I introduced.** The previous seed started on cobbles in Latrán — the
+client's own acceptance test was *"it starts at the start and runs through the alleys."* I
+re-picked the seed to kill the 12× leg (D-037), improved the detour factor from 2.18 to
+1.14, and moved the start into the woods without noticing. The audit measures *legs* on the
+network — 96% — and no check asserts that **the start itself is on it**. A gate that scores
+the course as a whole let its most-looked-at single point walk off the street.
+
+That is the same failure shape as every other one here: the measure was right about what it
+measured and silent about what it did not. **Phase 3 must assert the start and finish are on
+the graph**, not merely that the legs are — and until v2 exists, v1's own audit should carry
+that assertion too, since the client is not being shown the town in the meantime.
+
 **The common cause is representation, not detail.** Three sources disagree about where a
 wall is:
 
