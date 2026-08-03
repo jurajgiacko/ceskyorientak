@@ -46,7 +46,14 @@ import { existsSync, readFileSync } from 'node:fs';
 import { resolve, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { serve, withChrome, openTab } from '../ci/chrome.mjs';
-import { makeLegRouter, detourFaults, detourStats } from '../ci/check-passable.mjs';
+import {
+  makeLegRouter,
+  makeCourseAudit,
+  auditFaults,
+  auditTable,
+  detourFaults,
+  detourStats,
+} from '../ci/check-passable.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, '../..');
@@ -350,6 +357,18 @@ async function main() {
   // `ForestScene` enforces — it has no `blockedAt`.
   const route = makeLegRouter(venue, bin, { radiusM: VENUE_R[venue] ?? 600 });
 
+  /**
+   * The gate's own 1 m audit, run on the shortlist before a winner is declared.
+   *
+   * `route` above is a 2 m lattice and it is the *pre-filter*: cheap enough for
+   * several hundred candidates, and it once called six legs routable that a 1 m
+   * probe found unreachable, because Krumlov's alleys are 2–3 m wide. A tool
+   * that chooses a course the gate then rejects is worse than no tool, so the
+   * candidate that is actually recommended is checked with the identical
+   * function `check:passable` will judge it by. See D-037.
+   */
+  const audit = makeCourseAudit(venue, bin, { radiusM: VENUE_R[venue] ?? 600 });
+
   // Randomised so two venues can be picked at once without one silently
   // failing to bind and reporting every candidate as "never mounted".
   const port = 8400 + Math.floor(Math.random() * 400);
@@ -426,8 +445,48 @@ async function main() {
     );
   }
 
+  // --- the audit, on the shortlist ----------------------------------------
+  //
+  // Walked down in score order until one passes, and every rejection is
+  // printed. If none passes, that is the answer and it needs saying out loud:
+  // it would mean the venue's geometry cannot support a course of this shape,
+  // and the response is fewer controls or a different threshold, not a worse
+  // course.
+  const AUDIT_N = Math.min(25, viable.length);
+  let winner = null;
+  const rejected = [];
+  for (let i = 0; i < AUDIT_N; i++) {
+    const a = audit(viable[i].res.points);
+    const f = auditFaults(a);
+    viable[i].audit = a;
+    if (!f.length) { winner = viable[i]; break; }
+    rejected.push({ row: viable[i], faults: f });
+  }
+  if (rejected.length) {
+    console.log(`\n  refused by the 1 m audit, in score order:`);
+    for (const { row, faults } of rejected) {
+      console.log(`    ${row.seed}  ${faults[0]}${faults.length > 1 ? ` (+${faults.length - 1})` : ''}`);
+    }
+  }
+  if (!winner) {
+    console.log(
+      `\n  ✗ none of the top ${AUDIT_N} candidates passes the audit.` +
+        `\n    That is a statement about the venue, not about the seeds: this town cannot` +
+        `\n    hold a course of this shape without a leg over the limit. Fewer controls or` +
+        `\n    a different threshold — not a worse course.`,
+    );
+  }
+
+  if (winner) {
+    const b = winner;
+    console.log(
+      `\n  audit of the recommended seed (1 m, eight-connected, distance):\n` +
+        auditTable(b.audit, '    '),
+    );
+  }
+
   if (viable.length) {
-    const b = viable[0];
+    const b = winner ?? viable[0];
     console.log(
       `\n  → ${venue}: ${b.seed}` +
         `\n    ${b.res.controls} controls, ${b.res.lengthM} m, ${b.res.climbM} m climb, ` +

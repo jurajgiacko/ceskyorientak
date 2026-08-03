@@ -1466,6 +1466,318 @@ export function probeBlockers(venue, bin) {
 }
 
 /** Percentiles of the per-leg detour ratio, for reporting the whole distribution. */
+/**
+ * Audit one course, leg by leg: can every control be reached, and how far is
+ * the way there. **D-037.**
+ *
+ * This exists because a merge of the first attempt at D-037 shipped a course
+ * with six unreachable legs and a sealed control, and *nothing in this file
+ * failed*. `makeLegRouter` said the legs were routable, because it walks a 2 m
+ * lattice and Krumlov's alleys are 2–3 m wide — the exact aliasing
+ * `FieldTerrain.buildReachability` refuses to accept, and which its own comment
+ * warns about. The fault was found by hand, with a 1 m probe, after the merge.
+ * A measurement that has to be made by hand after a merge is not a gate.
+ *
+ * So this is deliberately **not** `makeLegRouter` with different constants:
+ *
+ *  - **1 m, not 2 m.** Same resolution the runtime's own reachability fill
+ *    uses, for the same reason.
+ *  - **Distance, not time.** `makeLegRouter` minimises time at the athlete's
+ *    class speeds, which is the right question for "does it run through the
+ *    alleys" and the wrong one for "how far is it": the fastest way round can
+ *    be longer than the shortest, and the ratio the sport talks about
+ *    (RESEARCH-SPORT §8.6, route efficiency) is a distance ratio.
+ *  - **Eight-connected with the corner rule**, so it cannot slip diagonally
+ *    between two blocked cells — the same rule `makeLegRouter` uses, and the
+ *    reason a plain four-connected flood reports "grid artifacts" this venue's
+ *    athlete walks straight through.
+ *  - **Sealed is distinct from unreachable.** A control with no open ground
+ *    within `SNAP_M` is not a routing failure, it is a control sited inside a
+ *    wall, and saying so is the difference between a five-minute fix and a
+ *    day of bisecting.
+ *
+ * One Dijkstra per sited point rather than per leg, which is the same work and
+ * gives the reachability of everything from the start for free.
+ */
+const SNAP_M = 3;
+
+export function makeCourseAudit(venue, bin, opts = {}) {
+  const { rMeta, r, town } = loadVenue(venue, bin);
+  const col = new Colliders(town);
+  const wb = new WaterBounds(town);
+  const rasterAt = (x, z) => {
+    const i = Math.round((x - rMeta.originX) / rMeta.resM);
+    const j = Math.round((z - rMeta.originZ) / rMeta.resM);
+    if (i < 0 || j < 0 || i >= rMeta.width || j >= rMeta.height) return IMPASSABLE;
+    return r[j * rMeta.width + i];
+  };
+  const blocked = blockedAtOf(col, wb, rasterAt);
+
+  const step = 1;
+  const R = opts.radiusM ?? PLAYABLE_R;
+  const w = Math.floor((2 * R) / step) + 1;
+  const h = w;
+  const idx = (i, j) => j * w + i;
+  const xOf = (i) => -R + i * step;
+  const zOf = (j) => -R + j * step;
+
+  const open = new Uint8Array(w * h);
+  for (let j = 0; j < h; j++) {
+    const z = zOf(j);
+    for (let i = 0; i < w; i++) open[idx(i, j)] = blocked(xOf(i), z) ? 0 : 1;
+  }
+  // Edge passability at the midpoint — a barrier lying between two open cell
+  // centres makes the step between them impossible while both cells look open.
+  const eastOk = new Uint8Array(w * h);
+  const southOk = new Uint8Array(w * h);
+  for (let j = 0; j < h; j++) {
+    const z = zOf(j);
+    for (let i = 0; i < w; i++) {
+      const k = idx(i, j);
+      if (!open[k]) continue;
+      const x = xOf(i);
+      if (i < w - 1 && open[k + 1] && !blocked(x + step / 2, z)) eastOk[k] = 1;
+      if (j < h - 1 && open[k + w] && !blocked(x, z + step / 2)) southOk[k] = 1;
+    }
+  }
+
+  /** The cell a sited point is routed from, snapped up to `SNAP_M` to open ground. */
+  const cellOf = (p) => {
+    const i0 = Math.max(0, Math.min(w - 1, Math.round((p.x + R) / step)));
+    const j0 = Math.max(0, Math.min(h - 1, Math.round((p.z + R) / step)));
+    if (open[idx(i0, j0)]) return idx(i0, j0);
+    const reach = Math.ceil(SNAP_M / step);
+    let best = -1;
+    let bestD = Infinity;
+    for (let dj = -reach; dj <= reach; dj++) {
+      for (let di = -reach; di <= reach; di++) {
+        const i = i0 + di;
+        const j = j0 + dj;
+        if (i < 0 || j < 0 || i >= w || j >= h) continue;
+        if (!open[idx(i, j)]) continue;
+        const d = di * di + dj * dj;
+        if (d < bestD) {
+          bestD = d;
+          best = idx(i, j);
+        }
+      }
+    }
+    return best;
+  };
+
+  const NB = [
+    [1, 0, 1], [-1, 0, 1], [0, 1, 1], [0, -1, 1],
+    [1, 1, Math.SQRT2], [1, -1, Math.SQRT2], [-1, 1, Math.SQRT2], [-1, -1, Math.SQRT2],
+  ];
+  const passable = (i0, j0, di, dj) => {
+    const k = idx(i0, j0);
+    if (di === 1) return eastOk[k] === 1;
+    if (di === -1) return i0 > 0 && eastOk[k - 1] === 1;
+    if (dj === 1) return southOk[k] === 1;
+    return j0 > 0 && southOk[k - w] === 1;
+  };
+
+  const dist = new Float64Array(w * h);
+  const stamp = new Int32Array(w * h);
+  let visit = 0;
+  let heapC = new Float64Array(1 << 17);
+  let heapK = new Int32Array(1 << 17);
+  let heapN = 0;
+  const push = (c, k) => {
+    if (heapN === heapC.length) {
+      const c2 = new Float64Array(heapN * 2);
+      const k2 = new Int32Array(heapN * 2);
+      c2.set(heapC); k2.set(heapK);
+      heapC = c2; heapK = k2;
+    }
+    let i = heapN++;
+    heapC[i] = c; heapK[i] = k;
+    while (i > 0) {
+      const p = (i - 1) >> 1;
+      if (heapC[p] <= heapC[i]) break;
+      const tc = heapC[p], tk = heapK[p];
+      heapC[p] = heapC[i]; heapK[p] = heapK[i];
+      heapC[i] = tc; heapK[i] = tk;
+      i = p;
+    }
+  };
+  const pop = () => {
+    const c = heapC[0], k = heapK[0];
+    heapN--;
+    heapC[0] = heapC[heapN]; heapK[0] = heapK[heapN];
+    let i = 0;
+    for (;;) {
+      const l = i * 2 + 1, rr = l + 1;
+      let m = i;
+      if (l < heapN && heapC[l] < heapC[m]) m = l;
+      if (rr < heapN && heapC[rr] < heapC[m]) m = rr;
+      if (m === i) break;
+      const tc = heapC[m], tk = heapK[m];
+      heapC[m] = heapC[i]; heapK[m] = heapK[i];
+      heapC[i] = tc; heapK[i] = tk;
+      i = m;
+    }
+    return [c, k];
+  };
+
+  /** Shortest walking distance in metres from `src` to every cell, or -1. */
+  const fieldFrom = (src) => {
+    visit++;
+    heapN = 0;
+    dist[src] = 0;
+    stamp[src] = visit;
+    push(0, src);
+    while (heapN) {
+      const [c, k0] = pop();
+      if (c > dist[k0]) continue;
+      const i0 = k0 % w;
+      const j0 = (k0 / w) | 0;
+      for (const [di, dj, d] of NB) {
+        const i1 = i0 + di;
+        const j1 = j0 + dj;
+        if (i1 < 0 || j1 < 0 || i1 >= w || j1 >= h) continue;
+        const k1 = idx(i1, j1);
+        if (!open[k1]) continue;
+        // A diagonal may not cut a corner the collider closes, and both of its
+        // orthogonal edges have to be crossable.
+        if (di && dj) {
+          if (!passable(i0, j0, di, 0) || !passable(i0, j0, 0, dj)) continue;
+          if (!passable(i0 + di, j0, 0, dj) || !passable(i0, j0 + dj, di, 0)) continue;
+        } else if (!passable(i0, j0, di, dj)) continue;
+        const nc = c + d * step;
+        if (stamp[k1] === visit && nc >= dist[k1]) continue;
+        stamp[k1] = visit;
+        dist[k1] = nc;
+        push(nc, k1);
+      }
+    }
+    return (k) => (stamp[k] === visit ? dist[k] : -1);
+  };
+
+  /**
+   * `points` is start, every control in order, then the finish — the same array
+   * `makeLegRouter` takes.
+   */
+  return function audit(points) {
+    const cells = points.map(cellOf);
+    const names = points.map((p, i) =>
+      i === 0 ? 'S' : i === points.length - 1 ? 'F' : String(i),
+    );
+
+    // Everything the athlete can reach from the start, which is the question
+    // "can this course be completed at all".
+    const fromStart = cells[0] >= 0 ? fieldFrom(cells[0]) : null;
+
+    const rows = [];
+    for (let k = 0; k + 1 < points.length; k++) {
+      const straightM = Math.hypot(
+        points[k + 1].x - points[k].x,
+        points[k + 1].z - points[k].z,
+      );
+      const name = `${names[k]}→${names[k + 1]}`;
+      if (cells[k] < 0 || cells[k + 1] < 0) {
+        rows.push({
+          leg: k, name, straightM, walkedM: -1, detour: 0,
+          status: 'SEALED',
+          sealed: cells[k] < 0 ? names[k] : names[k + 1],
+        });
+        continue;
+      }
+      const f = fieldFrom(cells[k]);
+      const walkedM = f(cells[k + 1]);
+      if (walkedM < 0) {
+        rows.push({ leg: k, name, straightM, walkedM: -1, detour: 0, status: 'UNREACHABLE' });
+        continue;
+      }
+      rows.push({
+        leg: k, name, straightM, walkedM,
+        detour: straightM > 0 ? Math.max(1, walkedM / straightM) : 1,
+        status: 'ok',
+      });
+    }
+
+    // Reachability of every sited point from the start, reported separately
+    // from the legs: a course can have every leg routable and still strand the
+    // athlete, and the two failures read completely differently.
+    const unreachableFromStart = [];
+    for (let i = 1; i < cells.length; i++) {
+      if (cells[i] < 0) continue;
+      if (!fromStart || fromStart(cells[i]) < 0) unreachableFromStart.push(names[i]);
+    }
+
+    const straightTotal = rows.reduce((a, x) => a + x.straightM, 0);
+    const walkedTotal = rows.reduce((a, x) => a + Math.max(0, x.walkedM), 0);
+    return {
+      rows,
+      unreachableFromStart,
+      sealed: [...new Set(rows.filter((x) => x.status === 'SEALED').map((x) => x.sealed))],
+      straightTotal,
+      walkedTotal,
+      courseDetour: straightTotal > 0 ? walkedTotal / straightTotal : 1,
+    };
+  };
+}
+
+/**
+ * The audit, judged. Every fault here is a hard failure on the shipped course.
+ *
+ * Ordered so the first line of the report is the worst thing that is true: a
+ * sealed control is a control inside a wall, an unreachable one is a course
+ * that cannot be completed, and a detour is a course that can be completed and
+ * should not have been set.
+ */
+export function auditFaults(a, limits = LIMITS) {
+  const out = [];
+  for (const p of a.sealed) {
+    out.push(`control ${p} is sealed — no open ground within ${SNAP_M} m of where it is sited`);
+  }
+  if (a.unreachableFromStart.length) {
+    out.push(
+      `control(s) ${a.unreachableFromStart.join(', ')} cannot be reached from the start at all — ` +
+        `this course cannot be completed`,
+    );
+  }
+  for (const x of a.rows) {
+    if (x.status === 'UNREACHABLE') {
+      out.push(`leg ${x.name} has no route between its ends (${Math.round(x.straightM)} m apart)`);
+    }
+  }
+  for (const x of a.rows) {
+    if (x.status !== 'ok') continue;
+    if (x.walkedM - x.straightM < limits.minDetourExcessM) continue;
+    if (x.detour <= limits.maxLegDetour) continue;
+    out.push(
+      `leg ${x.name} walks ${Math.round(x.walkedM)} m for a ${Math.round(x.straightM)} m ` +
+        `straight line — ${x.detour.toFixed(1)}×, over ${limits.maxLegDetour.toFixed(1)}×`,
+    );
+  }
+  return out;
+}
+
+/** The per-leg table, in the shape a human reads it. */
+export function auditTable(a, indent = '    ') {
+  const cell = (x) =>
+    x.status === 'ok'
+      ? `${String(Math.round(x.straightM)).padStart(4)}/${String(Math.round(x.walkedM)).padEnd(5)}` +
+        ` ${x.detour.toFixed(1)}×`
+      : `${String(Math.round(x.straightM)).padStart(4)}/${x.status}`;
+  const lines = [];
+  const half = Math.ceil(a.rows.length / 2);
+  for (let i = 0; i < half; i++) {
+    const l = a.rows[i];
+    const r = a.rows[i + half];
+    lines.push(
+      indent + `${l.name.padEnd(6)}${cell(l).padEnd(24)}` + (r ? `${r.name.padEnd(6)}${cell(r)}` : ''),
+    );
+  }
+  lines.push(
+    indent +
+      `total ${Math.round(a.straightTotal)} m straight, ${Math.round(a.walkedTotal)} m walked ` +
+      `— D ${a.courseDetour.toFixed(2)}`,
+  );
+  return lines.join('\n');
+}
+
 export function detourStats(legRuns) {
   const rs = [];
   for (const r of legRuns) for (const l of r.legs) if (l.routed) rs.push(l.detour);
@@ -2049,28 +2361,32 @@ async function stabilityPhase(venue, port, runs = 4) {
     );
   }
 
-  // --- the shipped course's own legs, measured -----------------------------
+  // --- the shipped course, audited leg by leg ------------------------------
+  //
+  // Every fault here is hard. This is the course the client plays, and the
+  // whole of D-037 is that "the gates were green and the course was
+  // unplayable" has now happened twice: once for the detour, and once for a
+  // merge that made six legs unreachable while `makeLegRouter` — 2 m lattice,
+  // alleys 2–3 m wide — reported every one of them routable. See
+  // `makeCourseAudit` for why this is a separate measurement rather than the
+  // same one with different constants.
   if (shipped) {
     const bins = [...new Set(tierRasters(venue).map((t) => t.bin))];
-    const routed = makeLegRouter(venue, bins[0] ?? 'runnability.bin')(shipped.points);
-    const faults = [];
-    for (const l of routed.legs.filter((l) => !l.routed)) {
-      faults.push(`leg ${l.leg} cannot be run at all — no route between its ends`);
-    }
+    const bin = bins[0] ?? 'runnability.bin';
+    const a = makeCourseAudit(venue, bin)(shipped.points);
+    const routed = makeLegRouter(venue, bin)(shipped.points);
+    const faults = auditFaults(a, LIMITS);
     if (routed.fraction < LIMITS.minLegsOnNetwork) {
       faults.push(
         `the legs run ${(routed.fraction * 100).toFixed(0)} % on the street network, ` +
           `under ${(LIMITS.minLegsOnNetwork * 100).toFixed(0)} %`,
       );
     }
-    faults.push(...detourFaults(routed, LIMITS));
-    const worst = routed.legs.reduce((a, l) => (l.detour > a.detour ? l : a), routed.legs[0]);
     console.log(
-      `  the shipped course runs ${routed.totalM} m for a printed ${ref.m} m — ` +
-        `D ${routed.courseDetour.toFixed(2)}, ` +
-        `${(routed.fraction * 100).toFixed(0)} % of it street; ` +
-        `worst leg ${worst.leg} at ${worst.detour.toFixed(1)}×`,
+      `  the shipped course walks ${Math.round(a.walkedTotal)} m for a printed ${ref.m} m ` +
+        `— D ${a.courseDetour.toFixed(2)}, ${(routed.fraction * 100).toFixed(0)} % of it street`,
     );
+    console.log(auditTable(a, '    '));
     for (const f of faults) console.error(`  ✗ ${f}`);
     if (faults.length) bad = true;
   }
