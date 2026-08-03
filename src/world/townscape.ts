@@ -230,6 +230,8 @@ export class Townscape {
   readonly stats = { walls: 0, steps: 0, water: 0, decks: 0, trees: 0, triangles: 0 };
 
   private readonly water: THREE.MeshStandardMaterial;
+  /** Read for one thing only: where a crossing hides the water under it. */
+  private readonly model: TownModel;
   private readonly materials: THREE.Material[] = [];
   private readonly geometries: THREE.BufferGeometry[] = [];
   private readonly treeMeshes: THREE.InstancedMesh[] = [];
@@ -243,6 +245,7 @@ export class Townscape {
     opts: TownscapeOptions,
   ) {
     this.group.name = 'townscape';
+    this.model = model;
 
     const stoneMat = new THREE.MeshStandardMaterial({
       map: stone.albedo,
@@ -666,6 +669,13 @@ export class Townscape {
       // out of bounds and invisible — small, and exactly the shape of fault
       // this venue has shipped four times.
       if (len < 1e-6) continue;
+      // A stream goes *under* a crossing. `WaterIndex.levelAt` stops the ribbon
+      // at the same band over the same `onCarriageway`, so the drawn water and
+      // the water every rule reads are one thing — the last time the geometry
+      // skipped what the index did not, 6 m² of the mill race was out of bounds
+      // and invisible. Sampled at both ends and the middle: a ribbon segment is
+      // metres long and a carriageway band is a few metres wide.
+      if (this.hiddenByCrossing(ax, az, bx, bz)) continue;
       const px = (-dz / len) * half;
       const pz = (dx / len) * half;
       const ya = field.heightAt(ax, az) + 0.1;
@@ -695,8 +705,18 @@ export class Townscape {
     for (let i = 0; i < n; i++) {
       const x = l[i * 2] as number;
       const z = l[i * 2 + 1] as number;
+      if (this.model.onCarriageway(x, z)) continue;
       this.buildDisc(b, x, field.heightAt(x, z) + 0.1, z, half);
     }
+  }
+
+  /** Is this ribbon segment under a crossing? See `buildWaterRibbon`. */
+  private hiddenByCrossing(ax: number, az: number, bx: number, bz: number): boolean {
+    return (
+      this.model.onCarriageway(ax, az) &&
+      this.model.onCarriageway(bx, bz) &&
+      this.model.onCarriageway((ax + bx) / 2, (az + bz) / 2)
+    );
   }
 
   /** A flat fan, used to round off the joints of a water ribbon. */

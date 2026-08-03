@@ -2390,7 +2390,20 @@ const PROBE = (limits) => `(async () => {
     if (level === null) continue;
     const feet = w.groundAt(x, z);
     const onDeck = surf.decks.covers(x, z);
-    wetness.push({ n: o.n, onDeck, freeboard: Number((feet - level).toFixed(2)) });
+    // Enough to say *why*, not only *that*. A crossing whose span was never
+    // raised leaves the athlete on the bare earth, and a watercourse ribbon is
+    // drawn at terrain + RIBBON_RISE_M — so "raised: false" with a freeboard of
+    // exactly minus the ribbon rise is a different fault from a sagging chord,
+    // and the two want opposite fixes.
+    wetness.push({
+      n: o.n,
+      onDeck,
+      raised: surf.decks.heightAt(x, z) !== null,
+      overCourse: level !== null && Math.abs(level - (terrainY + 0.1)) < 1e-6,
+      x: Number(x.toFixed(1)),
+      z: Number(z.toFixed(1)),
+      freeboard: Number((feet - level).toFixed(2)),
+    });
     if (!onDeck) {
       faults.push(
         o.n + ' is sited over water (ISSprOM 301) with no bridge under it, at ' +
@@ -2399,7 +2412,8 @@ const PROBE = (limits) => `(async () => {
     } else if (feet < level + ${limits.minFreeboardM}) {
       faults.push(
         o.n + ' stands on a bridge but ' + (level - feet).toFixed(2) +
-        ' m below the water surface',
+        ' m below the water surface, at ' + x.toFixed(0) + ',' + z.toFixed(0) +
+        (surf.decks.heightAt(x, z) === null ? ' (the span is not raised)' : ' (raised deck)'),
       );
     }
   }
@@ -2839,6 +2853,8 @@ async function runtimePhase(venue, port) {
     const onDeck = wetnessAll.filter((x) => x.onDeck).length;
     console.log(
       `  ${wetnessAll.length} sited point(s) stood over water, ${onDeck} of them on a bridge` +
+        `\n    ${wetnessAll.filter((x) => !x.raised).length} of them on a crossing whose span was ` +
+        `never raised, ${wetnessAll.filter((x) => x.overCourse).length} over a watercourse ribbon` +
         `\n    freeboard min ${fb[0].toFixed(2)} m · median ${fb[fb.length >> 1].toFixed(2)} m` +
         ` · max ${fb[fb.length - 1].toFixed(2)} m`,
     );

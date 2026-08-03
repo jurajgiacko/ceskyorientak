@@ -82,6 +82,18 @@ const MAX_DECK_LIFT_M = 10;
 const DECK_STEP_M = 2;
 
 /**
+ * Least clearance a raised deck keeps over the water it crosses, metres.
+ *
+ * The same number `tools/ci/check-passable.mjs` asserts, and deliberately the
+ * same one: a gate whose threshold the code does not know about is a gate the
+ * code can only satisfy by accident. D-031 states the reasoning — it is not a
+ * clearance requirement but the line between *standing on the deck* and
+ * *standing in the river*, set comfortably above the noise the abutment heights
+ * carry, and comfortably under the metre a real Krumlov footbridge sits at.
+ */
+const MIN_FREEBOARD_M = 0.5;
+
+/**
  * The deck's half-width is `TownCarriageway.half`, and the floor under it lives
  * in the model — one number for the band the deck is drawn to, the band the
  * athlete stands on, and the band the water and barrier rules are lifted over.
@@ -203,20 +215,68 @@ export class BridgeDecks {
 
   /**
    * `heights` is the bare-earth surface, and only the raised set depends on it.
+   *
+   * `waterAt` is the surface of whatever the crossing crosses, or null where
+   * nothing is drawn under it. See `clearWater`: a chord derived from two
+   * abutments can pass under the river between them, and D-031 is what that
+   * cost the last time nobody checked.
    */
   constructor(
     carriageways: readonly TownCarriageway[],
     heights: (x: number, z: number) => number,
+    waterAt: (x: number, z: number, groundY: number) => number | null = () => null,
   ) {
     for (const way of carriageways) {
       const flat = this.outline(way);
       if (!flat) continue;
       this.index(this.carriageways, flat);
-      const span = this.measure(flat, heights);
+      const span = this.measure(flat, heights, waterAt);
       if (!span) continue;
       this.spans.push(span);
       this.index(this.raised, span);
     }
+  }
+
+  /**
+   * Lift the chord clear of the water it crosses.
+   *
+   * D-031 fixed a deck that sagged 5.2 m below its abutments and left the
+   * general case standing: **the chord is derived from the two banks and knows
+   * nothing about what is between them.** Where the banks are low and the
+   * surveyed water surface is not, the deck can come out below the river — and
+   * a bridge whose roadway is under the water it crosses is not a bridge, it is
+   * a ford drawn as one.
+   *
+   * Measured on the venue as it stands, the worst raised span cleared the water
+   * by **0.34 m**. That is not a drowning and it is inside the noise the
+   * abutment heights carry, which is exactly why `MIN_FREEBOARD_M` exists and
+   * why it is a floor rather than a target: a real Krumlov footbridge sits about
+   * a metre over the Vltava, and anything under half of that is the derivation
+   * talking rather than the town.
+   *
+   * The whole span is lifted by the worst deficit rather than bent, because a
+   * street bridge is straight and `Townscape.buildDeck` draws it from these same
+   * two numbers. Drawn and stood on together, or the athlete floats.
+   */
+  private waterDeficit(
+    flat: DeckSpan,
+    y0: number,
+    y1: number,
+    heights: (x: number, z: number) => number,
+    waterAt: (x: number, z: number, groundY: number) => number | null,
+  ): number {
+    const { line, at, length } = flat;
+    let deficit = 0;
+    const steps = Math.max(2, Math.ceil(length / DECK_STEP_M));
+    for (let s = 0; s <= steps; s++) {
+      const t = s / steps;
+      const p = pointAt(line, at, length * t);
+      const level = waterAt(p.x, p.z, heights(p.x, p.z));
+      if (level === null) continue;
+      const need = level + MIN_FREEBOARD_M - (y0 + (y1 - y0) * t);
+      if (need > deficit) deficit = need;
+    }
+    return deficit;
   }
 
   /** The carriageway's footprint, with no heights read. */
@@ -247,6 +307,7 @@ export class BridgeDecks {
   private measure(
     flat: DeckSpan,
     heights: (x: number, z: number) => number,
+    waterAt: (x: number, z: number, groundY: number) => number | null,
   ): DeckSpan | null {
     const { line, at, length } = flat;
     const n = line.length / 2;
@@ -270,7 +331,20 @@ export class BridgeDecks {
     }
     if (lift < MIN_DECK_LIFT_M || lift > MAX_DECK_LIFT_M) return null;
 
-    return { line, at, length, half: flat.half, y0, y1, lift };
+    // And then clear of the water, which the chord's two abutments know nothing
+    // about. Applied after the raised/not-raised decision rather than before,
+    // so that a slab the survey puts at ground level stays a slab at ground
+    // level: this lifts a bridge that is one, it does not invent one.
+    const deficit = this.waterDeficit(flat, y0, y1, heights, waterAt);
+    return {
+      line,
+      at,
+      length,
+      half: flat.half,
+      y0: y0 + deficit,
+      y1: y1 + deficit,
+      lift: lift + deficit,
+    };
   }
 
   private index(grid: Grid<DeckSpan>, span: DeckSpan): void {
@@ -407,8 +481,10 @@ function pointInRing(p: Float32Array, x: number, z: number): boolean {
 export class WaterIndex {
   private readonly areas = new Grid<WaterArea>(24);
   private readonly courses = new Grid<WaterCourse>(24);
+  private readonly model: TownModel;
 
   constructor(model: TownModel) {
+    this.model = model;
     for (const w of model.waterAreas) {
       const ring = w.ring;
       let minX = Infinity;
@@ -443,11 +519,37 @@ export class WaterIndex {
     }
   }
 
+  /**
+   * A watercourse ribbon is a *drawing device*, and it stops at a crossing.
+   *
+   * An area has a surveyed surface elevation, which is a fact about the world
+   * and is drawn flat at it. A ribbon has no surveyed level at all: it follows
+   * the terrain at `RIBBON_RISE_M`, which exists so that it does not z-fight
+   * with the ground it is laid on. Run one under a crossing that the survey puts
+   * at ground level — a slab over a mill race, and **26 of Krumlov's 47 bridge
+   * ways are in that class** (`MIN_DECK_LIFT_M`) — and the ribbon is drawn ten
+   * centimetres above the ground the athlete is standing on. The stream is over
+   * their shoes.
+   *
+   * So the ribbon is not drawn across a carriageway, and this is where that is
+   * decided, for the drawing and for every rule that reads it alike.
+   * `Townscape.buildWaterRibbon` asks the same `TownModel.onCarriageway` over
+   * the same band. One object: the last time the geometry skipped something the
+   * index did not, it left 6 m² of the mill race out of bounds and invisible.
+   *
+   * Areas are untouched. The Vltava's surface is surveyed, a deck over it can
+   * genuinely sag under it, and that assertion is D-031's whole subject.
+   */
+  private ribbonHidden(x: number, z: number): boolean {
+    return this.model.onCarriageway(x, z);
+  }
+
   /** Is water drawn over (x, z)? */
   covers(x: number, z: number): boolean {
     for (const a of this.areas.at(x, z)) {
       if (pointInRing(a.ring, x, z)) return true;
     }
+    if (this.ribbonHidden(x, z)) return false;
     for (const c of this.courses.at(x, z)) {
       if (projectOnSegment(c.ax, c.az, c.bx, c.bz, x, z).d <= c.half) return true;
     }
@@ -469,6 +571,7 @@ export class WaterIndex {
       if (!pointInRing(a.ring, x, z)) continue;
       if (best === null || a.y > best) best = a.y;
     }
+    if (this.ribbonHidden(x, z)) return best;
     for (const c of this.courses.at(x, z)) {
       if (projectOnSegment(c.ax, c.az, c.bx, c.bz, x, z).d > c.half) continue;
       const y = groundY + RIBBON_RISE_M;
@@ -493,8 +596,12 @@ export class TownSurface {
   readonly water: WaterIndex;
 
   constructor(model: TownModel, heights: (x: number, z: number) => number) {
-    this.decks = new BridgeDecks(model.carriageways, heights);
+    // Water first: the decks are lifted clear of what they cross, so they have
+    // to be able to ask what that is. See `BridgeDecks.clearWater`.
     this.water = new WaterIndex(model);
+    this.decks = new BridgeDecks(model.carriageways, heights, (x, z, groundY) =>
+      this.water.levelAt(x, z, groundY),
+    );
   }
 
   /** Ground the athlete stands on at (x, z): the deck if there is one, else the terrain. */
