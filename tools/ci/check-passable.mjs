@@ -1629,7 +1629,7 @@ export function makeCourseAudit(venue, bin, opts = {}) {
    * around it. Omit `goal` for the reachability pass, which genuinely wants
    * everything.
    */
-  const fieldFrom = (src, goal = -1) => {
+  const distancesFrom = (src, targets, goal = -1) => {
     visit++;
     heapN = 0;
     dist[src] = 0;
@@ -1660,7 +1660,21 @@ export function makeCourseAudit(venue, bin, opts = {}) {
         push(nc, k1);
       }
     }
-    return (k) => (stamp[k] === visit ? dist[k] : -1);
+    // **Answered here, as plain numbers, and never as a closure.**
+    //
+    // `dist` and `stamp` are one pair of scratch arrays shared by every search,
+    // so a function that reads them later reads whatever the *last* search
+    // wrote. That is not hypothetical: this returned `(k) => stamp[k] === visit
+    // ? dist[k] : -1`, the reachability answers were read after sixteen
+    // per-leg searches had overwritten the arrays, and the gate reported four
+    // controls of a perfectly reachable course as unreachable. It only became
+    // visible when the per-leg searches gained an early exit and stopped
+    // incidentally re-covering the whole component — i.e. the bug was latent
+    // and a *speed-up* exposed it.
+    //
+    // Returning values rather than a view makes the stale read impossible
+    // rather than merely absent.
+    return targets.map((k) => (k >= 0 && stamp[k] === visit ? dist[k] : -1));
   };
 
   /**
@@ -1674,8 +1688,10 @@ export function makeCourseAudit(venue, bin, opts = {}) {
     );
 
     // Everything the athlete can reach from the start, which is the question
-    // "can this course be completed at all".
-    const fromStart = cells[0] >= 0 ? fieldFrom(cells[0]) : null;
+    // "can this course be completed at all". Read out immediately — see
+    // `distancesFrom`.
+    const fromStart =
+      cells[0] >= 0 ? distancesFrom(cells[0], cells) : cells.map(() => -1);
 
     const rows = [];
     for (let k = 0; k + 1 < points.length; k++) {
@@ -1692,8 +1708,7 @@ export function makeCourseAudit(venue, bin, opts = {}) {
         });
         continue;
       }
-      const f = fieldFrom(cells[k], cells[k + 1]);
-      const walkedM = f(cells[k + 1]);
+      const walkedM = distancesFrom(cells[k], [cells[k + 1]], cells[k + 1])[0];
       if (walkedM < 0) {
         rows.push({ leg: k, name, straightM, walkedM: -1, detour: 0, status: 'UNREACHABLE' });
         continue;
@@ -1711,7 +1726,7 @@ export function makeCourseAudit(venue, bin, opts = {}) {
     const unreachableFromStart = [];
     for (let i = 1; i < cells.length; i++) {
       if (cells[i] < 0) continue;
-      if (!fromStart || fromStart(cells[i]) < 0) unreachableFromStart.push(names[i]);
+      if (fromStart[i] < 0) unreachableFromStart.push(names[i]);
     }
 
     const straightTotal = rows.reduce((a, x) => a + x.straightM, 0);
@@ -2047,6 +2062,13 @@ const PROBE = (limits) => `(async () => {
     // Every sited point, so the caller can route the legs over the same
     // collision the game enforces and ask whether they run in the streets.
     points: named.map((o) => ({ n: o.n, x: o.p.x, z: o.p.z })),
+    // What the **runtime** thinks it can reach, point by point, so the caller
+    // can hold its offline reconstruction of \`blockedAt\` to account. The
+    // runtime is the truth here: it is what stops the player. An offline model
+    // that is stricter is safe when it passes a course and dangerous when it
+    // refuses one, because it will refuse courses that play perfectly and the
+    // picker will never find a seed. See \`makeCourseAudit\`.
+    runtimeReachable: named.map((o) => !!r.terrain.reachableAt(o.p.x, o.p.z)),
     startFinishM: Number(
       Math.hypot(c.start.x - c.finish.x, c.start.z - c.finish.z).toFixed(1),
     ),
@@ -2385,6 +2407,42 @@ async function stabilityPhase(venue, port, runs = 4) {
     const a = makeCourseAudit(venue, bin)(shipped.points);
     const routed = makeLegRouter(venue, bin)(shipped.points);
     const faults = auditFaults(a, LIMITS);
+
+    // --- and does the offline model still agree with the runtime? ----------
+    //
+    // The audit is a reconstruction of `SprintScene.blockedAt` outside the
+    // browser, and its own `blockedAtOf` comment records that it cannot see the
+    // landmark footprints `Buildings` skips — so it is *stricter*, never
+    // looser. Stricter is the safe direction for passing a course and the
+    // dangerous direction for refusing one: a gate harsher than the game
+    // refuses courses that play perfectly, and the picker sharing it would then
+    // reject good seeds forever and report "no seed passes" for a reason that
+    // is an artifact rather than a fact about the venue.
+    //
+    // So the two are compared directly, and a disagreement is its own fault
+    // with its own message. It is not the same bug as a bad course and must
+    // never be reported as one.
+    const names = shipped.points.map((p) => p.n);
+    const disagree = [];
+    for (let i = 0; i < names.length; i++) {
+      const offlineOk = !a.sealed.includes(names[i]) && !a.unreachableFromStart.includes(names[i]);
+      const runtimeOk = shipped.runtimeReachable?.[i] ?? true;
+      if (offlineOk !== runtimeOk) {
+        disagree.push(`${names[i]}: offline says ${offlineOk ? 'reachable' : 'not'}, the game says ${runtimeOk ? 'reachable' : 'not'}`);
+      }
+    }
+    if (disagree.length) {
+      faults.push(
+        `the offline collision model and the runtime disagree about ${disagree.length} point(s) — ` +
+          disagree.join('; ') +
+          `\n    The runtime is the truth: it is what stops the player. Fix the audit, not the` +
+          `\n    course. See blockedAtOf and makeCourseAudit in this file.`,
+      );
+    } else {
+      console.log(
+        `  the offline model and the runtime agree on all ${names.length} sited points`,
+      );
+    }
     if (routed.fraction < LIMITS.minLegsOnNetwork) {
       faults.push(
         `the legs run ${(routed.fraction * 100).toFixed(0)} % on the street network, ` +
