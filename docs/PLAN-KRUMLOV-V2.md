@@ -335,7 +335,9 @@ tested, which is precisely why an area measurement could never have caught D-027
 Do phase 0 before writing any of phase 1. It is the cheapest hour in the plan and the only
 one that can save the rest.
 
-1. **TownModel + colliders.** Vector, one source. Assert: drawn ≡ solid, everywhere.
+
+1. **TownModel + colliders.** Vector, one source. Assert: drawn ≡ solid, everywhere. **Done —
+   see below.**
 2. **Passable space + connectivity.** One component, asserted before any course exists.
    Tier-independent by construction.
 3. **Street graph + course setting on it.** Detour ratio and start run-out known at
@@ -343,6 +345,75 @@ one that can save the rest.
 4. **Dress the town** — shopfronts, arcades, furniture — with furniture doubling as control
    sites and column-D descriptions.
 5. **Play it.** Not a gate — a person running the course, several times, on a phone.
+
+### Answered: the model is built, and the gate reads the scene rather than the data
+
+**Phase 1 is done. D-038 has the whole record; this is what changes the plan.**
+
+`tools/terrain/townmodel.mjs` writes `townmodel.bin` — 1739 footprints, 619
+barriers, 8 water areas, 17 watercourses, 47 bridge carriageways, 3852 collision
+primitives in 134 kB (81 kB gzip) — and `src/world/townModel.ts` indexes it at
+load. `SprintScene.blockedAt` is one call into it, where it used to OR four
+sources of which two disagreed with the geometry the player sees.
+
+**The property is structural, not asserted.** The packed file carries a
+barrier's height and no solidity field: `blocks` is `height > crossableMaxH`,
+derived once, and the drawn slab is the same height and the same thickness. A
+file that says "drawn tall, not solid" cannot be written. `Buildings.blocks` is
+gone — it was the footprint list *filtered by a rendering concern*, which is how
+the castle tower came to be drawn and not solid — and anything modelled by hand
+registers its footprint in the function that draws it.
+
+**`tools/ci/check-townmodel.mjs` reads the scene graph**, rasterises every
+triangle under the town's groups at 0.5 m, and compares it with the running
+game's own `blockedAt`. Over the 144 ha playable square: **1 m² drawn and not
+solid, worst single run 0.25 m² — one cell of the lattice — and 0 m² solid with
+nothing drawn at it.** The game's collision against the shipped model's, cell for
+cell over 5.8 M points: 0 m² unexplained. It found seven real faults on the way,
+including the 54 m castle tower with no collider at all, 88 buildings whose eaves
+sat below the ground they stand on, and 305 m² of wall drawn diving under its own
+hillside. None had been reported by a player.
+
+**Three corrections to this plan, and the second one changes phase 2.**
+
+- **§6 phase 0's "2977 barrier segments with drawn ≡ solid" is the wrong set.**
+  Read literally, §2 rule 2 re-closes the 13.49 km of 0.9 m fence D-029
+  deliberately left crossable — 95.1 % of the venue reachable becomes 85.6 %.
+  The rule is *drawn as blocking* ≡ solid: 1885 segments, 3852 primitives. Phase
+  0's timings stand as an upper bound because they were measured on the larger
+  set.
+
+- **The raster cannot simply be dropped; it is now derived.** `Race.step` blocks
+  on `Runnability.Impassable` and that class carries speed zero, so the raster
+  held a second opinion about bounds whatever `blockedAt` said — 19 674 m² of the
+  playable square was out of bounds with nothing solid there, up to 43 m from
+  anything visible. It is now written from the model in one pass, replacing five
+  stamps in an order no single place owned. **Phase 2 inherits the consequence:**
+  the passable space it derives has to be the model's, and the raster is a
+  *drawing* of it at 1 m, not a second copy of it — a feature narrower than a
+  cell is drawn one cell wide, and widening every barrier by half a cell instead
+  turned a 2.5 m alley into 0.9 m and produced a course with five unrunnable
+  legs. D-027 at one twentieth of the scale.
+
+- **A collider thinner than one step was not a barrier.** The athlete moves
+  0.56 m in a frame and a railing's collider is 0.60 m; `Race.step` tested only
+  the destination. That produced a 142 m² pocket you could step into off a road
+  and not step out of through grass. The step is swept at 0.20 m now, and the
+  trap class is gone rather than the instance.
+
+**What phase 1 cost.** 217 ns a `blockedAt` query unthrottled — 0.02 ms at the
+measured 105 calls a frame, and phase 0's 4× figure of 0.36 ms p99 still bounds
+it. +134 kB on the wire, +37 % triangles on the townscape (the wall
+subdivision), reachability unchanged at 94.9 %, uncrossable barrier drawn on the
+map 95.6 % → 99.5 %, traps 1 → 0.
+
+**And one thing moved without being asked to:** `COURSE_SEED` is untouched but
+the course it resolves to is not, because the generator's RNG is drawn inside
+geometry-dependent branches (D-029) and the geometry changed. Krumlov now runs 13
+controls, 1740 m, D 1.16, worst leg 1.9× — better than the 1.48 that was chosen,
+and still starting and finishing on Road. It is a *generated* course that happens
+to be good, not a chosen one; **phase 3 must re-run `pick-course.mjs` on the
+street graph**, which it was going to do anyway.
 
 **Do not re-enable the menu entry until phase 5 passes.** That is the client's sequencing and
 it is the correct one: every Krumlov fault so far reached him because something shipped on a

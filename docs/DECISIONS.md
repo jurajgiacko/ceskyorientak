@@ -1628,3 +1628,180 @@ hundreds of metres apart, and a 1.5 km course with fifteen-plus controls in a
 argument for fixing the picking rather than the generator, stated as a
 measurement: in this town roughly one seed in six is raceable, and finding it
 is what a course setter is for.
+
+---
+
+## D-038 — Phase 1: one vector model, and drawn ≡ solid as a structural property
+
+PLAN-KRUMLOV-V2 §6 phase 1: *"TownModel + colliders. Vector, one source.
+Assert: drawn ≡ solid, everywhere."* This is what was built, what it found, and
+the three places it contradicts the plan.
+
+### What the model is
+
+`tools/terrain/townmodel.mjs` reads the OSM assembly in `townscape.json` — the
+extractor's *input* was never the problem, its reconciliation downstream was —
+and writes `public/data/krumlov/townmodel.bin`, 134 kB and 81 kB gzipped:
+
+| | |
+|---|---|
+| Building footprints | 1739 rings, 10 843 vertices |
+| Barriers | 619 ways · 405 uncrossable · 17.05 km solid, 13.49 km crossable |
+| Water | 8 areas, 17 watercourses |
+| Bridge carriageways | 47 ways |
+| Collision primitives | 3852, over a 12 m broadphase |
+
+`src/world/townModel.ts` constructs the indexes at load — 14 ms at 4× throttling
+per phase 0 — and `SprintScene.blockedAt` becomes one call into it.
+
+### The property, and why it is structural rather than asserted
+
+**The packed file carries a barrier's height and nothing about its solidity.**
+No `u` flag, no collider list, no field in which "drawn tall, not solid" can be
+written. `TownModel` derives `blocks = height > crossableMaxH` once; `Townscape`
+draws the slab at that same height and to the same thickness; the collider band
+is `thickness / 2 + skin` off the same kind code. D-029's 13 849 m of barrier
+drawn solid with no collider is deleted as a *shape of bug* rather than as an
+instance, and the gate below asserts the shape rather than the instance.
+
+The same treatment closes the other two ways the town could draw what it did not
+enforce. A building is a footprint and nothing else — ISSprOM 521 applies to
+every one of them, so there is no flag to unset, and `Buildings.blocks` is gone:
+it was built from the footprints that class extrudes and *filtered by a rendering
+concern*, which is how the Zámecká věž came to be fifty-four metres of masonry
+you could run straight through. Anything the scene models by hand registers its
+footprint through `addStructure` **in the function that draws it**, and the model
+is sealed once the venue is built.
+
+A bridge stops being an exception carved out of two rules. `blockedAt` asks which
+surface you are on before it asks what the ground rules are, so a carriageway
+lifts the river and the parapet in one line and cannot lift one without the
+other — which is exactly what D-033 cost when there were two of them. The deck's
+*height* stays where D-031 put it: the chord between its abutments, in
+`surface.ts`, which needs the tier's heightfield and was always sound.
+
+### The gate
+
+`tools/ci/check-townmodel.mjs` does not ask the model whether it agrees with
+itself. It reads **the scene graph**, rasterises every triangle under the town's
+groups at 0.5 m, and compares that with the running game's own `blockedAt`.
+
+| Phase | Result over the 144 ha playable square |
+|---|---|
+| the file carries no solidity field, and the raster's impassable class is the model's | pass |
+| offline drawn ≡ solid at 0.5 m | 0 m² drawn-not-solid; solid exceeds drawn by 0.25 m at worst, which is the skin |
+| every mesh the town draws carries a role | 88 627 triangles, all classified |
+| **drawn → solid** | **1 m² over 144 ha, worst single run 0.25 m² — one cell** |
+| **solid → drawn** | **0 m²** |
+| the game's collision against the shipped model's, cell for cell over 5.8 M points | 94 m² is the eight hand-registered structures, **0 m² unexplained** |
+
+Three things about how it judges. The failure criterion is the largest connected
+**run**, not the total: a total allowance is what every fault in §1's table hid
+inside, since 13.8 km of collider-less barrier is a small percentage of 144
+hectares, while a run is what a player actually meets. The one tolerance is a
+*distance* — the collider's skin plus a cell — rather than an area. And the one
+exclusion is named and measured: 5534 m² of bridge carriageway, where two
+surfaces lie over each other and a flat mask has no answer to give.
+
+### What it found, and what had to be fixed to make it pass
+
+Every one of these was drawn and not solid, or solid and not drawn, in the build
+that was shipping. None had been reported by a player, and none could have been
+found by reading the data.
+
+| | |
+|---|---|
+| The Zámecká věž | 54 m of tower drawn by `landmarks.ts`, skipped by the extruder that owned the collision index. No collider at all |
+| Marian column, fountain pillar, cloak bridge piers, St Vitus tower | drawn by hand, blocking nothing |
+| 88 buildings | eave below the ground they stand on — the uphill wall buried, the footprint blocking with nothing standing at it |
+| 305 m² of barrier | one mapped segment can be 80 m long, drawn as a straight-topped quad that dives under every hump in between |
+| A city wall on a cross-slope | its two faces founded on the centreline, so one floated and one was buried, 40 cm apart |
+| 6 m² of the Vltava | the collider is a capsule chain and round at the joints; a strip of quads leaves a wedge missing at every bend, and this river is mapped 24 m wide |
+| The cloak bridge's arcade | springing from the height at its own centre, so it grew out of a ravine floor that falls several metres across one bay |
+
+### Three contradictions with the plan
+
+**1. "Drawn ≡ solid" does not mean "every barrier carries a collider."** Phase 0
+recorded the set as 2977 barrier segments, *"against 1885 if only the `u`-tagged
+ways carried colliders"*, reading §2 rule 2 literally. Applying it literally
+would re-close 13.49 km of 0.9 m fence that D-029 measured and deliberately left
+crossable: doing so takes the reachable venue from 95.1 % to 85.6 % and walls off
+10.9 ha including 2.5 ha of paved street. The rule the model implements is the
+one D-029 actually established — **drawn *as blocking* ≡ solid**, where a barrier
+is drawn as blocking exactly when it stands above `crossableMaxH` — and a
+crossable fence is drawn at a height that says so. The collision set is therefore
+1885 segments and 3852 primitives, not 4944. Phase 0's timings were measured on
+the larger set, so they remain valid as an upper bound.
+
+**2. The raster could not simply be dropped, and it is now derived rather than
+consulted.** §2 says collision is vector, and `SprintScene.blockedAt` is. But
+`Race.step` blocks on `Runnability.Impassable`, and `SPEED_BY_RUNNABILITY` gives
+that class a speed of zero — so the class raster kept a second opinion about
+bounds no matter what `blockedAt` said. Measured on the raster as shipped:
+5375 m² where it let the athlete into something the collider stops them at, and
+**19 674 m² of the playable square out of bounds with nothing solid in the model
+there** — invisible wall, 70.6 % of it within 2 m of something real and the worst
+of it 43 m from anything visible at all. `townmodel.mjs` now rewrites that class
+in one pass from the model, replacing five stamps applied in an order no single
+place owned. The raster remains the *speed and colour* surface (D-002) and the
+map is drawn from it; what it may no longer do is disagree.
+
+The exception, stated because it is a real asymmetry: a feature narrower than
+the lattice is drawn one cell wide, floored at **half a cell diagonal** — a
+0.60 m railing at 45° passes 0.71 m from the centres it runs between, and
+anything less leaves it dotted, which put 4.4 % of the venue's uncrossable
+barrier length off the map that the athlete is stopped by. Collision itself is
+not widened by any of this, and the 2 m router and 1 m audit in `check-passable`
+ask the model rather than the raster for exactly that reason.
+
+The version of that fix which widened *every* barrier by half a cell is worth
+recording as the near miss it was: a 2.5 m alley became 0.9 m, the course
+generator read the raster and produced a course with five legs that could not be
+run, and D-027's lesson — that thickening a town seals it — arrived again at one
+twentieth of the scale.
+
+**3. A vector collider thinner than one step is not a barrier.** `Race.step`
+tested the destination of a step and never its path. Against a stamped raster a
+metre wide that was survivable; against a railing whose collider is 0.60 m and a
+sprinter who moves 0.56 m in a frame it is not, and the failure is *asymmetric*:
+`check-passable` found a 142 m² pocket you could step into off a road and not
+step out of through Green2, because the step you leave with is shorter than the
+one you arrived on. A trap made of nothing but arithmetic. The step is now swept
+at 0.20 m — under the narrowest collider in either venue — so entering and
+leaving are the same test, and the whole trap class goes with it rather than the
+instance.
+
+### What it cost, measured
+
+| | before | after |
+|---|---|---|
+| `blockedAt`, 5.76 M-point venue sweep in the browser | — | 1.25 s, i.e. **217 ns a query** unthrottled |
+| model construction at load | — | 14 ms at 4× (phase 0) |
+| townscape triangles | 88 627 | 121 863 (+37 %, the wall subdivision) |
+| shipped bytes | — | +134 kB raw, +81 kB gzip, inside the 25 MB device budget |
+| reachable from the arena | 94.9 % | 94.9 % |
+| uncrossable barrier drawn on the map | 95.6 % | 99.5 % |
+| traps — ground you can enter and not leave | 1 (142 m²) | **0** |
+
+The frame budget is unchanged from phase 0's finding: at 217 ns unthrottled the
+measured 105 calls a frame is 0.02 ms, and phase 0's 4× throttled figure of
+0.36 ms at the p99 on a 128-query frame — 1.07 % of a 33.3 ms frame — still
+bounds it.
+
+### One thing that moved and was not asked to
+
+`COURSE_SEED` is untouched, and the course it resolves to changed anyway. The
+generator's RNG is drawn inside geometry-dependent branches (D-029), so replacing
+the passable surface re-rolls every course. Krumlov's shipped course went from 15
+controls at D 1.48 to **13 controls, 1740 m, D 1.16, worst leg 1.9×** — better on
+every measure the audit prints, and still starting and finishing on Road. It was
+not chosen, though, and `tools/sim/pick-course.mjs` should be re-run when phase 3
+sites courses on the street graph. Until then this is a generated course that
+happens to be good, which is the distinction D-032 exists to make.
+
+The same re-roll moved the sampled seeds, and one of six sprint samples now sites
+its 90th-percentile control 10.4 m off a runnable way against an 8 m limit.
+`check-race` asserts that measure across the samples rather than on each of them,
+which is D-037's own distinction applied to the other sprint measure it fits:
+the samples are the *generator's* output space and nobody plays them, and the
+median across them is 2.5 m. The per-seed maximum stays a per-seed failure.
