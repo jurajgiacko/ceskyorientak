@@ -69,8 +69,6 @@ tools/blender/
 │                    writes public/models/manifest.json
 ├── validate.mjs     Parses every .glb with @gltf-transform and enforces budgets
 ├── preview.py       Imports a .glb and renders a 4-angle turntable sheet
-├── preview-viewmodel.py  Renders a viewmodel .glb from the game camera
-│                    (origin, 46 deg vFOV, -Z) -- one frame per clip
 ├── assets/<name>.py One script per asset -> public/models/<name>.glb
 ├── lib/             Shared helpers (see below)
 ├── previews/        Rendered verification sheets (committed)
@@ -198,14 +196,13 @@ _Generated 2026-08-01 by `node tools/blender/validate.mjs --write-readme`._
 | `control-stand` | 756 | 1146 (LOD0:756 LOD1:302 LOD2:88) | 3 | 2 | 0 | 43.8 KB | no | OK |
 | `deadwood` | 3038 | 4582 (LOD0:3038 LOD1:1212 LOD2:332) | 9 | 4 | 0 | 83.1 KB | yes | OK |
 | `finish-gantry` | 1728 | 2404 (LOD0:1728 LOD1:676) | 2 | 3 | 0 | 36.4 KB | yes | OK |
-| `orienteer-hands` | 5768 | 5768 (LOD0:5768) | 1 | 8 | 0 | 280.0 KB | no | OK |
 | `orienteer` | 12736 | 12736 (LOD0:12736) | 1 | 10 | 0 | 580.0 KB | no | OK |
 | `race-belt` | 880 | 880 (LOD0:880) | 1 | 3 | 0 | 38.3 KB | no | OK |
 | `si-unit` | 450 | 684 (LOD0:450 LOD1:180 LOD2:54) | 3 | 3 | 0 | 39.6 KB | no | OK |
 | `spectator-fence` | 480 | 721 (LOD0:480 LOD1:191 LOD2:50) | 3 | 2 | 0 | 48.2 KB | no | OK |
 | `spruce` | 18904 | 26178 (LOD0:18904 LOD1:7258 LOD2:16) | 12 | 7 | 6 | 987.4 KB | yes | OK |
 
-**Total: 13 assets, 65476 LOD0 triangles, 2841.9 KB on disk.**
+**Total: 12 assets, 59708 LOD0 triangles, 2561.9 KB on disk.**
 <!-- VALIDATION_TABLE_END -->
 
 Preview sheets for every asset are in [`previews/`](previews/), rendered from
@@ -228,7 +225,6 @@ Enforced by `validate.mjs`; exceeding one fails the build.
 | `beech` | 11000 | 3 variants |
 | `deadwood` | 3600 | 3 variants |
 | `race-belt` | 1000 | first-person prop, LOD0 only |
-| `orienteer-hands` | 9000 | first-person viewmodel, skinned, LOD0 only |
 | `finish-gantry` | 2200 | one-off |
 | `arena-tent` | 1400 | one-off |
 | `spectator-fence` | 600 | tiles along +X |
@@ -278,48 +274,6 @@ Library size is a VRAM cost, not a frame cost — per-frame is governed by
   manifest). Consecutive instances overlap only where the hook and eye interlock.
 - **`finish-gantry`'s banner is single-sided**, so brand art reads un-mirrored
   from −Y and mirrored from +Y.
-- **`orienteer-hands` is a first-person viewmodel and the library's only
-  skinned asset.** Everything about it differs from the scenery assets, so it
-  is worth stating plainly:
-
-  - **Origin is the eye, not the ground.** The asset is authored in camera
-    space: after export `+X` is camera right, `+Y` up and `−Z` forward. In
-    Blender that is `+Y` forward (`export_yup` maps Blender `(x,y,z)` to glTF
-    `(x, z, −y)` — the same convention `race-belt` documents). The whole model
-    lives in glTF `z ∈ [−0.56, +0.09]`, `y ∈ [−0.50, +0.01]`: in front of and
-    below the eye, with the upper-arm stubs just behind it and nothing inside
-    the 0.15 m near plane.
-  - **Framing, not anatomy, sets the layout.** At 46° vertical FOV the visible
-    half-height at depth *d* is `0.4245·d`, so at the hands' 0.43 m the frame
-    is 0.365 m tall. A hand carried at real chest height (0.37 m below the eye)
-    is below the bottom of the frustum at every depth an arm can reach. The
-    arms are therefore cheated up and in, like every other first-person
-    viewmodel. Changing the runtime FOV changes what is in frame.
-  - **Rig:** 9 bones (8 deforming) — `root`, `upperarm.L/R`, `forearm.L/R`,
-    `hand.L/R`, `thumb.L` (carries the thumb compass), `wrist.R` (carries the
-    SI stick). The map is weighted rigidly to `hand.L`.
-  - **Clips** at 30 fps, named `idle` (4.00 s), `jog` (0.867 s), `run`
-    (0.667 s) and `read` (2.00 s). All four are authored as closed cycles —
-    the last frame is evaluated at *t*=1.0 from the same periodic pose
-    functions as *t*=0.0 — so all four loop exactly, `read` included even
-    though it is meant to be cross-faded into.
-  - **`map_face` is a runtime contract.** The map's front is a flat 4×4 grid
-    of quads carrying a material named exactly `map_face`, with UVs filling
-    0..1: **UV (0,0) is the map's top-left corner seen from the front**, `+U`
-    runs along glTF `+X` and `+V` runs down the map — glTF's own top-left
-    texture origin, so a canvas drawn the normal way round lands upright.
-    `src/world/` binds the live ISOM canvas from `src/map/renderer.ts` to that
-    material by name. The reverse and the edge rim carry `map_back` so the
-    binding does not paint the back of the map as well. Precedent is
-    `finish-gantry`'s `BRAND_BANNER` island; the difference is that these UVs
-    are written straight from the grid parameters rather than derived from
-    world positions, because a derived island can come out mirrored and
-    mirrored here means the map reads backwards in game.
-  - **Verify it with `preview-viewmodel.py`, not `preview.py`.** A turntable
-    of a viewmodel tells you nothing; the four frames in
-    [`previews/orienteer-hands-view/`](previews/orienteer-hands-view/) are
-    what the player actually sees.
-
 ## Things that bit us (kept here so they don't again)
 
 - **`join()` silently dropped UVs and sharp edges.** `bmesh.faces.new()`
@@ -344,8 +298,10 @@ Library size is a VRAM cost, not a frame cost — per-frame is governed by
   30 fps clip in a 24 fps scene silently resamples it: frame 10 of a 20-frame
   cycle landed at 62% of the cycle instead of 50%, and an hour went into
   "why is the right arm below the frame" before the answer turned out to be
-  the *harness*, not the asset. `preview-viewmodel.py` sets `render.fps`
-  **before** importing, and it has to stay that way.
+  the *harness*, not the asset. Any preview script that imports a skinned
+  `.glb` must set `render.fps` **before** importing. (The harness this was
+  found on, `preview-viewmodel.py`, went with the hands in D-036. The rule did
+  not.)
 - **Blender can crash under heavy parallelism.** Four concurrent instances
   segfaulted once during glTF export; the same asset built fine alone. `--jobs 2`
   is the safe setting on an 8-core machine.
@@ -389,17 +345,13 @@ Library size is a VRAM cost, not a frame cost — per-frame is governed by
   See the runtime note above: the fix is binding the shipped 1k `bark-spruce`
   set by material name, not growing the `.glb` (the map alone would be ~600 kB
   in every copy of the tree).
-- `orienteer-hands`' fingers are unarticulated stubs — four on a knuckle line
-  plus a thumb, no joints of their own. At 0.45 m from the camera the left
-  hand's fingertips cresting the map's bottom edge do the work of a grip, but
-  a player who stops and stares will see that they never move relative to the
-  palm.
 - `assets/_orienteer.py` is a **parked** full-body third-person athlete —
   rigged, 20 bones, four clips, 12,736 LOD0 triangles. It builds and exports
   clean; it is excluded from the build only because `discover()` skips
   `_`-prefixed scripts, and it is excluded because the library cannot afford
-  12.7 k triangles on top of the viewmodel under the 60 k ceiling. Rename it
-  to re-enable, and re-check the total.
+  12.7 k triangles under the then-60 k ceiling. Rename it to re-enable, and
+  re-check the total. (Stale as written: the ceiling is 80 k, the athlete
+  builds as `orienteer`, and it is in the table above.)
 - `spruce` LOD1 reads a shade lighter than LOD0 — larger cards mean less
   card-on-card occlusion for the same vertex colours. It is close enough that
   the 36 m swap is not obvious, but it is not exact.

@@ -90,7 +90,6 @@
   "race.quitStay": "Pokračovat v závodě",
   "hint.freeRun": "WASD pohyb · myš rozhled (klikni pro zachycení) · Q/E otáčení · R/F náklon · Shift sprint · V kamera",
   "hint.freeRunSprint": "WASD pohyb · myš rozhled (klikni pro zachycení) · Q/E otáčení · R/F náklon · Shift sprint · N průchod",
-  "settings.showHands": "Zobrazit ruce",
   "settings.on": "ZAP",
   "settings.off": "VYP",
   "nutrition.startIn": "Start za {min} min",

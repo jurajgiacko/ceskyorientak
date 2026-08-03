@@ -329,42 +329,6 @@
       "notes": "skinned, 4 looping clips; every clip's last frame equals its first. Bind pose carries the map in the left hand; clip 'map' raises it to reading height"
     },
     {
-      "name": "orienteer-hands",
-      "file": "orienteer-hands.glb",
-      "bytes": 286764,
-      "tris": 5768,
-      "lods": [
-        {
-          "node": "orienteer-hands_LOD0",
-          "tris": 5768
-        }
-      ],
-      "originNote": "origin at the eye/camera, viewmodel space",
-      "forwardAxis": "-Z (glTF)",
-      "clips": [
-        "idle",
-        "jog",
-        "run",
-        "read"
-      ],
-      "clipSeconds": {
-        "idle": 4,
-        "jog": 0.8666666666666667,
-        "run": 0.6666666666666666,
-        "read": 2
-      },
-      "bones": 9,
-      "deformBones": 8,
-      "fps": 30,
-      "mapMaterial": "map_face",
-      "mapUV": "UV(0,0) = map top-left seen from the front; +U -> +X, +V -> down. glTF top-left texture origin, no flip needed",
-      "mapQuadSizeM": [
-        0.2,
-        0.155
-      ],
-      "notes": "first-person viewmodel; bind pose is the carry pose. Bind the ISOM canvas to the map_face material by name; map_back covers the reverse and the edge rim. Verify framing with tools/blender/preview-viewmodel.py, not the turntable"
-    },
-    {
       "name": "race-belt",
       "file": "race-belt.glb",
       "bytes": 39248,

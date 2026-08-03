@@ -48,7 +48,7 @@ const DRACO = new Set(['boulder-set', 'spruce', 'beech', 'deadwood', 'finish-gan
 /** Explicit order: cheap props first so failures surface fast. */
 const ORDER = [
   'control-flag', 'control-stand', 'si-unit', 'boulder-set', 'spruce',
-  'beech', 'deadwood', 'race-belt', 'orienteer-hands', 'finish-gantry',
+  'beech', 'deadwood', 'race-belt', 'finish-gantry',
   'arena-tent', 'spectator-fence',
 ];
 
