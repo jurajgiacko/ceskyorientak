@@ -33,10 +33,16 @@ const PROBE = `(async () => {
   const named = [{ n: 'start', p: c.start }]
     .concat(c.controls.map((k, i) => ({ n: String(i + 1), p: k.position })))
     .concat([{ n: 'finish', p: c.finish }]);
+  const i = window.__race.courseInfo;
   return JSON.stringify({
     id: c.id,
     points: named.map((o) => ({ n: o.n, x: o.p.x, z: o.p.z })),
-    seedsTried: window.__race.courseInfo.seedsTried,
+    seedsTried: i.seedsTried,
+    controls: c.controls.length,
+    lengthM: c.lengthM,
+    band: i.lengthBandM ?? null,
+    dropped: i.droppedControls,
+    arenaFaults: i.arenaFaults,
   });
 })()`;
 
@@ -57,7 +63,12 @@ try {
       const res = JSON.parse(await tab.evaluate(PROBE));
       await tab.close();
       const r = route(res.points);
-      console.log(`\n· ${res.id} (seedsTried ${res.seedsTried})`);
+      console.log(
+        `\n· ${res.id} — ${res.controls} controls, ${res.lengthM} m` +
+          (res.band ? ` (band ${res.band.min}–${res.band.max})` : '') +
+          `, seedsTried ${res.seedsTried}, dropped ${res.dropped}` +
+          (res.arenaFaults.length ? `, arena: ${res.arenaFaults.join('; ')}` : ''),
+      );
       for (const l of r.legs) {
         if (!l.routed || l.detour < 2) continue;
         const a = res.points[l.leg];

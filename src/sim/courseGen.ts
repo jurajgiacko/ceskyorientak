@@ -847,6 +847,18 @@ function countCrossings(from: World2, to: World2, placed: World2[]): number {
 const DETOUR_PROBE_MAX_M = 125;
 
 /**
+ * What a leg across uncrossable water costs itself in the candidate score.
+ *
+ * Larger than everything else in that score put together — feature 1.0 plus
+ * interest 1.3 plus jitter 0.15, against penalties that only subtract — so a
+ * wet candidate can never outscore a dry one and never survives in the
+ * shortlist while a dry one exists. It is a preference rather than a rejection
+ * for the reason set out at the call site: a rejection starves the pool and
+ * ends the course early.
+ */
+const WET_PENALTY = 100;
+
+/**
  * How far round the load-time probe will let a leg go, as a multiple of the
  * straight line.
  *
@@ -998,20 +1010,30 @@ function pickNextControl(o: PickOptions): World2 | null {
 
     // **Not across the river.** See `crossesWater` and D-037.
     //
-    // A refusal rather than a penalty, and last among the cheap tests because
-    // it is the only one that walks the leg. The client's report — *"I can see
-    // it across the water but I can't get across"* — was two controls 58 m
-    // apart on opposite banks with 810 m of running between them, and nothing
-    // in the score below could see it: `legInterest` returned 0, which is a
-    // deduction of 1.3 against a feature score of up to 1.0 and 0.15 of RNG
-    // jitter, and 0 is also what it returns for a leg into a courtyard.
+    // The client's report — *"I can see it across the water but I can't get
+    // across"* — was two controls 58 m apart on opposite banks with 810 m of
+    // running between them, and nothing in the score below could see it:
+    // `legInterest` returned 0, which is a deduction of 1.3 against a feature
+    // score of up to 1.0 and 0.15 of RNG jitter, and 0 is also what it returns
+    // for a leg into a courtyard.
     //
-    // The run-in is checked here too, on the last control only, because it is
+    // **A dominating preference and not a refusal**, which is the second thing
+    // this was tried as. A `continue` here starves the candidate pool: on a leg
+    // where the river takes most of the ninety samples, none survives, the loop
+    // in `generateCourse` breaks, and the course simply ends — measured, that
+    // took Krumlov from fifteen controls to twelve, under the fourteen a sprint
+    // is specified at. `WET_PENALTY` is larger than the whole rest of the score
+    // can reach, so a wet candidate loses to any dry one and is evicted from
+    // the shortlist the moment five dry ones exist; it is chosen only when the
+    // alternative is no leg at all.
+    //
+    // The run-in is priced here too, on the last control only, because it is
     // the one leg `pickNextControl` never gets asked about: the finish was
     // sited before the loop began, so a last control across the river from it
-    // would place the fault in the one leg no candidate test covers.
-    if (crossesWater(o.from, sited, o.terrain)) continue;
-    if (o.runInTo && crossesWater(sited, o.runInTo, o.terrain)) continue;
+    // would put the fault in the one leg no candidate test covers.
+    const wet =
+      crossesWater(o.from, sited, o.terrain) ||
+      (o.runInTo ? crossesWater(sited, o.runInTo, o.terrain) : false);
 
     const interest = legInterest(o.from, sited, o.terrain, o.routeStepM);
     const score =
@@ -1019,7 +1041,8 @@ function pickNextControl(o: PickOptions): World2 | null {
       interest * 1.3 -
       climbPenalty * 1.15 -
       crossings * 0.9 +
-      o.rng.next() * 0.15;
+      o.rng.next() * 0.15 -
+      (wet ? WET_PENALTY : 0);
     remember(sited, score);
   }
 
@@ -1053,19 +1076,30 @@ function pickNextControl(o: PickOptions): World2 | null {
       }
       return c.p;
     }
-    // Every one of the best five is a lap of the venue, on a leg short enough
-    // that we know it. **Refuse, rather than ship the best of a bad set.**
+    // Every one of the best five is a lap of the venue, and the best of them is
+    // returned anyway. **This was tried the other way and the other way was
+    // worse.**
     //
-    // This is the only backtracking the generator has. It places controls
-    // greedily and cannot revisit an earlier one, so a leg where every
-    // candidate is across the obstacle usually means the *previous* control was
-    // the mistake — and measured on seed 28803419, the fault survived the probe
-    // entirely for exactly that reason: all five candidates failed and the best
-    // of them was returned unchanged. Returning null ends the course here,
-    // `setCourse` shops for another seed, and a seed that had to be shopped
-    // away from is one `tools/sim/pick-course.mjs` disqualifies outright. So a
-    // bad seed becomes visibly bad instead of quietly producing a bad course.
-    return null;
+    // Returning null looks obviously right: the leg is a fault, refuse it, let
+    // `generateCourse` end the course there and `setCourse` shop for another
+    // seed. Measured over six consecutive menu-shaped seeds it truncated
+    // Krumlov from fifteen or eighteen controls to **twelve** — under the
+    // fourteen a sprint is specified at — and made two seeds in three shop,
+    // which `tools/sim/pick-course.mjs` disqualifies outright. Nought
+    // candidates in twenty survived. A generator that refuses every hard leg
+    // does not produce better courses, it produces short ones.
+    //
+    // The cause is that this generator is greedy and cannot revisit an earlier
+    // control. A leg where every candidate is across the obstacle usually means
+    // the *previous* control was the mistake, so refusing here punishes the
+    // wrong leg. Real backtracking would be the fix and it is not a small
+    // change.
+    //
+    // So the probe stays what it is: it moves the choice down the shortlist,
+    // which is where nearly all of its value is, and where it cannot help, the
+    // offline filter refuses the whole course rather than shipping it. That
+    // division of labour is D-037's, and it is the honest one.
+    return shortlist[0]!.p;
   }
 
   return shortlist[0]!.p;
