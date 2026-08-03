@@ -8,82 +8,32 @@
  * puzzle it is. ISSprOM makes the same point cartographically — §2.1: *"thick
  * black lines are only used for uncrossable features"* — and IOF Rule 17.2
  * makes it legal: 515 uncrossable wall and 518 uncrossable fence are two of the
- * thirteen symbols a competitor must not cross. So a wall over 1.5 m is
- * modelled here as geometry *and* registered as a hard blocker, from one flag
- * set once in the extractor.
+ * thirteen symbols a competitor must not cross.
+ *
+ * **Every dimension drawn here comes from `TownModel`** — the barrier's height,
+ * its thickness, the water's outline, the deck's width — and the collider was
+ * derived from those same numbers when the model was constructed. This file no
+ * longer owns a collision index, and that is phase 1's point: the wall you see
+ * and the wall that stops you are one object, so there is nothing left to keep
+ * in step. See src/world/townModel.ts.
  *
  * Steps are the opposite case and deserve saying out loud: ISSprOM 532 is
  * runnable. They cost time and they are a handrail for navigation, but they are
- * not a barrier, so they are drawn and not blocked.
+ * not a barrier, so they are drawn and not blocked — which is why they are
+ * emitted as their own mesh with its own role, rather than merged into the
+ * masonry, so that a gate reading the scene graph can tell them apart.
  */
 
 import * as THREE from 'three';
 import type { QualityTier } from '@/core/capabilities';
 import type { TerrainField } from './terrain';
-import type { SurfaceTextures, TownscapeData, WallRecord } from './buildings';
+import type { SurfaceTextures, TownscapeData } from './buildings';
 import type { Asset } from './vegetation';
 import { pointAt } from './surface';
 import type { BridgeDecks, DeckSpan } from './surface';
-
-// ---------------------------------------------------------------------------
-// Blocking segments
-// ---------------------------------------------------------------------------
-
-const CELL_M = 12;
-
-/** Uniform-grid index of uncrossable line features. */
-export class SegmentIndex {
-  private readonly cells = new Map<number, number[]>();
-  private readonly seg: number[] = [];
-  private readonly half: number[] = [];
-
-  add(ax: number, az: number, bx: number, bz: number, halfWidth: number): void {
-    const i = this.half.length;
-    this.seg.push(ax, az, bx, bz);
-    this.half.push(halfWidth);
-    const minX = Math.min(ax, bx) - halfWidth;
-    const maxX = Math.max(ax, bx) + halfWidth;
-    const minZ = Math.min(az, bz) - halfWidth;
-    const maxZ = Math.max(az, bz) + halfWidth;
-    for (let cz = Math.floor(minZ / CELL_M); cz <= Math.floor(maxZ / CELL_M); cz++) {
-      for (let cx = Math.floor(minX / CELL_M); cx <= Math.floor(maxX / CELL_M); cx++) {
-        const key = cx * 100003 + cz;
-        let list = this.cells.get(key);
-        if (!list) {
-          list = [];
-          this.cells.set(key, list);
-        }
-        list.push(i);
-      }
-    }
-  }
-
-  test(x: number, z: number): boolean {
-    const key = Math.floor(x / CELL_M) * 100003 + Math.floor(z / CELL_M);
-    const list = this.cells.get(key);
-    if (!list) return false;
-    for (const i of list) {
-      const ax = this.seg[i * 4] as number;
-      const az = this.seg[i * 4 + 1] as number;
-      const bx = this.seg[i * 4 + 2] as number;
-      const bz = this.seg[i * 4 + 3] as number;
-      const h = this.half[i] as number;
-      const dx = bx - ax;
-      const dz = bz - az;
-      const len2 = dx * dx + dz * dz;
-      let t = len2 > 1e-9 ? ((x - ax) * dx + (z - az) * dz) / len2 : 0;
-      t = t < 0 ? 0 : t > 1 ? 1 : t;
-      const px = ax + dx * t - x;
-      const pz = az + dz * t - z;
-      if (px * px + pz * pz <= h * h) return true;
-    }
-    return false;
-  }
-
-  get size(): number {
-    return this.half.length;
-  }
-}
+import type { TownBarrier, TownModel } from './townModel';
+import type { TownRole } from './roles';
+import { tagRole } from './roles';
 
 // ---------------------------------------------------------------------------
 // Geometry accumulation
@@ -247,33 +197,6 @@ export interface TownscapeOptions {
 }
 
 /**
- * Tallest a barrier may be drawn when nothing stops the athlete at it, metres.
- *
- * Must match `CROSSABLE_MAX_H` in tools/terrain/townscape.mjs, and the data
- * carries the number it was built with (`TownscapeData.crossableMaxH`) so the
- * two cannot drift apart silently.
- *
- * This is the fix for the report that reads "I go through some brown walls, and
- * then I'm stuck again", and it is worth being exact about what went wrong,
- * because the diagnosis that looked obvious was not the one. Nothing here is in
- * the wrong coordinate frame: walls, footprints and the water all come from OSM
- * lon/lat through the same tangent-plane transform `src/core/geo.ts` defines,
- * the ZABAGED overlay goes through the same `geoToWorld`, and only the *height*
- * rasters are resampled out of S-JTSK (D-017). Measured against the shipped
- * raster, 100 % of uncrossable barrier length is stamped and the impassable
- * cells with nothing visible on them are 1.2 % of the playable ground, a metre
- * from something drawn, with no preferred bearing. There is no rotation.
- *
- * What there was: 44 % of the barrier length in Krumlov was drawn as a solid
- * 1.5 m slab and registered no collider at all, because the extractor invented
- * that 1.5 m for every untagged fence and then decided crossability from it.
- * So the athlete ran through the visible barrier into the strip behind it and
- * jammed against the uncrossable wall on its far side — one event, both halves
- * of the sentence.
- */
-export const CROSSABLE_MAX_H = 0.9;
-
-/**
  * How finely a bridge deck is tessellated along its length, metres.
  *
  * Matches `DECK_STEP_M` in surface.ts, which is what the lift was measured on:
@@ -285,18 +208,24 @@ const DECK_SEGMENT_M = 2;
 /** How far a deck's skirt sinks below the bare earth at the abutments, metres. */
 const DECK_SKIRT_M = 0.5;
 
-const WALL_SPEC: Record<number, { thick: number; mat: 'stone' | 'metal' | 'hedge' }> = {
-  0: { thick: 0.45, mat: 'stone' },
-  1: { thick: 1.15, mat: 'stone' },
-  2: { thick: 0.6, mat: 'stone' },
-  3: { thick: 0.1, mat: 'metal' },
-  4: { thick: 0.95, mat: 'hedge' },
+/**
+ * What a barrier of each kind is made of.
+ *
+ * Material only. The *thickness* used to live here too, next to a second copy
+ * in the extractor and a third in the gate; it is now one number in the model,
+ * and this table has nothing to say about how wide a wall is or whether it
+ * stops you.
+ */
+const WALL_MATERIAL: Record<number, 'stone' | 'metal' | 'hedge'> = {
+  0: 'stone',
+  1: 'stone',
+  2: 'stone',
+  3: 'metal',
+  4: 'hedge',
 };
 
 export class Townscape {
   readonly group = new THREE.Group();
-  /** Uncrossable line features — ISSprOM 411/515/518, all DSQ under Rule 17.2. */
-  readonly blocks = new SegmentIndex();
 
   readonly stats = { walls: 0, steps: 0, water: 0, decks: 0, trees: 0, triangles: 0 };
 
@@ -308,6 +237,7 @@ export class Townscape {
 
   constructor(
     data: TownscapeData,
+    model: TownModel,
     field: TerrainField,
     stone: SurfaceTextures,
     opts: TownscapeOptions,
@@ -339,51 +269,60 @@ export class Townscape {
     this.water = makeWaterMaterial();
     this.materials.push(stoneMat, metalMat, hedgeMat, this.water);
 
-    const stoneBuf = buf();
+    // One buffer per (material, role). The masonry is split three ways —
+    // barrier, steps, deck — where it used to be merged into one mesh: two more
+    // draw calls, in exchange for a scene graph in which every triangle says
+    // whether it is something that should stop the athlete. That is what
+    // `tools/ci/check-townmodel.mjs` reads, and a merged mesh made the question
+    // unanswerable without going back to the data the mesh was built from,
+    // which is the one source a gate must not be allowed to trust.
+    const barrierBuf = buf();
+    const stepsBuf = buf();
+    const deckBuf = buf();
     const metalBuf = buf();
     const hedgeBuf = buf();
     const waterBuf = buf();
 
-    for (const w of data.walls) {
-      const spec = WALL_SPEC[w.k];
-      if (!spec) continue;
-      const target =
-        spec.mat === 'stone' ? stoneBuf : spec.mat === 'metal' ? metalBuf : hedgeBuf;
-      this.buildWall(target, w, spec.thick, field);
+    for (const b of model.barriers) {
+      const mat = WALL_MATERIAL[b.kind];
+      if (!mat) continue;
+      const target = mat === 'stone' ? barrierBuf : mat === 'metal' ? metalBuf : hedgeBuf;
+      this.buildWall(target, b, field, model.crossableMaxH);
       this.stats.walls++;
     }
 
     for (const s of data.steps) {
-      this.buildSteps(stoneBuf, s.p, s.n, s.w, field);
+      this.buildSteps(stepsBuf, s.p, s.n, s.w, field);
       this.stats.steps++;
     }
 
     // Before the water, so a deck drawn over the river wins the depth test at
     // its own edges rather than trading z-fighting with the surface below it.
     for (const span of opts.decks?.spans ?? []) {
-      this.buildDeck(stoneBuf, span, field);
+      this.buildDeck(deckBuf, span, field);
       this.stats.decks++;
     }
 
-    for (const w of data.water) {
-      if (w.p && w.y !== undefined) {
-        this.buildWaterArea(waterBuf, w.p, w.y);
-        this.stats.water++;
-      } else if (w.l && w.w) {
-        this.buildWaterRibbon(waterBuf, w.l, w.w, field);
-        this.stats.water++;
-      }
+    for (const w of model.waterAreas) {
+      this.buildWaterArea(waterBuf, w.ring, w.level);
+      this.stats.water++;
+    }
+    for (const c of model.waterCourses) {
+      this.buildWaterRibbon(waterBuf, c.pts, c.width, field);
+      this.stats.water++;
     }
 
-    this.emit(stoneBuf, stoneMat, true);
-    this.emit(metalBuf, metalMat, true);
-    this.emit(hedgeBuf, hedgeMat, true);
-    this.emit(waterBuf, this.water, false);
+    this.emit(barrierBuf, stoneMat, true, 'barrier');
+    this.emit(metalBuf, metalMat, true, 'barrier');
+    this.emit(hedgeBuf, hedgeMat, true, 'barrier');
+    this.emit(stepsBuf, stoneMat, true, 'steps');
+    this.emit(deckBuf, stoneMat, true, 'deck');
+    this.emit(waterBuf, this.water, false, 'water');
 
     if (opts.beech) this.buildTrees(data, field, opts.beech, opts.tier);
   }
 
-  private emit(b: Buf, material: THREE.Material, shadow: boolean): void {
+  private emit(b: Buf, material: THREE.Material, shadow: boolean, role: TownRole): void {
     const g = toGeometry(b);
     if (!g) return;
     this.geometries.push(g);
@@ -392,24 +331,36 @@ export class Townscape {
     mesh.castShadow = shadow;
     mesh.receiveShadow = true;
     mesh.matrixAutoUpdate = false;
+    tagRole(mesh, role);
     this.group.add(mesh);
   }
 
-  private buildWall(b: Buf, w: WallRecord, thick: number, field: TerrainField): void {
-    const n = w.p.length / 2;
+  /**
+   * A barrier, drawn to the model's own dimensions.
+   *
+   * `height` and `halfThickness` are the numbers the model derived its collider
+   * from — there is no clamp here, and there is nothing to clamp: a barrier
+   * that is drawn tall *is* one that blocks, because `blocks` is a function of
+   * this same height. The previous version of this method had to defend itself
+   * against a stale file carrying a drawn height and a separate `u` flag that
+   * disagreed with it; that file no longer has an `u` flag to disagree with.
+   */
+  private buildWall(
+    b: Buf,
+    w: TownBarrier,
+    field: TerrainField,
+    crossable: number,
+  ): void {
+    const n = w.pts.length / 2;
     if (n < 2) return;
-    const half = thick * 0.5;
-    // Draw only what the collider below will actually enforce. With current
-    // data this clamp never bites — the extractor already derives `u` from the
-    // same number — but it is what makes a stale townscape.json degrade into a
-    // low fence rather than back into a wall you can walk through.
-    const height = w.u ? w.h : Math.min(w.h, CROSSABLE_MAX_H);
+    const half = w.halfThickness;
+    const height = w.height;
 
     for (let i = 0; i < n - 1; i++) {
-      const ax = w.p[i * 2] as number;
-      const az = w.p[i * 2 + 1] as number;
-      const bx = w.p[i * 2 + 2] as number;
-      const bz = w.p[i * 2 + 3] as number;
+      const ax = w.pts[i * 2] as number;
+      const az = w.pts[i * 2 + 1] as number;
+      const bx = w.pts[i * 2 + 2] as number;
+      const bz = w.pts[i * 2 + 3] as number;
       const dx = bx - ax;
       const dz = bz - az;
       const len = Math.hypot(dx, dz);
@@ -417,29 +368,84 @@ export class Townscape {
       const px = (-dz / len) * half;
       const pz = (dx / len) * half;
 
-      // Both ends follow the ground so a wall on the castle ramp does not float
-      // at one end and bury itself at the other.
-      const ag = field.heightAt(ax, az) - 0.35;
-      const bg = field.heightAt(bx, bz) - 0.35;
-      const at = field.heightAt(ax, az) + height;
-      const bt = field.heightAt(bx, bz) + height;
+      // How many pieces this run has to be drawn in to stay above the ground.
+      //
+      // A barrier way is mapped by its corners, so one segment can run eighty
+      // metres over ground that rises and falls several times. Drawn as a
+      // single quad its top is a straight line between the two ends, which
+      // dives *under* every hump in between — the wall is there, it stops you,
+      // and you cannot see it. Measured before this loop existed: 305 m² of
+      // Krumlov. So the run is split until the straight top is within
+      // `WALL_SAG_M` of the ground it is supposed to stand on, which on flat
+      // ground is one piece and on the castle ramp is a dozen.
+      // The wall may sag into the ground as far as it can and still stand
+      // `crossable` proud of it — the same line D-029 drew, and the same one
+      // `Buildings` now stands its footprints on. A barrier that does not block
+      // may sag as far as it likes: nobody is stopped by it.
+      const maxSag = w.blocks ? height - crossable : Infinity;
+      let pieces = 1;
+      while (pieces < 4 && maxSag < Infinity) {
+        let worst = 0;
+        for (let k = 1; k < pieces * 4; k++) {
+          const t = k / (pieces * 4);
+          const straight = this.pieceTop(field, ax, az, bx, bz, t, pieces);
+          const sag = field.heightAt(ax + dx * t, az + dz * t) + height - straight;
+          if (sag > worst) worst = sag;
+        }
+        if (worst <= maxSag) break;
+        pieces *= 2;
+      }
 
+      // Each *face* follows the ground under itself rather than under the
+      // centreline. On the castle ramp and the river bank the cross-slope is
+      // steep enough that a city wall's two faces sit 40 cm apart in height,
+      // which used to leave one buried and one floating. It also makes the
+      // drawn height exact: every top vertex is the ground beneath it plus
+      // `height`, which is what lets `check-townmodel` measure "does this
+      // stand above the step-over line" without a tolerance to hide behind.
       const v = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
-      const uMax = len;
       const vMax = height;
 
-      // Two faces and a cap. No end caps: walls in the data are long runs and
-      // the ends are almost always against a building or another wall.
-      quad(b, v(ax + px, ag, az + pz), v(bx + px, bg, bz + pz), v(bx + px, bt, bz + pz), v(ax + px, at, az + pz), uMax, vMax);
-      quad(b, v(bx - px, bg, bz - pz), v(ax - px, ag, az - pz), v(ax - px, at, az - pz), v(bx - px, bt, bz - pz), uMax, vMax);
-      quad(b, v(ax - px, at, az - pz), v(bx - px, bt, bz - pz), v(bx + px, bt, bz + pz), v(ax + px, at, az + pz), uMax, thick);
+      for (let k = 0; k < pieces; k++) {
+        const t0 = k / pieces;
+        const t1 = (k + 1) / pieces;
+        const sx = ax + dx * t0;
+        const sz = az + dz * t0;
+        const ex = ax + dx * t1;
+        const ez = az + dz * t1;
+        const uMax = len / pieces;
 
-      // ISSprOM 515/518 and 411 — a legal boundary under Rule 17.2, so it
-      // blocks. Below `CROSSABLE_MAX_H` it is 513.1/516 crossable and does not,
-      // which is only defensible because the quad above is now drawn at a
-      // height a runner is obviously stepping over.
-      if (w.u) this.blocks.add(ax, az, bx, bz, half + 0.25);
+        const aL = field.heightAt(sx + px, sz + pz);
+        const bL = field.heightAt(ex + px, ez + pz);
+        const aR = field.heightAt(sx - px, sz - pz);
+        const bR = field.heightAt(ex - px, ez - pz);
+
+        // Two faces and a cap. No end caps: walls in the data are long runs and
+        // the ends are almost always against a building or another wall.
+        quad(b, v(sx + px, aL - 0.35, sz + pz), v(ex + px, bL - 0.35, ez + pz), v(ex + px, bL + height, ez + pz), v(sx + px, aL + height, sz + pz), uMax, vMax);
+        quad(b, v(ex - px, bR - 0.35, ez - pz), v(sx - px, aR - 0.35, sz - pz), v(sx - px, aR + height, sz - pz), v(ex - px, bR + height, ez - pz), uMax, vMax);
+        quad(b, v(sx - px, aR + height, sz - pz), v(ex - px, bR + height, ez - pz), v(ex + px, bL + height, ez + pz), v(sx + px, aL + height, sz + pz), uMax, half * 2);
+      }
     }
+  }
+
+  /** The straight top of the piece of `[a,b]` that `t` falls in, metres ASL. */
+  private pieceTop(
+    field: TerrainField,
+    ax: number,
+    az: number,
+    bx: number,
+    bz: number,
+    t: number,
+    pieces: number,
+  ): number {
+    const k = Math.min(pieces - 1, Math.floor(t * pieces));
+    const t0 = k / pieces;
+    const t1 = (k + 1) / pieces;
+    const y0 = field.heightAt(ax + (bx - ax) * t0, az + (bz - az) * t0);
+    const y1 = field.heightAt(ax + (bx - ax) * t1, az + (bz - az) * t1);
+    const f = (t - t0) / (t1 - t0);
+    return y0 + (y1 - y0) * f;
   }
 
   /**
@@ -620,7 +626,7 @@ export class Townscape {
     }
   }
 
-  private buildWaterArea(b: Buf, p: number[], y: number): void {
+  private buildWaterArea(b: Buf, p: Float32Array, y: number): void {
     const ring: THREE.Vector2[] = [];
     for (let i = 0; i < p.length; i += 2) {
       ring.push(new THREE.Vector2(p[i] as number, p[i + 1] as number));
@@ -643,7 +649,7 @@ export class Townscape {
     }
   }
 
-  private buildWaterRibbon(b: Buf, l: number[], width: number, field: TerrainField): void {
+  private buildWaterRibbon(b: Buf, l: Float32Array, width: number, field: TerrainField): void {
     const n = l.length / 2;
     if (n < 2) return;
     const half = width * 0.5;
@@ -655,7 +661,11 @@ export class Townscape {
       const dx = bx - ax;
       const dz = bz - az;
       const len = Math.hypot(dx, dz);
-      if (len < 0.5) continue;
+      // Every segment the model carries is drawn, including the short ones.
+      // Skipping segments under half a metre left 6 m² of the mill race
+      // out of bounds and invisible — small, and exactly the shape of fault
+      // this venue has shipped four times.
+      if (len < 1e-6) continue;
       const px = (-dz / len) * half;
       const pz = (dx / len) * half;
       const ya = field.heightAt(ax, az) + 0.1;
@@ -670,6 +680,43 @@ export class Townscape {
         width,
         len,
       );
+    }
+
+    // A disc at every vertex, and it is not decoration.
+    //
+    // The collider is a capsule chain — distance to the segment, clamped —
+    // so it is round at the joints, while a strip of quads leaves a wedge
+    // missing on the outside of every bend. On a 0.45 m wall that gap is
+    // millimetres. On the Vltava, mapped as a centreline 24 m wide, it is
+    // metres of river that is out of bounds and not drawn, which is the
+    // invisible-wall fault at its own scale: measured at 6 m² before this
+    // loop existed. The union of the quads and these discs is exactly the
+    // capsule the collider tests.
+    for (let i = 0; i < n; i++) {
+      const x = l[i * 2] as number;
+      const z = l[i * 2 + 1] as number;
+      this.buildDisc(b, x, field.heightAt(x, z) + 0.1, z, half);
+    }
+  }
+
+  /** A flat fan, used to round off the joints of a water ribbon. */
+  private buildDisc(b: Buf, cx: number, y: number, cz: number, r: number): void {
+    const SIDES = 16;
+    const base = b.pos.length / 3;
+    b.pos.push(cx, y, cz);
+    b.nrm.push(0, 1, 0);
+    b.uv.push(cx, cz);
+    for (let i = 0; i < SIDES; i++) {
+      const a = (i / SIDES) * Math.PI * 2;
+      // Circumscribed rather than inscribed, so the polygon covers the whole
+      // disc the collider tests instead of cutting its corners off.
+      const rr = r / Math.cos(Math.PI / SIDES);
+      b.pos.push(cx + Math.cos(a) * rr, y, cz + Math.sin(a) * rr);
+      b.nrm.push(0, 1, 0);
+      b.uv.push(cx + Math.cos(a) * rr, cz + Math.sin(a) * rr);
+    }
+    for (let i = 0; i < SIDES; i++) {
+      b.idx.push(base, base + 1 + ((i + 1) % SIDES), base + 1 + i);
     }
   }
 
@@ -726,6 +773,7 @@ export class Townscape {
         im.receiveShadow = true;
         im.frustumCulled = false;
         im.count = 0;
+        tagRole(im, 'scenery');
         this.group.add(im);
         this.treeMeshes.push(im);
         this.treeSets.near.push(im);
@@ -738,6 +786,7 @@ export class Townscape {
       im.receiveShadow = true;
       im.frustumCulled = false;
       im.count = 0;
+      tagRole(im, 'scenery');
       this.group.add(im);
       this.treeMeshes.push(im);
       this.treeSets.far.push(im);

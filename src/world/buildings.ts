@@ -28,6 +28,7 @@
 import * as THREE from 'three';
 import type { QualityTier } from '@/core/capabilities';
 import type { TerrainField } from './terrain';
+import { tagRole } from './roles';
 
 // ---------------------------------------------------------------------------
 // Data
@@ -1246,85 +1247,31 @@ function rectangularity(ring: THREE.Vector2[], az: number): number {
 // Collision
 // ---------------------------------------------------------------------------
 
-const CELL_M = 12;
-
 /**
- * Point-in-building test over a uniform grid.
+ * There is no collision index here any more.
  *
- * ISSprOM 521 plus Rule 17.2 make this a legal boundary, not a physical one:
- * every building in a sprint is out of bounds whether or not there is a door.
- * The grid is uniform rather than a quadtree because the town is uniformly
- * dense — a quadtree over Krumlov's old town would be a full tree.
+ * `Buildings.blocks` used to be a `BlockIndex` built from the footprints this
+ * class extrudes — which sounds like the right shape and was one footprint
+ * short of it: a building in `KRUMLOV_SKIP` was skipped by the loop *before* it
+ * registered, so the Zámecká věž was drawn fifty-four metres tall by
+ * `landmarks.ts` and had no collider at all. Drawing and blocking were derived
+ * from one list and *filtered by a rendering concern*.
+ *
+ * Both now come off `TownModel`, which knows nothing about who draws what. See
+ * src/world/townModel.ts.
  */
-export class BlockIndex {
-  private readonly cells = new Map<number, number[]>();
-  private readonly rings: Float32Array[] = [];
-  private readonly bounds: Float32Array[] = [];
-
-  add(ring: number[]): void {
-    const idx = this.rings.length;
-    const r = new Float32Array(ring);
-    this.rings.push(r);
-    let minX = Infinity;
-    let maxX = -Infinity;
-    let minZ = Infinity;
-    let maxZ = -Infinity;
-    for (let i = 0; i < r.length; i += 2) {
-      const x = r[i] as number;
-      const z = r[i + 1] as number;
-      if (x < minX) minX = x;
-      if (x > maxX) maxX = x;
-      if (z < minZ) minZ = z;
-      if (z > maxZ) maxZ = z;
-    }
-    this.bounds.push(new Float32Array([minX, minZ, maxX, maxZ]));
-    for (let cz = Math.floor(minZ / CELL_M); cz <= Math.floor(maxZ / CELL_M); cz++) {
-      for (let cx = Math.floor(minX / CELL_M); cx <= Math.floor(maxX / CELL_M); cx++) {
-        const key = cx * 100003 + cz;
-        let list = this.cells.get(key);
-        if (!list) {
-          list = [];
-          this.cells.set(key, list);
-        }
-        list.push(idx);
-      }
-    }
-  }
-
-  test(x: number, z: number): boolean {
-    const key = Math.floor(x / CELL_M) * 100003 + Math.floor(z / CELL_M);
-    const list = this.cells.get(key);
-    if (!list) return false;
-    for (const i of list) {
-      const bb = this.bounds[i] as Float32Array;
-      if (x < (bb[0] as number) || x > (bb[2] as number)) continue;
-      if (z < (bb[1] as number) || z > (bb[3] as number)) continue;
-      if (inRing(this.rings[i] as Float32Array, x, z)) return true;
-    }
-    return false;
-  }
-
-  get size(): number {
-    return this.rings.length;
-  }
-}
-
-function inRing(r: Float32Array, x: number, z: number): boolean {
-  let inside = false;
-  const n = r.length / 2;
-  for (let i = 0, j = n - 1; i < n; j = i++) {
-    const xi = r[i * 2] as number;
-    const zi = r[i * 2 + 1] as number;
-    const xj = r[j * 2] as number;
-    const zj = r[j * 2 + 1] as number;
-    if (zi > z !== zj > z && x < ((xj - xi) * (z - zi)) / (zj - zi) + xi) inside = !inside;
-  }
-  return inside;
-}
 
 // ---------------------------------------------------------------------------
 // Buildings
 // ---------------------------------------------------------------------------
+
+/**
+ * How far a building's eave must stand above the highest ground under its
+ * footprint, metres. `TownModel`'s `crossableMaxH`, and for its reason: a
+ * footprint blocks, so what is drawn on it has to be something a runner can
+ * see they are not getting over.
+ */
+const MIN_WALL_ABOVE_GROUND_M = 0.9;
 
 export interface BuildingsOptions {
   tier: QualityTier;
@@ -1344,9 +1291,8 @@ const TILE_M = 150;
 
 export class Buildings {
   readonly group = new THREE.Group();
-  readonly blocks = new BlockIndex();
 
-  readonly stats = { buildings: 0, triangles: 0, tiles: 0, visible: 0 };
+  readonly stats = { buildings: 0, triangles: 0, tiles: 0, visible: 0, lifted: 0 };
 
   private readonly tiles: Tile[] = [];
   private readonly wallMat: THREE.MeshStandardMaterial;
@@ -1380,7 +1326,6 @@ export class Buildings {
       }
       if (ring.length < 3) continue;
 
-      this.blocks.add(b.p);
       this.stats.buildings++;
 
       let cx = 0;
@@ -1408,6 +1353,45 @@ export class Buildings {
       // would hang over the courtyard. Demote those to a gable, which is built
       // on the footprint itself and cannot.
       const rec = { ...b };
+
+      // Stand the building on the hill it is built into.
+      //
+      // The eave comes from the LiDAR canopy model over the footprint, and on
+      // Krumlov's steep ground — the castle rock, the Latrán bank — the uphill
+      // corner of a footprint is *higher* than the measured eave. Drawn
+      // faithfully, the wall on that side is buried and the athlete meets a
+      // footprint that blocks with nothing standing at it: 53 m² of the venue
+      // on 78 of 1739 buildings, worst case 4.4 m under the hill, found by
+      // `check-townmodel`. Since the footprint is out of bounds under ISSprOM
+      // 521 whatever the survey says, the geometry is what has to give: every
+      // building stands at least `crossableMaxH` proud of the highest ground it
+      // covers, which is the same line that decides whether a barrier is a
+      // thing you step over.
+      // Over the footprint *and* over the ground the roof oversails: the eave
+      // hangs `OVERHANG_M` beyond the wall, so on a bank the tiles can reach
+      // the ground outside a footprint that is itself clear of it.
+      let gMax = -Infinity;
+      const outline = expandRing(ring, OVERHANG_M);
+      for (let i = 0; i < outline.length; i++) {
+        const p0 = outline[i] as THREE.Vector2;
+        const p1 = outline[(i + 1) % outline.length] as THREE.Vector2;
+        // Along the edges, not only at the corners: a footprint's longest side
+        // can be forty metres and the bank under it does not care where the
+        // vertices are.
+        const steps = Math.max(1, Math.ceil(p0.distanceTo(p1)));
+        for (let k = 0; k < steps; k++) {
+          const t = k / steps;
+          const g = field.heightAt(p0.x + (p1.x - p0.x) * t, p0.y + (p1.y - p0.y) * t);
+          if (g > gMax) gMax = g;
+        }
+      }
+      const lift = gMax + MIN_WALL_ABOVE_GROUND_M - rec.e;
+      if (lift > 0) {
+        rec.e += lift;
+        rec.r += lift;
+        this.stats.lifted++;
+      }
+
       if (
         (rec.s === RoofShape.Hipped ||
           rec.s === RoofShape.HalfHipped ||
@@ -1562,6 +1546,7 @@ export class Buildings {
     mesh.receiveShadow = true;
     mesh.matrixAutoUpdate = false;
     mesh.frustumCulled = false;
+    tagRole(mesh, 'building');
     return mesh;
   }
 

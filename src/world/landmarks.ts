@@ -28,6 +28,8 @@
 import * as THREE from 'three';
 import type { TerrainField } from './terrain';
 import type { BuildingRecord, SurfaceTextures } from './buildings';
+import { tagRole } from './roles';
+import type { TownModel } from './townModel';
 
 // ---------------------------------------------------------------------------
 // Placement, measured
@@ -80,6 +82,61 @@ export const KRUMLOV_OVERRIDES = new Map<number, Partial<BuildingRecord>>([
 export const KRUMLOV_SKIP: ReadonlySet<number> = new Set([
   KRUMLOV_LANDMARKS.castleTower.osmId,
 ]);
+
+
+// ---------------------------------------------------------------------------
+// Footprints of what this file draws
+// ---------------------------------------------------------------------------
+
+/**
+ * Every landmark here is drawn by hand rather than extruded from a footprint,
+ * so nothing downstream knows it is there — which is exactly how the Zámecká
+ * věž came to be fifty-four metres of masonry you could run straight through.
+ *
+ * So each build function registers the part of its geometry that stands in the
+ * athlete's way, **in the function that draws it and from the same numbers**,
+ * and `TownModel` seals the list once the scene is built. What is registered is
+ * the piece that crosses the runner's body — not the whole silhouette: the
+ * cloak bridge's deck and arcades are twenty metres up and you run underneath
+ * them, and the column's bottom plinth step is 0.28 m and you run over it.
+ */
+function ringOf(cx: number, cz: number, r: number, sides: number, rot = 0): number[] {
+  const out: number[] = [];
+  for (let i = 0; i < sides; i++) {
+    // three.js's own vertex convention for a cylinder — x = r·sin θ,
+    // z = r·cos θ — so the registered polygon is the drawn one and not a
+    // copy of it turned by half a facet. Half a facet on the Marian column's
+    // plinth is 0.17 m, which the gate duly found as a square metre of stone
+    // you are stopped by and cannot see.
+    const a = rot + (i / sides) * Math.PI * 2;
+    out.push(cx + Math.sin(a) * r, cz + Math.cos(a) * r);
+  }
+  return out;
+}
+
+/**
+ * A box footprint, `w` across and `d` deep, turned by `yaw`.
+ *
+ * The rotation follows three.js's `rotation.y`, which is the *opposite* sense
+ * to the textbook 2D rotation — x' = x·cos + z·sin, z' = −x·sin + z·cos. Got
+ * that backwards first time and the cloak bridge's piers registered footprints
+ * mirrored about the bridge, which the gate found as 28 m² drawn and not solid
+ * plus 30 m² solid and not drawn: the same object, twice, in both directions.
+ */
+function rectOf(cx: number, cz: number, w: number, d: number, yaw: number): number[] {
+  const c = Math.cos(yaw);
+  const sn = Math.sin(yaw);
+  const out: number[] = [];
+  for (const [ox, oz] of [
+    [-w / 2, -d / 2],
+    [w / 2, -d / 2],
+    [w / 2, d / 2],
+    [-w / 2, d / 2],
+  ] as [number, number][]) {
+    out.push(cx + ox * c + oz * sn, cz - ox * sn + oz * c);
+  }
+  return out;
+}
 
 // ---------------------------------------------------------------------------
 // Materials
@@ -256,11 +313,21 @@ function drum(rTop: number, rBottom: number, h: number, seg: number): THREE.Cyli
  *  50.0 – 53 m   lantern, glazed and open-sided
  *  53.0 – 54.5 m finial and cross
  */
-function buildCastleTower(group: THREE.Group, field: TerrainField, p: Palette): number {
+function buildCastleTower(
+  group: THREE.Group,
+  field: TerrainField,
+  p: Palette,
+  model: TownModel,
+): number {
   const L = KRUMLOV_LANDMARKS.castleTower;
   const base = field.heightAt(L.x, L.z) - 0.6;
   const R = L.radius;
   let tris = 0;
+
+  // The medieval base, which is what a runner meets. The OSM footprint is in
+  // the model already — this is the drawn square, which tapers out to R × 1.18
+  // at the foot and can stand a few centimetres proud of the mapped ring.
+  model.addStructure(ringOf(L.x, L.z, R * 1.18, 4, Math.PI / 4));
 
   const add = (g: THREE.BufferGeometry, m: THREE.Material, y: number, rotY = 0): void => {
     group.add(mesh(g, m, L.x, base + y, L.z, rotY));
@@ -369,7 +436,12 @@ function buildCastleTower(group: THREE.Group, field: TerrainField, p: Palette): 
  * Pier feet are sampled off the DMR, so the arcade genuinely stands on the
  * ravine floor rather than on a guessed datum.
  */
-function buildCloakBridge(group: THREE.Group, field: TerrainField, p: Palette): number {
+function buildCloakBridge(
+  group: THREE.Group,
+  field: TerrainField,
+  p: Palette,
+  model: TownModel,
+): number {
   const L = KRUMLOV_LANDMARKS.cloakBridge;
   const dx = L.bx - L.ax;
   const dz = L.bz - L.az;
@@ -409,6 +481,10 @@ function buildCloakBridge(group: THREE.Group, field: TerrainField, p: Palette): 
     pier.scale.set(2.4, h, w * 0.9);
     pier.rotation.y = yaw;
     push(pier, 12);
+    // A pier stands on the ravine floor and is the one part of this bridge the
+    // athlete can run into. The deck and the three arcade tiers above it are
+    // not registered, and must not be: you run *under* the cloak bridge.
+    model.addStructure(rectOf(q.x, q.z, 2.4, w * 0.9, yaw));
   }
 
   // --- three tiers of arches between the piers ---
@@ -425,7 +501,20 @@ function buildCloakBridge(group: THREE.Group, field: TerrainField, p: Palette): 
     for (let i = 0; i < bays; i++) {
       const q = local((i + 0.5) / bays);
       const foot = field.heightAt(q.x, q.z);
-      const y = foot + 4.5 + tier * 6.2;
+      // Keep the whole half-ring clear of the ground it spans.
+      //
+      // The ravine floor falls several metres across one bay, so an arch
+      // placed off the height at its own centre buried its springing in the
+      // bank — stone drawn at knee height, and nothing there to stop you,
+      // which is the fault this venue is being rebuilt for. The clearance is
+      // measured to the *bottom* of the ring, tube included.
+      let gMax = foot;
+      for (let k = 0; k <= 8; k++) {
+        const p2 = local((i + k / 8) / bays);
+        const g = field.heightAt(p2.x, p2.z);
+        if (g > gMax) gMax = g;
+      }
+      const y = Math.max(foot + 4.5 + tier * 6.2, gMax + span * 0.42 + 0.5 + 0.9);
       if (y > deck - 2.2) continue;
       const arch = new THREE.Mesh(archGeo, p.stone);
       arch.position.set(q.x, y, q.z);
@@ -482,11 +571,21 @@ function buildCloakBridge(group: THREE.Group, field: TerrainField, p: Palette): 
  * tallest CHM cell inside the church footprint, so this is a measured height
  * even though the shape is drawn by hand.
  */
-function buildStVitus(group: THREE.Group, field: TerrainField, p: Palette): number {
+function buildStVitus(
+  group: THREE.Group,
+  field: TerrainField,
+  p: Palette,
+  model: TownModel,
+): number {
   const L = KRUMLOV_LANDMARKS.stVitus;
   const base = field.heightAt(L.x, L.z) - 0.6;
   const yaw = Math.PI * 0.02;
   let tris = 0;
+
+  // The tower stands mostly inside the church's own footprint, and mostly is
+  // not a word this venue is allowed to use about collision: it oversails the
+  // mapped outline by a few square metres on the west face.
+  model.addStructure(rectOf(L.x, L.z, 8.4, 8.4, yaw));
 
   const bodyH = L.height * 0.63;
   const body = mesh(
@@ -576,7 +675,12 @@ function buildStVitus(group: THREE.Group, field: TerrainField, p: Palette): numb
  * houses. What a square needs to *be* a square is a centrepiece, and Krumlov's
  * is the 1716 column with the fountain basin wrapped round its base.
  */
-function buildSquare(group: THREE.Group, field: TerrainField, p: Palette): number {
+function buildSquare(
+  group: THREE.Group,
+  field: TerrainField,
+  p: Palette,
+  model: TownModel,
+): number {
   const C = KRUMLOV_LANDMARKS.marianColumn;
   const F = KRUMLOV_LANDMARKS.fountain;
   let tris = 0;
@@ -596,6 +700,11 @@ function buildSquare(group: THREE.Group, field: TerrainField, p: Palette): numbe
     y += s.h;
   }
 
+  // The plinth's top step is the piece that stands above a runner's stride —
+  // the two below it are 0.28 m and are stepped over, which is the same rule
+  // `crossableMaxH` applies to a fence and is why they are not registered.
+  model.addStructure(ringOf(C.x, C.z, 2.18, 8));
+
   // Shaft and capital.
   group.add(mesh(new THREE.CylinderGeometry(0.42, 0.62, 8.2, 10), p.stone, C.x, y + 4.1, C.z));
   tris += 40;
@@ -614,6 +723,9 @@ function buildSquare(group: THREE.Group, field: TerrainField, p: Palette): numbe
   tris += 32;
   group.add(mesh(new THREE.CylinderGeometry(0.4, 0.55, 1.9, 12), p.stone, F.x, fBase + 1.4, F.z));
   tris += 48;
+  // The jet pillar, 1.9 m of it. The basin below is 0.85 m and is not
+  // registered: at that height it is ISSprOM 513.1's rule, a thing you clear.
+  model.addStructure(ringOf(F.x, F.z, 0.55, 12));
 
   return tris;
 }
@@ -627,15 +739,27 @@ export class Landmarks {
   readonly stats = { triangles: 0, objects: 0 };
   private readonly palette: Palette;
 
-  constructor(field: TerrainField, stone?: SurfaceTextures) {
+  /**
+   * `model` is not decoration on this signature: each build function registers
+   * the footprint of what it draws at running height, so that a landmark cannot
+   * be added to this file and be invisible to collision. That is the whole of
+   * §2 rule 2 applied to hand-modelled geometry.
+   */
+  constructor(field: TerrainField, model: TownModel, stone?: SurfaceTextures) {
     this.group.name = 'landmarks';
     this.palette = makePalette(stone);
 
     let tris = 0;
-    tris += buildCastleTower(this.group, field, this.palette);
-    tris += buildCloakBridge(this.group, field, this.palette);
-    tris += buildStVitus(this.group, field, this.palette);
-    tris += buildSquare(this.group, field, this.palette);
+    tris += buildCastleTower(this.group, field, this.palette, model);
+    tris += buildCloakBridge(this.group, field, this.palette, model);
+    tris += buildStVitus(this.group, field, this.palette, model);
+    tris += buildSquare(this.group, field, this.palette, model);
+
+    // Everything here draws something the town is recognised by, and the gate
+    // reads the scene graph rather than this file, so it has to be able to ask.
+    this.group.traverse((o) => {
+      if ((o as THREE.Mesh).isMesh) tagRole(o, 'structure');
+    });
 
     this.stats.triangles = Math.round(tris);
     this.stats.objects = this.group.children.length;
