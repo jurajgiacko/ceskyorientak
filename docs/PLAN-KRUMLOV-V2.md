@@ -101,6 +101,16 @@ measured and silent about what it did not. **Phase 3 must assert the start and f
 the graph**, not merely that the legs are — and until v2 exists, v1's own audit should carry
 that assertion too, since the client is not being shown the town in the meantime.
 
+**Done, in v1's audit.** `endpointFaults` in `tools/ci/check-passable.mjs`. It is a **class**
+test rather than a distance one, and that is the design: the shipped start is 1.4 m from the
+nearest Road cell — one diagonal cell of the 1 m raster — so any tolerance wide enough to
+absorb quantisation is wide enough to pass the fault it exists to catch. The cell the start is
+sited in is Road or Path, or it is not on the network. Verified both ways offline: it fires on
+the shipped start, is silent on the finish, and goes quiet when the start is moved to Náměstí
+Svornosti, which is stamped Road for 1629 of the 1681 cells around it. Controls stay exempt —
+they run a median 0.0 m and a p90 of 4.2 m off the network, and a sprint control on the corner
+of a building is correct.
+
 **The common cause is representation, not detail.** Three sources disagree about where a
 wall is:
 
@@ -245,6 +255,82 @@ That last one may be the single biggest fix to how v1 *feels*, independently of 
   wrong and this plan needs rewriting around a hybrid — vector for the map and the graph, a
   fine raster *derived from it* for per-frame collision. Derived, so it still cannot
   disagree; that is the part of §2 that matters, and it survives either outcome.
+
+### Answered: vector collision passes, and not narrowly
+
+Measured, not reasoned. `tools/perf/collision-bench.mjs` builds the whole vector set from the
+shipped `townscape.json` using the runtime's own `BlockIndex`, `SegmentIndex` and `WaterIndex`
+algorithms, and the identical module runs under Node and inside a CPU-throttled headless
+Chrome. The throttle is `Emulation.setCPUThrottlingRate: 4` — **this project's own mid-range
+Android proxy**, the one `tools/perf/budget.mjs` sets and against which the 33.3 ms budget was
+written. At 1× the two engines agree within 1%, so the throttled figures are a measurement
+rather than a multiplication.
+
+**The set.** 1739 building rings (10 843 vertices), **2977 barrier segments** with drawn ≡ solid
+— against 1885 if only the `u`-tagged ways carried colliders — 71 bridge carriageway segments,
+8 water rings and 149 watercourse segments. 4944 primitives, 371 kB packed. Broadphase
+occupancy at the runtime's existing 12 m cell: a mean of 1.8–2.2 candidates per hit cell,
+p99 of 9, max 17. A sweep of 3–32 m puts the optimum at 8–12 m, so **12 m is already right**
+and needs no tuning.
+
+| | mean ns/query | @ 4× (Android proxy) | @ 8× (pessimistic) |
+|---|---|---|---|
+| athlete, moving | 131 | **520** | 1056 |
+| generator, scattered | 362 | 1546 | 3553 |
+| venue sweep, coherent | 243 | 1006 | 2054 |
+
+**The other factor was wrong in this plan and it matters.** "Several times per frame" is
+**105** — measured by wrapping the shipping runtime's `blockedAt` and driving the race for 600
+steps (mean 104.8, p99 132, max 148). The athlete's navigation model rings the collider, it
+does not merely probe two axes. So:
+
+| queries/frame | p99 ms @ 4× | of the 33.3 ms frame |
+|---|---|---|
+| 8 | 0.020 | 0.06% |
+| 32 | 0.083 | 0.25% |
+| 128 (above the measured 105) | 0.356 | **1.07%** |
+
+**The budgeted slice, stated.** Collision gets **1 ms of 33.3** — 3%. That is a deliberately
+mean allowance: the sprint's own p95 baseline is already 32.4 ms against a 50 ms ceiling, so
+there is no room to be generous, and a physics test that needed more than a thirtieth of a
+frame would be the wrong shape of thing. Measured cost at the real call count is **0.36 ms at
+the p99 on a 128-query frame, 5.5% of that slice and 1.07% of the frame**.
+
+**Verdict: PASS**, by roughly two orders of magnitude. Even at 8× throttling and 128 queries a
+frame it does not reach 2.5% of the frame. §2 stands as written; the hybrid fallback is not
+needed and phase 1 should be built on vector colliders.
+
+**One real finding that is not the kill criterion.** The *load-time* batches are where vector
+collision costs something: `bakedRaster`'s 2.56 M-cell sweep is 2.6 s at 4×, and
+`buildReachability`'s fill another 2.9 s. Those are v1 shapes and §2 already says the model is
+"built offline, once" — but phase 2 must honour that literally. **Any venue-wide sweep of the
+vector model belongs in the build, not in the loading screen.** Constructing the model itself
+is cheap and can stay at load: 14 ms at 4×.
+
+**If the fallback is ever wanted anyway** — for a lower tier than the brief asks for, say — the
+resolution question now has a number instead of a Nyquist argument. Deriving the raster from
+the vector model at each cell size and asking the town's own 66 257 street-centreline points
+what survives:
+
+| cell | alleys kept (≤3 m corridors) | false-open | 1-bit RAM | gzipped |
+|---|---|---|---|---|
+| 4 m | 62.8% | 1.30% | 11 kB | 6 kB |
+| 2 m | 79.5% | 1.05% | 44 kB | 18 kB |
+| 1 m | 89.2% | 0.70% | 176 kB | 50 kB |
+| **0.5 m** | **93.9%** | **0.51%** | **704 kB** | **125 kB** |
+| 0.25 m | 96.0% | 0.43% | 2814 kB | 292 kB |
+
+**0.5 m** is the recommendation: 94% of the alleys, against a 96.1% ceiling set by the vector
+model itself, for 704 kB of RAM and 125 kB on the wire — *less* than the 176 kB
+`runnability.bin` already ships, and additional to it rather than replacing it, since the class
+raster carries the speed model. 0.25 m buys 2 more points of alley for 4× the memory.
+
+Two things in that table are worth keeping. **D-027's 4 m grid loses 37% of the alleys** — the
+fault, reproduced from the data. And **`false-open` rises as the grid coarsens**: a 4 m grid
+steps clean over a 0.1 m railing and deletes it, so a coarse raster scores *better* on naive
+"reachable %" while being wrong in the direction that runs a player through a fence. Any
+future resolution decision has to read both columns. Open *area* is 77.0% at every resolution
+tested, which is precisely why an area measurement could never have caught D-027.
 
 Do phase 0 before writing any of phase 1. It is the cheapest hour in the plan and the only
 one that can save the rest.
