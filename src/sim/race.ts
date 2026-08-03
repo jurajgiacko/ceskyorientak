@@ -32,6 +32,7 @@ import {
   SPEED_BY_RUNNABILITY,
   freshStats,
 } from './athlete';
+import { Cornering, easeSpeed } from './cornering';
 import {
   Rng,
   initNav,
@@ -97,6 +98,12 @@ export class Race {
   phase: RacePhase = 'prestart';
   athlete: AthleteState;
   nav: NavState;
+  /**
+   * What the athlete's turning is costing them. Public so the debug overlay
+   * and the gates can read the turn rate and the radius without the HUD having
+   * to carry a diagnostic. See `src/sim/cornering.ts`.
+   */
+  readonly cornering = new Cornering();
   splits: Split[] = [];
   nextControl = 0;
 
@@ -156,6 +163,9 @@ export class Race {
   start(): void {
     if (this.phase !== 'prestart') return;
     this.phase = 'running';
+    // The athlete has been standing on the triangle turning to face the first
+    // control; none of that is a corner they ran.
+    this.cornering.reset();
     this.route = [{ t: 0, x: this.athlete.position.x, z: this.athlete.position.z }];
   }
 
@@ -191,13 +201,22 @@ export class Race {
     // is a real cost rather than a pause: you keep moving, more slowly.
     const readMul = this.readingMap ? 0.55 : 1;
 
-    const target =
+    const straight =
       here.runnability === Runnability.Impassable
         ? 0
         : BASE_MS * terrainMul * gradeMul * fuel * belt.speedMul * readMul * intent.forward;
 
-    // Ease toward the target so acceleration is not instant.
-    a.speed += (target - a.speed) * Math.min(1, dtS * 3.2);
+    // Cornering. What the athlete could hold in a straight line is not what
+    // they can hold through a corner, and a sprint in an old town is corners.
+    // The model — and the argument for why the cost lands here rather than on
+    // how fast the player may turn — is `src/sim/cornering.ts`.
+    this.cornering.step(dtS, a.heading, a.speed);
+    const target = this.cornering.limit(straight);
+
+    // Ease toward the target: Furusawa–Hill acceleration, flat braking, and
+    // braking is the faster of the two. Most of what a corner costs is the ten
+    // metres afterwards, and a symmetric constant hid that.
+    a.speed = easeSpeed(a.speed, target, dtS);
     const moved = a.speed * dtS;
 
     const dx = Math.sin(a.heading) * moved;
