@@ -25,7 +25,6 @@ import * as THREE from 'three';
 import type { Capabilities, QualityTier } from '@/core/capabilities';
 import { clearHarness, exposeForHarness } from '@/core/perf';
 import { getVenue } from '@/core/venues';
-import { Runnability } from '@/core/types';
 import { TerrainField, TerrainMesh, TOWN_SPLAT } from './terrain';
 import { createTerrainMaterial, loadGroundTextures, TOWN_GROUND } from './materials';
 import type { GroundTextures } from './materials';
@@ -35,6 +34,7 @@ import type { Weather } from './sky';
 import { Buildings, loadSurface, loadTownscape } from './buildings';
 import type { SurfaceTextures, TownscapeData } from './buildings';
 import { Townscape } from './townscape';
+import { TownModel, loadTownModel } from './townModel';
 import { Landmarks, KRUMLOV_LANDMARKS, KRUMLOV_OVERRIDES, KRUMLOV_SKIP } from './landmarks';
 import { Vegetation, disposeAsset, loadAsset } from './vegetation';
 import type { Asset } from './vegetation';
@@ -83,6 +83,12 @@ export class SprintScene {
    * itself would be checking its own arithmetic. See src/world/surface.ts.
    */
   surface!: TownSurface;
+  /**
+   * The venue, as one vector description. Public for the same reason `surface`
+   * is: the gate asks the running game what blocks, and a gate that rebuilt the
+   * answer would be checking its own arithmetic.
+   */
+  model!: TownModel;
   /** `groundAt` behind the `GroundSurface` interface, for the pieces that stand on it. */
   private walkable!: GroundSurface;
   private terrain!: TerrainMesh;
@@ -158,6 +164,12 @@ export class SprintScene {
 
     step(0.25, 'townscape');
     this.data = await loadTownscape('krumlov');
+    // The vector model, packed offline by tools/terrain/townmodel.mjs. What
+    // happens here is indexing, not deriving: phase 0 measured construction at
+    // 14 ms on the 4×-throttled Android proxy, against 2.6 s for the venue-wide
+    // sweep that now happens in the build.
+    this.model = new TownModel(await loadTownModel('krumlov'));
+    this.warnings.push(...this.model.warnings);
 
     step(0.4, 'textures');
     this.ground = await loadGroundTextures(this.tier, TOWN_GROUND);
@@ -276,11 +288,11 @@ export class SprintScene {
     // Built before anything that founds itself on the surface, because from
     // here on `this.groundAt` — not `this.field.heightAt` — is what the town
     // stands on.
-    this.surface = new TownSurface(this.data, (x, z) => this.field.heightAt(x, z));
+    this.surface = new TownSurface(this.model, (x, z) => this.field.heightAt(x, z));
     this.walkable = { heightAt: (x, z) => this.groundAt(x, z) };
 
     // --- walls, steps, river, bridge decks, street trees -------------------
-    this.town = new Townscape(this.data, this.field, stone, {
+    this.town = new Townscape(this.data, this.model, this.field, stone, {
       tier: this.tier,
       beech: assets?.beech,
       decks: this.surface.decks,
@@ -300,7 +312,10 @@ export class SprintScene {
     }
 
     // --- the five that have to be right ----------------------------------
-    this.landmarks = new Landmarks(this.field, stone);
+    this.landmarks = new Landmarks(this.field, this.model, stone);
+    // Nothing may register a collider after this point: a collider that can
+    // appear once the venue has been built is a collider no gate has swept.
+    this.model.seal();
     this.scene.add(this.landmarks.group);
 
     // --- the beginner's bearing aid ---------------------------------------
@@ -365,7 +380,17 @@ export class SprintScene {
     if (!this.data.rasterStamped) {
       this.warnings.push(
         'townscape.json predates raster stamping — run tools/terrain/townscape.mjs; ' +
-          'walls will not be on the map and bridges will not cross',
+          'walls will not be on the map',
+      );
+    }
+    // The class raster no longer decides anything about bounds, but it still
+    // has to *agree*: `Race.step` blocks on `Impassable`, so a raster whose
+    // impassable class was not derived from the model can stop the athlete
+    // where the model says run. See tools/terrain/townmodel.mjs.
+    if (this.field.rMeta.impassableFrom !== 'townmodel') {
+      this.warnings.push(
+        "runnability.json is not marked impassableFrom: 'townmodel' — run " +
+          'tools/terrain/townmodel.mjs; the speed surface and the collider may disagree',
       );
     }
     this.stampedCells =
@@ -382,29 +407,25 @@ export class SprintScene {
   /**
    * Is this point out of bounds?
    *
-   * Three things make it so, and all three are IOF Rule 17.2 rather than
-   * physics: ISSprOM 521 (every building), 515/518 (uncrossable wall, fence or
-   * railing), and 301 (uncrossable water — the Vltava). In the forest these
-   * would be a high traversal cost; in a sprint they are a binary fail state
-   * and the geometry has to agree with the map about exactly where they are.
+   * One question, one object, one answer. IOF Rule 17.2 rather than physics:
+   * ISSprOM 521 (every building), 515/518 (uncrossable wall, fence or railing)
+   * and 301 (the Vltava), with a bridge carriageway as the surface that lifts
+   * the last two. All of it is `TownModel.blockedAt`, and this method exists
+   * only to hand the race a bound function.
+   *
+   * What it used to be is the argument for phase 1: **four sources OR'd
+   * together**, of which two disagreed with the geometry the player sees. The
+   * building index skipped whichever footprints `landmarks.ts` drew by hand;
+   * the barrier index carried only the ways an extractor had flagged; the
+   * runnability raster carried a different outline again, stamped in an order
+   * no single place owned, and was the only clause that could stop the athlete
+   * where nothing at all is drawn — 19 674 m² of this venue, up to 43 m from
+   * the nearest visible thing. That clause is gone, and the raster's
+   * `Impassable` class is now derived from this same model in the build, so
+   * the speed surface and the collider cannot part company either.
    */
   blockedAt(x: number, z: number): boolean {
-    if (this.buildings.blocks.test(x, z)) return true;
-    // 515/518, and a bridge carriageway is the exception — the same exception
-    // `stampRaster` grants and, until D-033, the one it granted in step 2 and
-    // took back in step 5. Krumlov's river wall and its parapets are mapped as
-    // barrier ways running onto the decks, so the band below closed 17 of the
-    // venue's 47 crossings. Off the deck the barrier still blocks in full, and
-    // the water clause below is what stops anyone running off the parapet.
-    if (this.town.blocks.test(x, z) && !this.surface.decks.covers(x, z)) return true;
-    if (this.field.runnabilityAt(x, z) === Runnability.Impassable) return true;
-    // 301, and until now this line was the only part of the sentence above that
-    // was not actually true. The raster's water comes from ZABAGED and the
-    // river is drawn from OSM; where the two outlines disagree — about 5 300 m²
-    // of this venue — the Vltava was drawn over ground the raster called Road,
-    // and the course setter duly sited controls in it. A bridge deck is the one
-    // exception, which is the same exception `stampRaster` grants.
-    return this.surface.inWater(x, z);
+    return this.model.blockedAt(x, z);
   }
 
   /**
@@ -648,7 +669,7 @@ export class SprintScene {
       walls: this.town.stats.walls,
       steps: this.town.stats.steps,
       decks: this.town.stats.decks,
-      onDeck: this.surface.decks.covers(this.camera.position.x, this.camera.position.z)
+      onDeck: this.model.onCarriageway(this.camera.position.x, this.camera.position.z)
         ? 'yes'
         : 'no',
       streetTrees: this.town.stats.trees,

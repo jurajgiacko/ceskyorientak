@@ -39,7 +39,7 @@
  * `TerrainField.load` and `FieldTerrain.rulesHeightAt`.
  */
 
-import type { PavedRecord, TownscapeData, WaterRecord } from './buildings';
+import type { TownCarriageway, TownModel } from './townModel';
 
 /**
  * Anything that can say how high the ground is.
@@ -82,21 +82,18 @@ const MAX_DECK_LIFT_M = 10;
 const DECK_STEP_M = 2;
 
 /**
- * Half-width floor, metres.
- *
- * The same figure `stampRaster` uses when it paints the deck into the
- * runnability raster — `max(1.4, w / 2)` — so the ground you can stand on and
- * the ground that is drawn under you are the same band to the centimetre. They
- * have to be: a deck one cell wider than the raster says would let the athlete
- * walk off the surface, and one cell narrower would leave a passable strip at
- * riverbed height along both parapets.
+ * The deck's half-width is `TownCarriageway.half`, and the floor under it lives
+ * in the model — one number for the band the deck is drawn to, the band the
+ * athlete stands on, and the band the water and barrier rules are lifted over.
+ * A deck one cell wider than the exemption would let the athlete walk off the
+ * surface; one cell narrower would leave a passable strip at riverbed height
+ * along both parapets.
  */
-const DECK_HALF_MIN_M = 1.4;
 
 /** One accepted crossing: its centreline, its arc lengths, and its abutments. */
 export interface DeckSpan {
   /** Flat [x0,z0,…], world metres — the OSM way's own centreline. */
-  readonly line: readonly number[];
+  readonly line: Float32Array;
   /** Cumulative arc length at each vertex, metres. */
   readonly at: readonly number[];
   /** Total length, metres. */
@@ -207,9 +204,11 @@ export class BridgeDecks {
   /**
    * `heights` is the bare-earth surface, and only the raised set depends on it.
    */
-  constructor(paved: readonly PavedRecord[], heights: (x: number, z: number) => number) {
-    for (const way of paved) {
-      if (!way.b) continue;
+  constructor(
+    carriageways: readonly TownCarriageway[],
+    heights: (x: number, z: number) => number,
+  ) {
+    for (const way of carriageways) {
       const flat = this.outline(way);
       if (!flat) continue;
       this.index(this.carriageways, flat);
@@ -220,9 +219,9 @@ export class BridgeDecks {
     }
   }
 
-  /** The way's footprint, with no heights read. */
-  private outline(way: PavedRecord): DeckSpan | null {
-    const line = way.l;
+  /** The carriageway's footprint, with no heights read. */
+  private outline(way: TownCarriageway): DeckSpan | null {
+    const line = way.pts;
     const n = line.length / 2;
     if (n < 2) return null;
     const at: number[] = [0];
@@ -236,7 +235,9 @@ export class BridgeDecks {
       line,
       at,
       length,
-      half: Math.max(DECK_HALF_MIN_M, way.w * 0.5),
+      // The model's own half-width, which is the band its collider exempts and
+      // the band `Townscape` draws the deck to. One number, three consumers.
+      half: way.half,
       y0: 0,
       y1: 0,
       lift: 0,
@@ -341,7 +342,7 @@ function arcAt(span: DeckSpan, x: number, z: number): number | null {
 
 /** Walk `s` metres along a polyline. */
 export function pointAt(
-  line: readonly number[],
+  line: Float32Array,
   at: readonly number[],
   s: number,
 ): { x: number; z: number; tx: number; tz: number } {
@@ -366,7 +367,7 @@ export function pointAt(
 // ---------------------------------------------------------------------------
 
 interface WaterArea {
-  readonly ring: readonly number[];
+  readonly ring: Float32Array;
   readonly y: number;
 }
 
@@ -378,7 +379,7 @@ interface WaterCourse {
   readonly half: number;
 }
 
-function pointInRing(p: readonly number[], x: number, z: number): boolean {
+function pointInRing(p: Float32Array, x: number, z: number): boolean {
   let inside = false;
   const n = p.length / 2;
   for (let i = 0, j = n - 1; i < n; j = i++) {
@@ -407,38 +408,37 @@ export class WaterIndex {
   private readonly areas = new Grid<WaterArea>(24);
   private readonly courses = new Grid<WaterCourse>(24);
 
-  constructor(water: readonly WaterRecord[]) {
-    for (const w of water) {
-      if (w.p && w.p.length >= 6 && w.y !== undefined) {
-        const ring = w.p;
-        let minX = Infinity;
-        let maxX = -Infinity;
-        let minZ = Infinity;
-        let maxZ = -Infinity;
-        for (let i = 0; i < ring.length; i += 2) {
-          const x = ring[i] as number;
-          const z = ring[i + 1] as number;
-          if (x < minX) minX = x;
-          if (x > maxX) maxX = x;
-          if (z < minZ) minZ = z;
-          if (z > maxZ) maxZ = z;
-        }
-        this.areas.add({ ring, y: w.y }, minX, minZ, maxX, maxZ);
-      } else if (w.l && w.w) {
-        const half = w.w * 0.5;
-        for (let i = 0; i + 3 < w.l.length; i += 2) {
-          const ax = w.l[i] as number;
-          const az = w.l[i + 1] as number;
-          const bx = w.l[i + 2] as number;
-          const bz = w.l[i + 3] as number;
-          this.courses.add(
-            { ax, az, bx, bz, half },
-            Math.min(ax, bx) - half,
-            Math.min(az, bz) - half,
-            Math.max(ax, bx) + half,
-            Math.max(az, bz) + half,
-          );
-        }
+  constructor(model: TownModel) {
+    for (const w of model.waterAreas) {
+      const ring = w.ring;
+      let minX = Infinity;
+      let maxX = -Infinity;
+      let minZ = Infinity;
+      let maxZ = -Infinity;
+      for (let i = 0; i < ring.length; i += 2) {
+        const x = ring[i] as number;
+        const z = ring[i + 1] as number;
+        if (x < minX) minX = x;
+        if (x > maxX) maxX = x;
+        if (z < minZ) minZ = z;
+        if (z > maxZ) maxZ = z;
+      }
+      this.areas.add({ ring, y: w.level }, minX, minZ, maxX, maxZ);
+    }
+    for (const c of model.waterCourses) {
+      const half = c.width * 0.5;
+      for (let i = 0; i + 3 < c.pts.length; i += 2) {
+        const ax = c.pts[i] as number;
+        const az = c.pts[i + 1] as number;
+        const bx = c.pts[i + 2] as number;
+        const bz = c.pts[i + 3] as number;
+        this.courses.add(
+          { ax, az, bx, bz, half },
+          Math.min(ax, bx) - half,
+          Math.min(az, bz) - half,
+          Math.max(ax, bx) + half,
+          Math.max(az, bz) + half,
+        );
       }
     }
   }
@@ -492,9 +492,9 @@ export class TownSurface {
   readonly decks: BridgeDecks;
   readonly water: WaterIndex;
 
-  constructor(data: TownscapeData, heights: (x: number, z: number) => number) {
-    this.decks = new BridgeDecks(data.paved ?? [], heights);
-    this.water = new WaterIndex(data.water ?? []);
+  constructor(model: TownModel, heights: (x: number, z: number) => number) {
+    this.decks = new BridgeDecks(model.carriageways, heights);
+    this.water = new WaterIndex(model);
   }
 
   /** Ground the athlete stands on at (x, z): the deck if there is one, else the terrain. */

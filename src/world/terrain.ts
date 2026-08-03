@@ -45,6 +45,18 @@ interface HeightMeta extends RasterMetaBase {
 
 interface ClassMeta extends RasterMetaBase {
   format: 'uint8';
+  /**
+   * Set to `'townmodel'` when this raster's `Impassable` class was derived from
+   * the town's vector model rather than stamped into it.
+   *
+   * The class raster is the *speed and colour* surface (D-002) and the map is
+   * drawn from it; what it may not do is hold a second opinion about what is
+   * out of bounds, because `Race.step` blocks on `Impassable` and the athlete
+   * would be stopped by ground the collider let them into — or, worse, frozen
+   * at zero speed standing in it. `SprintScene` warns when the marker is
+   * missing, which is what a regenerated raster looks like.
+   */
+  impassableFrom?: string;
 }
 
 interface CanopyMeta extends RasterMetaBase {
