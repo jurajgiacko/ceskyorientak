@@ -132,31 +132,48 @@ export function getVenue(id: VenueId): VenueAnchor {
  * right way to revisit them; changing them by hand is not.
  *
  * ---------------------------------------------------------------------------
- * krumlov 30521551 — 15 controls, 1558 m, 45 m climb
+ * krumlov 30814554 — 17 controls, 1756 m, 60 m climb
  * ---------------------------------------------------------------------------
  *
- * Of 160 candidates 59 were viable, and this one wins at 142.9 against 141.5
- * for the runner-up. It is worth recording *why* it wins, because the margin is
- * thin and the reasons are the client's sentence almost word for word:
+ * **Replaces 30521551, which was unplayable.** D-037. That course had control 2
+ * fifty-eight metres from control 1 on the far bank of the Vltava with no
+ * bridge between them: the player saw the flag across the water and the only
+ * way to it was **717 m** of town, 12.3× the straight line. Control 13 was the
+ * same fault again at 8.5×. The client found both. Every gate passed it,
+ * because every leg measure in the project was a *boolean* — the leg was
+ * routable, and 98 % of it was street.
  *
- *  - **Every one of its 17 sited points is on Road or Path** — 100 % runnable
- *    ground. Control-to-paved distance is a median of 0.0 m, a p90 of 0.1 m,
- *    and the worst control in the whole course is **0.4 m** off the network.
- *  - **99 % of the fastest running between controls is on the street network**,
- *    measured by routing every leg over the game's own collision with the
- *    athlete's own class speeds.
- *  - **It stays in the old town** — x −157…242, z −200…172: Latrán, the square
- *    and the Plešivec bank. The runner-up 30474037 finishes 260 m east and 15 m
- *    up the hill outside the town, reached by a 364 m run-in that is both its
- *    longest leg and its least interesting one, and puts two of its controls in
- *    scrub.
- *  - Legs run 47–226 m with the longest last: short technical work, then a
- *    run-in, which is the shape a sprint should have.
- *  - The start is a cobbled street between buildings in Latrán; the finish is
- *    465 m away across the river, so the two are visibly different places and
- *    no leg passes the finish on its way anywhere.
- *  - 2.9 % climb per kilometre. A Knock-Out Sprint round is technically hard
+ * So the picker gained a hard filter on `routedM / straightM` and a 1 m audit
+ * that is the same function `check:passable` judges the shipped course by, and
+ * both venues were re-picked. What that turned up about this town is worth
+ * knowing before anyone changes the seed by hand:
+ *
+ * > Across 240 menu-shaped candidates, the **median course's worst leg runs
+ * > 8.71×** its straight line. Only 39 of 240 keep every leg under 3.0×, and
+ * > only 11 under 2.0×.
+ *
+ * The Vltava loops right around the old town, the bridges are hundreds of
+ * metres apart, and a 1.5 km course with fifteen-plus controls in a 500 m-wide
+ * town puts consecutive controls on opposite banks constantly. **The fault is
+ * the venue's, not the generator's**, which is exactly why the answer is to
+ * pick rather than to change the generator — see D-037 for the three generator
+ * fixes that were tried and measured and all made things worse.
+ *
+ * This one is the fourth-highest scorer of the seven viable, and it is the
+ * highest that survives the 1 m audit: the three above it fail on one leg each,
+ * at 5.0×, 3.4× and 3.0×. What it gets right:
+ *
+ *  - **No leg over 1.6×**, and only two over 1.3×. The whole course walks
+ *    2007 m for a printed 1756 m — a detour factor of **1.14** against the
+ *    ≈1.05 a real elite sprint runs (RESEARCH-SPORT §8.6).
+ *  - **96 % of the running is on the street network**, and the controls sit a
+ *    median of 0.6 m off it with a p90 of 3.3 m.
+ *  - 17 controls over 1756 m — legs of 47–384 m with the run-in last, which is
+ *    the shape a sprint should have, and a leg spread of 0.78.
+ *  - 3.4 % climb per kilometre. A Knock-Out Sprint round is technically hard
  *    and physically flat; see D-030.
+ *  - The start is 376 m from the finish, so the two are visibly different
+ *    places and no leg passes the finish on its way anywhere.
  *
  * ---------------------------------------------------------------------------
  * martinkov 29658380 — 15 controls, 4367 m, 235 m climb
@@ -184,9 +201,31 @@ export function getVenue(id: VenueId): VenueAnchor {
  * capped at 480 m — a figure tuned for a 1 200 m town and close to meaningless
  * in a 2 000 m forest, where 416 m and 488 m are the same answer. Worth knowing
  * before reading too much into the ordering of the forest shortlist.
+ *
+ * **Re-picked under D-037's detour filter and deliberately left alone.** The
+ * filter that condemned the Krumlov seed finds nothing whatever wrong here:
+ * audited at 1 m, every leg of this course runs between 1.0× and 1.1× its
+ * straight line and the whole course walks 4587 m for a printed 4367 m — a
+ * detour factor of **1.05**. Nor is that this seed being lucky. Across 140
+ * forest candidates, *every one* keeps *every* leg under 1.6×, and the worst
+ * leg anywhere in 2111 legs is 1.55×.
+ *
+ * Which is the control on the Krumlov finding above: the detour fault is the
+ * **Vltava**, not the generator. Lachovice has no uncrossable water and no
+ * street network to be forced onto, so the shortest way between two controls is
+ * very nearly the straight line, everywhere, on every seed.
+ *
+ * The re-pick's own top scorer was 29975140 at 69.9 against this course's 66.8,
+ * and it was not taken: it carries **12** controls where a middle is specified
+ * at 14, and six places on a shortlist whose spread is 69.9 to 65.6 is inside
+ * the noise of a scoring function whose start–finish term is admitted above to
+ * be miscalibrated for this venue. Changing a fixed seed also throws away every
+ * personal best and ghost `LocalStore` holds under the old `course.id`, which
+ * is a real cost and needs a real reason. There isn't one here.
  */
 export const COURSE_SEED: Readonly<Record<VenueId, number>> = {
-  krumlov: 30_521_551,
+  /** D-037. Was 30_521_551, whose leg 1→2 ran 12.3× its straight line. */
+  krumlov: 30_814_554,
   martinkov: 29_658_380,
 };
 

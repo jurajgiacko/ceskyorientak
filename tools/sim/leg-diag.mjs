@@ -12,7 +12,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { resolve, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { serve, withChrome, openTab } from '../ci/chrome.mjs';
-import { makeLegRouter, probeBlockers } from '../ci/check-passable.mjs';
+import { makeLegRouter, probeBlockers, makeCourseAudit, auditFaults, auditTable } from '../ci/check-passable.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, '../..');
@@ -50,6 +50,7 @@ const port = 8700 + Math.floor(Math.random() * 200);
 const server = await serve(DIST, port);
 const route = makeLegRouter(venue, 'runnability.bin', { radiusM: venue === 'krumlov' ? 600 : 1000 });
 const why = probeBlockers(venue, 'runnability.bin');
+const audit = makeCourseAudit(venue, 'runnability.bin', { radiusM: venue === 'krumlov' ? 600 : 1000 });
 try {
   await withChrome(async (cdpPort) => {
     for (const seed of seeds) {
@@ -63,6 +64,10 @@ try {
       const res = JSON.parse(await tab.evaluate(PROBE));
       await tab.close();
       const r = route(res.points);
+      const a = audit(res.points);
+      console.log(auditTable(a, '    '));
+      for (const f of auditFaults(a)) console.log(`    \u2717 ${f}`);
+      if (!auditFaults(a).length) console.log('    \u2713 audit clean');
       console.log(
         `\n· ${res.id} — ${res.controls} controls, ${res.lengthM} m` +
           (res.band ? ` (band ${res.band.min}–${res.band.max})` : '') +
