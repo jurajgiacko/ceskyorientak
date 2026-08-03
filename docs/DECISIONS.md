@@ -1576,3 +1576,55 @@ argument for that is not only the measurements above:
 
 Which is D-032's argument again. The generator produces candidates; the setter
 picks. When the picking is the thing that was broken, fix the picking.
+
+### What was chosen
+
+`krumlov` **30 814 554** — 17 controls, 1756 m, 60 m climb. Audited at 1 m,
+eight-connected, shortest distance:
+
+```
+S→1   137/165  1.2x       9→10    67/72   1.1x
+1→2    66/70   1.1x      10→11   118/122  1.0x
+2→3    52/56   1.1x      11→12    68/70   1.0x
+3→4    63/69   1.1x      12→13    79/83   1.0x
+4→5    93/101  1.1x      13→14    70/115  1.6x
+5→6    70/78   1.1x      14→15   109/118  1.1x
+6→7    57/61   1.1x      15→16    47/49   1.0x
+7→8    48/52   1.1x      16→17   162/169  1.0x
+8→9    66/72   1.1x      17→F    384/486  1.3x
+total 1756 m straight, 2007 m walked — D 1.14
+```
+
+Every control reachable; the offline model and the runtime agree on all 19
+sited points. Worst leg **1.6×** against a limit of 3.0. The leg the client
+reported — control 1 to control 2 — is 66 m of straight line and 70 m of
+running, and the autopilot playing the real build walks it in **68 m**.
+
+`martinkov` **29 658 380** — **unchanged**, and that is a result rather than an
+omission. Every leg audits between 1.0× and 1.1×, D **1.05**.
+
+**What the re-pick found out about the venue, which is worth more than either
+seed.** Across 240 menu-shaped Krumlov candidates:
+
+| | worst leg per candidate |
+|---|---|
+| best | 1.49× |
+| p10 | 2.55× |
+| **median** | **8.71×** |
+| max | 20.29× |
+
+Only **39 of 240** keep every leg under 3.0×, and 11 under 2.0×. Of 3737 legs,
+798 are over 2.0× and 524 over 3.0×. Seven candidates were viable on the full
+score; the chosen one is the highest of those that also survives the 1 m audit,
+the three above it failing on one leg each at 5.0×, 3.4× and 3.0×.
+
+The forest is the control on that number: across 140 candidates and 2111 legs,
+**not one leg anywhere exceeds 1.55×**. Same generator, same scoring, no
+uncrossable water. The Vltava loops right around the old town with its bridges
+hundreds of metres apart, and a 1.5 km course with fifteen-plus controls in a
+500 m-wide town puts consecutive controls on opposite banks constantly.
+
+**So the fault was the venue's and the remedy is selection.** That is the whole
+argument for fixing the picking rather than the generator, stated as a
+measurement: in this town roughly one seed in six is raceable, and finding it
+is what a course setter is for.
