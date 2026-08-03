@@ -224,8 +224,24 @@ export function getVenue(id: VenueId): VenueAnchor {
  * is a real cost and needs a real reason. There isn't one here.
  */
 export const COURSE_SEED: Readonly<Record<VenueId, number>> = {
-  /** D-037. Was 30_521_551, whose leg 1→2 ran 12.3× its straight line. */
-  krumlov: 30_814_554,
+  /**
+   * D-037, then again once `endpointFaults` existed.
+   *
+   * `30_521_551` was replaced because its leg 1→2 ran 12.3× its straight line.
+   * `30_814_554` replaced it and fixed that — worst leg 1.9×, D 1.14 — but put
+   * the **start in the woods**, on ForestOpen a metre off the network, facing an
+   * uncrossable barrier 11 m away. That is the client's *"you run out and
+   * there's a wall straight away"*, and no gate caught it because the audit
+   * measured whether the **legs** ran on the street (96%) and never asked
+   * whether the **start** stood on it. See PLAN-KRUMLOV-V2 §1.
+   *
+   * This one is picked with the start-on-network assertion as a filter. It
+   * costs some efficiency — D 1.48 against 1.14 — and that is the right trade:
+   * a slightly loopier course you can run out of beats a tight one that opens
+   * on a wall. Both are far inside the ≤3× rule, and the picker refused two
+   * higher-scoring seeds for 4.4× and 5.0× legs on the way here.
+   */
+  krumlov: 31_804_429,
   martinkov: 29_658_380,
 };
 

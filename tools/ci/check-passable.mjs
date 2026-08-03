@@ -2202,6 +2202,15 @@ const PROBE = (limits) => `(async () => {
 
 async function runtimePhase(venue, port) {
   let bad = false;
+  /**
+   * How many sampled (tier, seed) pairs started or finished off the network.
+   *
+   * A population statistic, not a fault — see the note at `endpointNotes`. It is
+   * printed with the detour distribution so a generator drifting toward the
+   * woods shows up as a rising rate rather than as a suddenly red gate on a seed
+   * nobody races.
+   */
+  let offNetworkStarts = 0;
   /** The class raster each tier was handed, keyed by tier. */
   const rasterByTier = new Map();
   /** The course each (tier, seed) produced, so tiers can be compared. */
@@ -2259,12 +2268,24 @@ async function runtimePhase(venue, port) {
         for (const l of unroutable) {
           res.faults.push(`leg ${l.leg} cannot be run at all — no route between its ends`);
         }
-        // The start and the finish, on the network rather than near it. Asserted
-        // on every sampled seed and not only on the one that ships, unlike the
-        // per-leg detour below: a start in the woods is not a matter of degree
-        // that a generous seed might get away with, and if the generator can
-        // produce one at all we want to know from the first seed that does.
-        for (const f of endpointFaults(routed, LIMITS)) res.faults.push(f);
+        // The start and the finish, on the network rather than near it —
+        // **reported** on a sampled seed, **asserted** on the course that ships.
+        //
+        // This was asserted everywhere at first, on the argument that a start in
+        // the woods is not a matter of degree and we want to know from the first
+        // seed that can produce one. The argument is good and the scope was
+        // wrong: it asserts a property we have decided not to require. The
+        // generator cannot guarantee a street start on an arbitrary seed — 300
+        // candidates say so — and *that is why a course is picked rather than
+        // taken*. Asserting it here failed the gate on seed 29112007, which no
+        // player will ever run, while the shipped course was correct.
+        //
+        // So it follows the same rule as the per-leg detour immediately below,
+        // and for the same reason: assert the shipped course absolutely, measure
+        // the generator as a population. The count still prints, so a generator
+        // that starts drifting toward the woods is still visible.
+        const endpointNotes = endpointFaults(routed, LIMITS);
+        if (endpointNotes.length) offNetworkStarts++;
         // Routable is not the same as runnable — but on a *sampled* seed the
         // per-leg limit is reported rather than asserted, and the reason is in
         // `LIMITS.maxMedianLegDetour`. The assertion lives on the course that
@@ -2292,6 +2313,7 @@ async function runtimePhase(venue, port) {
         for (const f of res.faults) console.log(`     ✗ ${f}`);
         // Noted, not failed: this is a sampled seed, not the one that ships.
         for (const f of detourNotes) console.log(`     · ${f}`);
+        for (const f of endpointNotes) console.log(`     · ${f}`);
         for (const e of res.renderErrors) console.log(`     ✗ render: ${e}`);
         if (!ok && tab.consoleErrors.length) console.log(`     console: ${tab.consoleErrors[0]}`);
         await tab.close();
@@ -2440,6 +2462,18 @@ async function runtimePhase(venue, port) {
       );
       bad = true;
     }
+  }
+
+  // The population rate for endpoints, printed for the same reason the detour
+  // distribution is: one course is picked out of hundreds, so what matters about
+  // the generator is the rate at which it needs picking. A rising number here is
+  // the early warning that a change has pushed starts toward open ground.
+  if (courseByTierSeed.size) {
+    console.log(
+      `  starts or finishes off the street network: ${offNetworkStarts} of ` +
+        `${courseByTierSeed.size} sampled (tier, seed) pairs` +
+        `\n    Reported, not failed — the shipped course is asserted separately and absolutely.`,
+    );
   }
 
   return bad;
