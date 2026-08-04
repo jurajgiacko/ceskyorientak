@@ -2334,3 +2334,80 @@ out of `RaceController.courseInfo.street` — the report the setter wrote while 
 was setting — and the setter's own limit is asserted to be no looser than the
 gate's, which is the containment `lengthBandM` already states for lengths.
 
+### What was chosen
+
+`krumlov` **30 616 579**, and it is the first Krumlov seed since D-032 that is
+**chosen** rather than inherited. Top of 13 viable out of 200 menu-shaped
+candidates on `tools/sim/pick-course.mjs`'s score, and the first of them the
+0.5 m audit accepted — no rejections on the way down.
+
+```
+S→1     73/76    1.0x         9→10    64/95    1.5x
+1→2     91/159   1.7x        10→11   133/154   1.2x
+2→3     92/93    1.0x        11→12    46/49    1.1x
+3→4    145/193   1.3x        12→13   114/125   1.1x
+4→5     73/78    1.1x        13→14    99/126   1.3x
+5→6     84/181   2.2x        14→15    52/56    1.1x
+6→7     95/106   1.1x        15→16    62/67    1.1x
+7→8    129/151   1.2x        16→17    85/136   1.6x
+8→9     56/62    1.1x        17→F    271/592   2.2x
+total 1763 m straight, 2499 m walked — D 1.42
+on the graph  1.0 1.8 1.2 1.5 1.1 2.3 1.3 1.2 1.1 1.5 1.1 1.2 1.1 1.4 1.2 1.1 1.8 2.2
+```
+
+| | |
+|---|---|
+| Controls · length · climb | 17 · 1763 m · 45 m (2.6 %) |
+| Running on the street network | **100 %** |
+| Control distance to a runnable way | median **0.0 m**, p90 0.7 m, worst 4.0 m |
+| Start and finish off the network | **0.0 m** and **0.0 m** |
+| Run-out toward control 1 | hits the 60 m measuring cap without meeting anything |
+| Worst leg | **2.2×** against a 3.0× limit, on both measures |
+| Start to finish | 373 m |
+
+The whole-course detour, D 1.42, is worse than `30_814_554`'s 1.14 and that is
+the trade this file already recorded once: *a slightly loopier course you can
+run out of beats a tight one that opens on a wall.* What is different is that
+the trade is now made by a setter looking at both numbers rather than found by
+an audit afterwards.
+
+**What the re-pick says about the venue**, which is worth more than the seed —
+the same measurement D-037 made, on the same 200-candidate scale:
+
+| worst leg per candidate | D-037 (240 candidates) | phase 3 (200) |
+|---|---|---|
+| best | 1.49× | **1.36×** |
+| p10 | 2.55× | **1.68×** |
+| **median** | **8.71×** | **3.65×** |
+| keeping every leg under 2.0× | 11 | **53** |
+| keeping every leg under 3.0× | 39 (16 %) | **89 (45 %)** |
+| legs over 3.0×, of all legs | 524 of 3737 (14 %) | **173 of 3403 (5 %)** |
+
+D-037 concluded *"in this town roughly one seed in six is raceable, and finding
+it is what a course setter is for."* It is now closer to one in two. The venue
+did not change; what changed is that the setter can see the route.
+
+And the refusal histogram is worth reading as a whole, because two of its lines
+are phase 3's:
+
+```
+ 106  a leg over 3.0x on the 2 m router
+  26  too few or too many controls
+  18  took more than one seed to settle
+  16  the athlete runs too few metres out of the start   ← fault 8, filtered
+  12  the start or the finish is on a bridge deck
+   6  a leg over 3.0x on the street graph                ← §3, filtered
+```
+
+Sixteen candidates in two hundred put the start somewhere you cannot run out
+of. Every one of them would have passed every gate this project had before
+phase 3, and one of them is what the client played.
+
+`martinkov` **29 658 380** — **unchanged, and asserted so rather than hoped
+for.** Two of phase 3's additions reach any venue with a `blockedAt`, and the
+forest has one: the shorter-leg rung of the retry ladder, and leg 1's run-out
+test. Both are now withheld where there is no network, because D-029 established
+that the generator's RNG is drawn inside geometry-dependent branches — a rule
+that rejects one candidate re-rolls every draw after it, and a forest course
+that changed would be this phase touching the venue it was told not to.
+

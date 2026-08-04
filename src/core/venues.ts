@@ -225,23 +225,36 @@ export function getVenue(id: VenueId): VenueAnchor {
  */
 export const COURSE_SEED: Readonly<Record<VenueId, number>> = {
   /**
-   * D-037, then again once `endpointFaults` existed.
+   * D-040, and the first Krumlov seed since D-032 that is **chosen** rather
+   * than inherited.
    *
-   * `30_521_551` was replaced because its leg 1→2 ran 12.3× its straight line.
-   * `30_814_554` replaced it and fixed that — worst leg 1.9×, D 1.14 — but put
-   * the **start in the woods**, on ForestOpen a metre off the network, facing an
-   * uncrossable barrier 11 m away. That is the client's *"you run out and
-   * there's a wall straight away"*, and no gate caught it because the audit
-   * measured whether the **legs** ran on the street (96%) and never asked
-   * whether the **start** stood on it. See PLAN-KRUMLOV-V2 §1.
+   * The three before it each fixed the last one's fault and were overtaken by
+   * the geometry: `30_521_551` had a 12.3× leg; `30_814_554` fixed that and put
+   * the start in the woods; `31_804_429` was picked with the start-on-network
+   * assertion but then re-rolled twice underneath the seed as phases 1 and 2
+   * changed the passable surface, because the generator's RNG is drawn inside
+   * geometry-dependent branches (D-029). D-039 said so out loud: the gate's
+   * strictest assertion was being applied to an unchosen sample that happened
+   * to pass, *"and phase 3 is where it stops being luck."*
    *
-   * This one is picked with the start-on-network assertion as a filter. It
-   * costs some efficiency — D 1.48 against 1.14 — and that is the right trade:
-   * a slightly loopier course you can run out of beats a tight one that opens
-   * on a wall. Both are far inside the ≤3× rule, and the picker refused two
-   * higher-scoring seeds for 4.4× and 5.0× legs on the way here.
+   * This one is chosen on the street graph, out of 200 menu-shaped candidates,
+   * by `tools/sim/pick-course.mjs` — top of 13 viable on score, and the first
+   * of them the 0.5 m audit accepted:
+   *
+   *   17 controls · 1763 m · 45 m climb · start 373 m from the finish
+   *   **100 % of the running on the street network**
+   *   control distance to paved: median 0.0 m, p90 0.7 m, worst 4.0 m
+   *   worst leg **2.2×** against a 3.0× limit, D 1.42
+   *   start and finish **0.0 m** off the network, and the run-out toward
+   *   control 1 hits the 60 m measuring cap without meeting anything
+   *
+   * The whole-course D is higher than `30_814_554`'s 1.14, and that is the same
+   * trade this file has already recorded once: a slightly loopier course you
+   * can run out of beats a tight one that opens on a wall. What is different is
+   * that the trade is now made by a setter looking at both numbers rather than
+   * discovered by an audit afterwards.
    */
-  krumlov: 31_804_429,
+  krumlov: 30_616_579,
   martinkov: 29_658_380,
 };
 
