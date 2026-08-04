@@ -1718,3 +1718,20 @@ everything phase 2 spent itself reducing. It is not phase 3's to fix and it is
 phase 3's to have found. It belongs in front of phase 5, which is the phase that
 puts this on a phone.
 
+### What phase 3 does not do
+
+The graph makes three faults structurally impossible and leaves two things
+standing that are worth naming rather than implying:
+
+- **It does not make every leg raceable.** The setter's last rung still takes
+  the least-bad rule-breaker, because refusing outright ends the course (D-037).
+  Two candidates in five come out clean; the picker is still what chooses.
+- **It does not know what a control *is*.** §4 — the shopfronts, the arcades,
+  the furniture — is where a control site stops being "a corner near a way" and
+  becomes a named object with a column-D description and something to see when
+  you arrive. The graph gives that phase somewhere to hang it.
+
+And the number this phase found that belongs to no phase: **3.6 s of a phone's
+loading screen goes on setting the course.** Venue setup is 10 ms. That
+asymmetry is the thing to look at before phase 5 puts this in a hand.
+
