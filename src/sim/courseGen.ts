@@ -82,13 +82,6 @@ export interface StreetRouting {
    * Null when `p` itself cannot be put on the network at all.
    */
   fieldFrom(p: World2): ((q: World2) => number) | null;
-  /**
-   * The bearings the network offers out of `p`, radians.
-   *
-   * Fault 8's question — *"you run out and there's a wall straight away"* — as
-   * a property of the graph rather than of a raster ring.
-   */
-  exitsAt(p: World2): number[];
 }
 
 /** What the generator needs to know about the ground. */

@@ -30,7 +30,7 @@ import { fileURLToPath } from 'node:url';
 import { readModel, colliders } from '../terrain/townmodel.mjs';
 import { buildGraph, sweepGraph, readGraph, waysOf } from '../terrain/streetgraph.mjs';
 import { serve, withChrome, openTab } from './chrome.mjs';
-import { makeCourseAudit, auditFaults, auditTable } from './check-passable.mjs';
+import { makeCourseAudit, auditTable } from './check-passable.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, '../..');
@@ -329,8 +329,15 @@ async function runtimePhase(venueId, offline) {
   console.log('\n' + auditTable(a, '    '));
   console.log(`    on the graph: ${graphDetour.map((d) => (d === null ? '∞' : `${d.toFixed(1)}×`)).join(' ')}`);
 
-  for (const f of auditFaults({ ...a, rows: a.rows.filter((r) => r.status !== 'ok') })) {
-    fail(f);
+  // A control inside a wall is not a routing question and the graph has nothing
+  // to say about it, so those faults come straight from the audit.
+  for (const p of a.sealed) {
+    fail(`control ${p} is sealed — no open ground within 3 m of where it is sited`);
+  }
+  if (a.unreachableFromStart.length) {
+    fail(
+      `control(s) ${a.unreachableFromStart.join(', ')} cannot be reached from the start at all`,
+    );
   }
   for (const r of rows) {
     if (r.status !== 'ok' && !Number.isFinite(r.graphDetour)) {

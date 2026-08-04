@@ -126,6 +126,17 @@ const MAX_SNAP_M = 30;
 export class StreetGraph {
   readonly meta: StreetGraphMeta;
   readonly warnings: string[] = [];
+  /**
+   * What indexing this cost, milliseconds.
+   *
+   * Reported for `FieldTerrain.costMs`' reason: PLAN-KRUMLOV-V2 §6 phase 0
+   * budgeted the loading screen and required that every venue-wide sweep of the
+   * model live in the build, and a budget with no instrument is a budget nobody
+   * can tell has been broken. Nothing here queries the model — it is a CSR
+   * adjacency and a bucket grid over 14 719 vertices — but that is a claim, and
+   * a claim about load time should carry a number.
+   */
+  readonly buildMs: number;
   readonly nodeX: Float32Array;
   readonly nodeZ: Float32Array;
   readonly nodeComp: Int32Array;
@@ -154,6 +165,7 @@ export class StreetGraph {
   private heapN = 0;
 
   constructor(data: StreetGraphData) {
+    const t0 = typeof performance === 'undefined' ? Date.now() : performance.now();
     const m = data.meta;
     this.meta = m;
     const arr = (name: string): Float32Array | Int32Array => {
@@ -228,6 +240,7 @@ export class StreetGraph {
     this.dist = new Float64Array(n);
     this.heapC = new Float64Array(Math.max(64, n * 2));
     this.heapK = new Int32Array(Math.max(64, n * 2));
+    this.buildMs = (typeof performance === 'undefined' ? Date.now() : performance.now()) - t0;
   }
 
   private bucket(idx: number, ax: number, az: number, bx: number, bz: number): void {

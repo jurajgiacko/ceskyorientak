@@ -178,9 +178,10 @@ const PROBE = `(async () => {
  * Both are upper bounds on the shortest route the athlete could actually run,
  * and neither dominates: the graph is confined to a network drawn inside the
  * open space, so it can call a leg longer than it is; the 0.5 m lattice cannot
- * express a doorway narrower than its own diagonal (D-039), so it can too — and
- * measured over 161 sprint-length legs each one is the shorter of the pair
- * about as often as the other.
+ * express a doorway narrower than its own diagonal (D-039), so it can too.
+ * Measured over 174 sprint-length legs the graph is the conservative one — a
+ * median 1.04× and a p90 1.53× longer than the audit — and each is the tighter
+ * of the pair on some legs.
  *
  * D-037's fault is *"the flag is in sight across an uncrossable feature and the
  * way to it is a lap of the venue"*, and a route exhibited by either measure

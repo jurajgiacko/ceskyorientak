@@ -2245,21 +2245,29 @@ between them, where the network makes you go 10 % further round. 3579 of them,
 you may *run* over is anything the model lets you stand on and the network you
 may *site* on is the street. With them the median is 1.02× and the p90 1.33×.
 
-**3. The 0.5 m audit is not the truth either, and phase 3 had to stop treating
-it as one.** D-037 built `makeCourseAudit` as the stricter second measurement
-and the gate has judged the shipped course by it ever since. Measured over 161
-sprint-length legs, the graph is shorter than the audit about as often as the
-reverse, and on the shipped course leg 16→17 reads **5.3× on the graph and 1.3×
-on the audit**. Neither dominates, and the reason is structural on both sides:
-the graph is confined to a network drawn inside the open space, and a lattice
-cannot express a doorway narrower than its own diagonal — which is D-039's own
-third contradiction, arriving from the other direction.
+**3. Neither the graph nor the 0.5 m audit is the truth, and phase 3 had to stop
+treating the audit as one.** D-037 built `makeCourseAudit` as the stricter
+second measurement and the gate has judged the shipped course by it ever since.
+Measured over 174 sprint-length legs against it, the graph runs a **median 1.04×
+and a p90 of 1.53×** longer — it is the conservative measure, and on the shipped
+course leg 16→17 reads **5.3× on the graph and 1.3× on the audit**. But it is
+conservative rather than correct: the audit lengthens too, because a lattice
+cannot express a doorway narrower than its own diagonal (D-039's own third
+contradiction), and at 1 m D-039 measured one leg of the shipped course at 155 m
+that is 52 m.
 
-Both are **upper bounds on the shortest route the athlete could actually run**.
-D-037's fault is *"the flag is in sight across an uncrossable feature and the way
-to it is a lap of the venue"* — a statement that **no** short route exists — so a
-route exhibited by either measure disproves it. `check-streets` and
-`pick-course` judge a leg on the shorter of the two and print both.
+Both are **upper bounds on the shortest route the athlete could actually run**,
+and each is the tighter one on some legs. D-037's fault is *"the flag is in
+sight across an uncrossable feature and the way to it is a lap of the venue"* —
+a statement that **no** short route exists — so a route exhibited by either
+measure disproves it. `check-streets` and `pick-course` judge a leg on the
+shorter of the two and print both.
+
+The cost of the graph being the conservative one is paid by the *setter*, not by
+the gate: **17 of 174 legs read over 3.0× on the graph that the athlete runs
+under it**, so one candidate leg in ten is refused for a reason that is not
+quite true. That is why the refusals are a ladder with a last rung rather than a
+rule, and why the picker still exists.
 
 **4. Validating geometry at full precision and shipping it at a centimetre is a
 bug, and the assertion caught it on its first run.** The derivation checked

@@ -223,7 +223,6 @@ export class FieldTerrain implements CourseTerrain, RaceTerrain {
             const f = streets.fieldFrom(p);
             return f ? (q) => f.to(q) : null;
           },
-          exitsAt: (p) => streets.exitsAt(p),
         }
       : undefined;
 

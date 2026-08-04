@@ -564,15 +564,16 @@ The three things §3 promised are now properties of the construction:
   between junctions with a clear swept line between them, marked routable and
   never sitable: median error 1.21× → 1.02×.
 
-- **The 0.5 m audit is not the truth either.** D-037 built it as the stricter
-  second measurement and the gate has judged the shipped course by it since.
-  Measured over 161 legs, the graph is the shorter of the two about as often as
-  the audit is, and on the shipped course one leg reads 5.3× on the graph and
-  1.3× on the audit. Both are *upper bounds* on the athlete's shortest route —
-  the graph is confined to a network, the lattice cannot express a narrow
-  doorway (D-039) — and D-037's fault is that **no** short route exists, so a
-  route exhibited by either disproves it. The gate now judges the shorter and
-  prints both.
+- **Neither the graph nor the 0.5 m audit is the truth.** Both are *upper
+  bounds* on the athlete's shortest route — the graph is confined to a network,
+  and the lattice cannot express a doorway narrower than its diagonal (D-039).
+  Measured over 174 legs the graph is the conservative one, a median 1.04× and a
+  p90 1.53× longer, and on the shipped course one leg reads 5.3× on the graph
+  and 1.3× on the audit. D-037's fault is that **no** short route exists, so a
+  route exhibited by either disproves it: the gate judges the shorter and prints
+  both. The cost falls on the setter — **17 of 174 legs read over 3.0× on the
+  graph that the athlete runs under it** — which is why the refusals are a
+  ladder with a last rung rather than a rule.
 
 - **Validating geometry at full precision and shipping it at a centimetre is a
   bug**, and the assertion caught it on its first run: 49 edges and 31 junctions
