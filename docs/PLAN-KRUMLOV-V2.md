@@ -546,6 +546,14 @@ The three things §3 promised are now properties of the construction:
 - **The start's run-out** — the start and the finish are *projected onto* the
   network rather than filtered for being near it (0.0 m off it on every seed
   sampled), and leg 1 requires 25 m of clear straight running out of the start.
+  Twenty candidates in two hundred were refused for it.
+
+`COURSE_SEED` names a **chosen** course again: krumlov **30 640 336** — 14
+controls, 1750 m, 95 % of the running on the street network, worst leg **2.1×**
+against a 3.0× limit, start and finish 0.0 m off the network, 34.5 m of run-out
+toward control 1. Across the venue the median candidate's worst leg went 8.71×
+(D-037) to 3.68×, and the share keeping every leg under 3.0× went 16 % to 39 %.
+`martinkov` is unchanged and `check:race` confirms it leg for leg.
 
 **Five corrections to this plan, and the second changes what a street graph is.**
 

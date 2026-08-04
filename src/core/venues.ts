@@ -238,13 +238,13 @@ export const COURSE_SEED: Readonly<Record<VenueId, number>> = {
    * to pass, *"and phase 3 is where it stops being luck."*
    *
    * This one is chosen on the street graph, out of 200 menu-shaped candidates,
-   * by `tools/sim/pick-course.mjs` — top of 13 viable on score, and the first
+   * by `tools/sim/pick-course.mjs` — top of 12 viable on score, and the first
    * of them the 0.5 m audit accepted:
    *
-   *   17 controls · 1763 m · 45 m climb · start 373 m from the finish
-   *   **100 % of the running on the street network**
-   *   control distance to paved: median 0.0 m, p90 0.7 m, worst 4.0 m
-   *   worst leg **2.2×** against a 3.0× limit, D 1.42
+   *   14 controls · 1750 m · 55 m climb · start 402 m from the finish
+   *   **95 % of the running on the street network**
+   *   control distance to paved: median 0.0 m, p90 4.3 m, worst 5.6 m
+   *   worst leg **2.1×** against a 3.0× limit, D 1.36
    *   start and finish **0.0 m** off the network, and the run-out toward
    *   control 1 hits the 60 m measuring cap without meeting anything
    *
@@ -254,7 +254,7 @@ export const COURSE_SEED: Readonly<Record<VenueId, number>> = {
    * that the trade is now made by a setter looking at both numbers rather than
    * discovered by an audit afterwards.
    */
-  krumlov: 30_616_579,
+  krumlov: 30_640_336,
   martinkov: 29_658_380,
 };
 
