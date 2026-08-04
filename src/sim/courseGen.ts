@@ -1028,19 +1028,25 @@ function pickNextControl(o: PickOptions): World2 | null {
   let fallback: { p: World2; score: number; detour: number } | null = null;
 
   /**
-   * How many bearings to try.
+   * How many bearings to try. **90, and the network does not change it.**
    *
-   * 90 without a network and 200 with one, and the difference is not
-   * arbitrary: the network adds three more ways for a candidate to be refused —
-   * off the street, unroutable, over the detour limit — and 90 draws was tuned
-   * against a loop that had none of them. Measured on Krumlov, going back to 90
-   * with the network rules in place leaves the fallback firing on the late
-   * home-bias legs, which is where a course that has wandered to the far bank
-   * cannot get back. Each extra draw costs one snap and one array lookup; the
-   * Dijkstra is the leg's, not the candidate's.
+   * The network adds three more ways for a candidate to be refused — off the
+   * street, unroutable, over the detour limit — so the obvious response is more
+   * draws, and 200 was tried. It is the wrong lever twice over. The *retry
+   * ladder* in `generateCourse` already re-draws ninety fresh bearings on each
+   * of its rungs, so raising this raises the floor rather than the ceiling: it
+   * pays for the extra draws on every leg instead of only on the legs that
+   * need them. And the draw is not the cheap part — each one runs
+   * `findControlSite`, which is sixty samples of `featureScoreAt`, and that is
+   * a 22 m ring plus a feature-index lookup apiece.
+   *
+   * Measured, unthrottled, on the shipped venue: **6 120 ms of course setting
+   * at 200 draws against 2 900 ms at 90**, for a candidate pool that the ladder
+   * recovers anyway. On the 4× Android proxy that is 24 s of loading screen
+   * against 12 s, and phase 2 has just spent itself getting venue setup from
+   * 5 902 ms to 3 ms.
    */
-  const attempts = o.net ? 200 : 90;
-  for (let attempt = 0; attempt < attempts; attempt++) {
+  for (let attempt = 0; attempt < 90; attempt++) {
     // Turn away from the incoming direction. A change of at least ~40° keeps
     // the control meaningful and avoids the dog-leg the rules discourage.
     const turn = (0.7 + o.rng.next() * 1.6) * (o.rng.next() < 0.5 ? 1 : -1);

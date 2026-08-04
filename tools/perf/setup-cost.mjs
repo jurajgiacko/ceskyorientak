@@ -78,6 +78,11 @@ await withChrome(async (cdp) => {
       const info = window.__race.courseInfo;
       return {
         costMs: { ...t.costMs },
+        // Course setting, deliberately outside costMs — see
+        // CourseSetupResult.setupMs. Printed rather than summed with the
+        // venue-wide passes, because it is a different kind of cost and the
+        // 250 ms tripwire in check-passable exists to catch a sweep coming back.
+        courseMs: info.setupMs ?? null,
         reachable: info.reachableFraction,
         controls: info.controls,
         lengthM: info.lengthM,
@@ -110,6 +115,15 @@ for (const [p, ms] of Object.entries(best).sort((a, b) => b[1] - a[1])) {
   console.log(`  ${p.padEnd(10)} ${ms.toFixed(0).padStart(6)} ms`);
 }
 console.log(`  ${'total'.padEnd(10)} ${total.toFixed(0).padStart(6)} ms   (budget ${BUDGET_MS} ms)`);
+const courseMs = Math.min(...samples.map((s) => s.courseMs ?? Infinity));
+if (Number.isFinite(courseMs)) {
+  console.log(
+    `
+  course setting ${courseMs.toFixed(0)} ms — outside the budget above and the largest single` +
+      `
+  thing opening this venue spends time on. See CourseSetupResult.setupMs.`,
+  );
+}
 console.log(
   `  reachable ${(samples[0].reachable * 100).toFixed(1)} % · ` +
     `${samples[0].controls} controls, ${samples[0].lengthM} m`,

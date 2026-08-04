@@ -99,6 +99,22 @@ export interface CourseSetupResult {
     offNetworkM: { start: number; finish: number };
     startRunOutM: number;
   } | null;
+  /**
+   * What setting the course cost, milliseconds.
+   *
+   * **Deliberately not in `FieldTerrain.costMs`.** That record is the
+   * venue-wide passes over the model, and `check-passable` budgets their *sum*
+   * at 250 ms as a tripwire for a sweep coming back (phase 0). Course setting
+   * is not one of those and never was; folding it in there made the tripwire
+   * fire on a cost that has always been paid and had simply never been looked
+   * at — which is the wrong end of the same failure, a measure that is right
+   * about what it measures and silent about what it does not.
+   *
+   * So it is measured here, where it happens, and reported for
+   * `tools/perf/setup-cost.mjs` to print at the phone throttle. It is the
+   * largest single thing opening a Krumlov race spends time on.
+   */
+  setupMs: number;
 }
 
 /** How many seeds to try before accepting an edited course. */
@@ -136,6 +152,7 @@ export function setCourse(
   terrain: FieldTerrain,
   o: { venue: VenueAnchor; discipline: Discipline; seed: number; arena: World2 },
 ): CourseSetupResult {
+  const t0 = now();
   const { fraction } = terrain.buildReachability(o.arena);
   const band = courseLengthBand(o.discipline, o.venue);
 
@@ -205,6 +222,7 @@ export function setCourse(
             arenaFaults: arena,
             lengthBandM: band,
             street: streetReport(terrain, course),
+            setupMs: now() - t0,
           };
         }
         // Keep the best runner-up: a sound arena first, then enough controls,
@@ -238,6 +256,7 @@ export function setCourse(
       arenaFaults: arenaOf(complete.course),
       lengthBandM: band,
       street: streetReport(terrain, complete.course),
+      setupMs: now() - t0,
     };
   }
 
@@ -256,6 +275,7 @@ export function setCourse(
     arenaFaults: arenaOf(edited),
     lengthBandM: band,
     street: streetReport(terrain, edited),
+    setupMs: now() - t0,
   };
 }
 
@@ -315,6 +335,11 @@ function runOutM(terrain: FieldTerrain, from: World2, toward: World2): number {
     if (terrain.blockedAt(from.x + ux * d, from.z + uz * d)) return d - 0.5;
   }
   return reach;
+}
+
+/** `performance.now`, and `Date.now` where there is none (the Node harnesses). */
+function now(): number {
+  return typeof performance === 'undefined' ? Date.now() : performance.now();
 }
 
 /** How far each control sits from the street network, metres. */

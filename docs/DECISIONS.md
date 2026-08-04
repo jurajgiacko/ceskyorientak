@@ -2411,3 +2411,56 @@ that the generator's RNG is drawn inside geometry-dependent branches — a rule
 that rejects one candidate re-rolls every draw after it, and a forest course
 that changed would be this phase touching the venue it was told not to.
 
+### What it cost, measured
+
+`tools/perf/setup-cost.mjs` and a bench inside the running game, both at
+`Emulation.setCPUThrottlingRate: 4` — this project's mid-range-Android proxy and
+the throttle every timing in this file is stated against.
+
+| | 1× | 4× (Android proxy) |
+|---|---|---|
+| indexing the graph at load | 2.6 ms | **10–13 ms** |
+| one Dijkstra field (a leg) | 0.26 ms | **0.93 ms** |
+| one snap onto the network | 2.5 µs | 11.4 µs |
+| venue setup, all phases | — | **10 ms** (budget 550) |
+
+Nothing here queries the model: the artefact is built offline and what happens
+at load is a CSR adjacency and a bucket grid over 14 719 vertices. That is the
+literal reading of phase 0's rule, and `FieldTerrain.costMs.streets` carries the
+number so it stays true — phase 2 got venue setup from 5902 ms to 3 ms and the
+way to lose that again is one venue-wide sweep nobody is measuring.
+
+| | |
+|---|---|
+| on the wire | +274 kB raw, **+115 kB gzip** |
+| device fetch, one race | 17.4 → **17.6 MB** of a 25 MB budget |
+| `check:payload`, `check:town`, `check:race`, `check:passable` | green |
+
+### The cost that had always been paid and had never been looked at
+
+Folding course setting into `FieldTerrain.costMs` tripped `check-passable`'s
+250 ms venue-setup budget at **6 120 ms**, and the first reading of that is that
+phase 3 had put a sweep back in the loading screen. It had not. Two separate
+things were true and both are worth recording.
+
+**The budget is about venue-wide passes over the model, and course setting is
+not one.** It is measured in `CourseSetupResult.setupMs` now, printed by
+`tools/perf/setup-cost.mjs` and summed with nothing. Venue setup itself is
+**10 ms at 4×** against a 550 ms budget, of which the street graph is the whole
+of it.
+
+**But 6 120 ms was real, and half of it was mine.** Raising
+`pickNextControl`'s bearing draws from 90 to 200 — the obvious response to the
+network refusing more candidates — was the wrong lever twice: the retry ladder
+already re-draws ninety fresh bearings on each of its rungs, so it raises the
+*floor* rather than the ceiling, and the draw is not the cheap part, because
+each one runs `findControlSite`'s sixty samples of `featureScoreAt`. Back at 90
+it is **3 612 ms at 4×**, and the pool the extra draws bought is recovered by
+the ladder on the legs that actually need it.
+
+What is left is a pre-existing cost that nobody had a number for: **3.6 s of a
+mid-range phone's loading screen goes on setting the course**, against 10 ms for
+everything phase 2 spent itself reducing. It is not phase 3's to fix and it is
+phase 3's to have found. It belongs in front of phase 5, which is the phase that
+puts this on a phone.
+
