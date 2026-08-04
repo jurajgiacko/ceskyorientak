@@ -44,6 +44,53 @@ export interface ControlSite {
   g?: string;
 }
 
+/**
+ * Routing over the venue's street network, as the course is being set.
+ *
+ * PLAN-KRUMLOV-V2 §3. This is the interface that ends fault 7: `routeCost`
+ * below samples the *straight line*, so a leg with a river across it costs
+ * `Infinity` and scores exactly the same as a leg into a courtyard — the
+ * generator cannot tell "go round the block" from "go round the town", and
+ * D-037's 12.3× leg is what that looks like on a description sheet.
+ *
+ * Kept to two methods on purpose. `src/sim` is calibrated against its own
+ * harnesses and may not learn about three.js, packed buffers or broadphase
+ * grids; what it needs to know is *how far is it really* and *is this point on
+ * a street*, and both are numbers.
+ */
+export interface StreetRouting {
+  /**
+   * Metres from `p` to the nearest way a control may be sited on — Road, Path
+   * or Steps. `Infinity` past the search radius.
+   *
+   * Deliberately not "the nearest network of any kind": the graph carries
+   * chords across open ground so that a leg across a square is not measured
+   * round it, and a control in the middle of a square is not a sprint control.
+   */
+  offNetworkM(p: World2): number;
+  /**
+   * The nearest point *on* a sitable way, or null if there is none within the
+   * search radius. What makes "the start is on the network" a construction
+   * rather than a filter.
+   */
+  snapToNetwork(p: World2): World2 | null;
+  /**
+   * Distances from `p` over the network. One Dijkstra; the closure answers
+   * metres for any point, or `Infinity` where either end is off the network or
+   * in another component.
+   *
+   * Null when `p` itself cannot be put on the network at all.
+   */
+  fieldFrom(p: World2): ((q: World2) => number) | null;
+  /**
+   * The bearings the network offers out of `p`, radians.
+   *
+   * Fault 8's question — *"you run out and there's a wall straight away"* — as
+   * a property of the graph rather than of a raster ring.
+   */
+  exitsAt(p: World2): number[];
+}
+
 /** What the generator needs to know about the ground. */
 export interface CourseTerrain {
   runnabilityAt(x: number, z: number): Runnability;
@@ -84,6 +131,34 @@ export interface CourseTerrain {
    * `FieldTerrain.pavedDistanceAt`.
    */
   pavedDistanceAt?(x: number, z: number): number;
+  /**
+   * Is this point out of bounds? The athlete's own test.
+   *
+   * Optional because a synthetic terrain in a harness has no collider, and
+   * absent in the forest for a better reason: there is nothing there the class
+   * raster does not already say. Used for the start's run-out, which is a
+   * continuous measurement — how far you get before something stops you — and
+   * cannot be read off a class.
+   */
+  blockedAt?(x: number, z: number): boolean;
+  /**
+   * Can the athlete get here from the arena at all?
+   *
+   * The shipped passable space's own answer. Asked here so that projecting the
+   * start onto the network cannot land it somewhere `setCourse` will
+   * immediately drag it off again — the two would otherwise be pulling in
+   * different directions, which is how a start ends up neither on the network
+   * nor where the generator put it.
+   */
+  reachableAt?(x: number, z: number): boolean;
+  /**
+   * The street network, where the venue has one. See `StreetRouting`.
+   *
+   * Absent in the forest, and that is not an omission: a forest course is not
+   * set on a network, every leg there audits between 1.0× and 1.1×, and the
+   * one measure this would add is the one the forest has never failed.
+   */
+  network?: StreetRouting;
 }
 
 /** Target shape per discipline. Winning times are the IOF-specified quantity. */
@@ -363,6 +438,88 @@ const RELAXED_CLEARANCE = 0.7;
 const LAST_RESORT_SEPARATION = 0.85;
 
 /**
+ * How far a leg may run against its straight line, measured on the street
+ * graph while the leg is being set.
+ *
+ * **The same 3.0× `tools/ci/check-passable.mjs` asserts, and stated here rather
+ * than imported for the reason `COURSE_LENGTH_M` is stated there rather than
+ * read out of the build**: a gate that reads the setter's own number cannot
+ * catch a wrong number. What ties them together is containment, asserted rather
+ * than maintained by hand — `setCourse` reports `detourLimit` and the gate
+ * checks it is not looser than its own.
+ *
+ * D-037 derived 3.0 from the sport: RESEARCH-SPORT §8.6 puts elite leg route
+ * efficiency between 1.1× and 2.0×, and 2.0 is the bottom of the published
+ * scale, so 3.0 is a floor under indefensible rather than a definition of good.
+ * The two faults the client found ran 14.0× and 10.3×.
+ *
+ * **What makes this different from D-037's three failed attempts** — which is
+ * the whole of §3, so it is worth being exact about. Those measured the
+ * straight line and could not see a detour at all: `routeCost` returns
+ * `Infinity` for a leg with a river across it and `Infinity` for a leg into a
+ * courtyard, so refusing on it starved the candidate pool and ended courses
+ * early. This measures the route. A candidate refused here is refused because
+ * the way to it is genuinely a lap of the venue, and a candidate accepted comes
+ * with a **route the athlete can physically run** at that ratio — every edge of
+ * the graph is swept-clear against the model.
+ */
+export const MAX_LEG_DETOUR = 3.0;
+
+/**
+ * Below this much excess the ratio is not measured. D-037's allowance, and the
+ * same 40 m: it is a measurement allowance rather than a sporting one, and on a
+ * 47 m leg — legal at 25 m under Rule 19.4 — snapping each end onto the network
+ * is worth 0.2 of the ratio on its own.
+ */
+const MIN_DETOUR_EXCESS_M = 40;
+
+/**
+ * How far off the street network the start and the finish may sit, metres.
+ *
+ * **Fault 8, made structural.** `endpointFaults` in check-passable states the
+ * same property as a *class* test — the cell the start stands in is Road or
+ * Path, or it is not on the network — on the argument that any tolerance wide
+ * enough to absorb 1 m quantisation is wide enough to pass the fault. On a
+ * vector graph there is no quantisation to absorb: 2.5 m is one stride, it is
+ * inside the carriageway of every way in the town, and the start this replaces
+ * was 1.4 m from a Road cell *and in the woods* — because the raster's nearest
+ * cell and the network are different questions. This one asks the network.
+ */
+const MAX_ENDPOINT_OFF_NETWORK_M = 2.5;
+
+/**
+ * How far the athlete must be able to run out of the start on the bearing to
+ * control 1, metres.
+ *
+ * The measured shape of fault 8: the shipped start faced the right way, stood
+ * on ForestOpen, and had a `town.blocks` barrier **11 m** ahead of it. Nothing
+ * measured that, because every course measure was an aggregate and the start is
+ * one point. 25 m is about five seconds of a sprinter's race and about the
+ * length of a Krumlov block; a start you have to turn inside of is a start
+ * sited against geometry.
+ *
+ * Applied to the first leg's candidates rather than to the start itself,
+ * because it is a property of the pair: a start on a street with the first
+ * control round the corner behind it is exactly the complaint, and the start
+ * alone cannot see it.
+ */
+const START_RUN_OUT_M = 25;
+
+/**
+ * How far off the street network a control may be sited, metres.
+ *
+ * Looser than the start and the finish, and it has to be: **a sprint control on
+ * the corner of a building is correct**, and D-037 measured the shipped
+ * course's controls at a median 0.0 m off the network with a p90 of 4.2 m. What
+ * this forbids is the other thing — a control fifteen metres into a courtyard
+ * or a meadow with a wall between it and the street the leg comes down. 12 m is
+ * `FEATURE_REACH` in `src/race/terrainAdapter.ts`, i.e. the furthest a control
+ * may be from the feature that describes it, which is the same distance for the
+ * same reason.
+ */
+const MAX_CONTROL_OFF_NETWORK_M = 12;
+
+/**
  * How many candidate sites are worth an escape flood, per band.
  *
  * The flood is a couple of milliseconds — cheap once, ruinous sixty times. The
@@ -452,7 +609,14 @@ export function generateCourse(o: GenerateOptions): Course {
    * straight out of and reports as open: what makes it a garden is that it is
    * off the network, and that is cheap to measure on every sample.
    */
+  const net = o.terrain.network;
   const onNetwork = (p: World2): boolean => {
+    // **On the graph, not near a paved cell.** Where the venue ships a street
+    // network this is the whole test and the raster proxy below is not
+    // consulted: the shipped start that produced fault 8 was 1.4 m from a Road
+    // cell and standing in woodland, which is what a nearest-cell measure
+    // cannot tell apart from a street.
+    if (net) return net.offNetworkM(p) <= MAX_ENDPOINT_OFF_NETWORK_M;
     if (!urban || !o.terrain.pavedDistanceAt) return true;
     return o.terrain.pavedDistanceAt(p.x, p.z) <= MAX_ARENA_PAVED_M;
   };
@@ -467,13 +631,34 @@ export function generateCourse(o: GenerateOptions): Course {
   // That order is the fix. Both used to be drawn from an annulus around the
   // arena with no relationship to each other, so nothing stopped them landing
   // a few metres apart — which is what the client played.
-  const finish = pickOpenSite(rng, o.terrain, inBounds, [
-    { around: arena, min: 60, max: 180, open: 0.7, speed: 0.8, accept: onNetwork, verify: opensOut },
-    { around: arena, min: 60, max: 320, open: 0.55, speed: 0.72, accept: onNetwork, verify: opensOut },
-    { around: arena, min: 40, max: 420, open: 0.4, speed: 0.6, verify: opensOut },
-    { around: arena, min: 40, max: 420, open: 0.4 },
-    { around: arena, min: 40, max: 420, open: 0 },
-  ]) ?? arena;
+  /**
+   * The last word on where an arena point is: **on the network**.
+   *
+   * The bands below relax, and they have to — a dense old town may have no
+   * 75 %-open spot near the arena — but every one of the things they relax is a
+   * matter of degree, and being on the street is not one. So wherever a graph
+   * exists the chosen point is projected onto the nearest way a control may
+   * hang on, and the property stops being something a later band can give away.
+   * The projection is short by construction: the bands sample near the arena
+   * and the network is never far from anywhere in a town.
+   */
+  const ontoNetwork = (p: World2): World2 => {
+    if (!net) return p;
+    const q = net.snapToNetwork(p);
+    if (!q || blockedAt(o.terrain, q)) return p;
+    if (o.terrain.reachableAt && !o.terrain.reachableAt(q.x, q.z)) return p;
+    return q;
+  };
+
+  const finish = ontoNetwork(
+    pickOpenSite(rng, o.terrain, inBounds, [
+      { around: arena, min: 60, max: 180, open: 0.7, speed: 0.8, accept: onNetwork, verify: opensOut },
+      { around: arena, min: 60, max: 320, open: 0.55, speed: 0.72, accept: onNetwork, verify: opensOut },
+      { around: arena, min: 40, max: 420, open: 0.4, speed: 0.6, verify: opensOut },
+      { around: arena, min: 40, max: 420, open: 0.4 },
+      { around: arena, min: 40, max: 420, open: 0 },
+    ]) ?? arena,
+  );
 
   // The start must be somewhere you can actually run out of in any direction,
   // and it must be a long way from the finish on the far side of the arena.
@@ -494,7 +679,7 @@ export function generateCourse(o: GenerateOptions): Course {
   const away = bearing(finish, arena);
   const far = (m: number) => (p: World2) => dist2(p, finish) >= m;
   const sep = spec.minStartFinishM;
-  const start = pickOpenSite(rng, o.terrain, inBounds, [
+  const rawStart = pickOpenSite(rng, o.terrain, inBounds, [
     { around: arena, min: 120, max: 260, open: 0.75, speed: 0.8, sector: { centre: away, half: 1.05 }, accept: both(far(sep), onNetwork), verify: opensOut },
     { around: arena, min: 120, max: 420, open: 0.75, speed: 0.8, sector: { centre: away, half: 1.75 }, accept: both(far(sep), onNetwork), verify: opensOut },
     { around: arena, min: 80, max: 520, open: 0.6, speed: 0.72, sector: { centre: away, half: 2.45 }, accept: far(sep), verify: opensOut },
@@ -504,6 +689,7 @@ export function generateCourse(o: GenerateOptions): Course {
     // property that cannot be given up is met by construction.
     { around: finish, min: sep * LAST_RESORT_SEPARATION, max: sep * LAST_RESORT_SEPARATION + 260, open: 0 },
   ]) ?? arena;
+  const start = ontoNetwork(rawStart);
 
   const targetLegs = spec.legCount[0] + Math.floor(rng.next() * (spec.legCount[1] - spec.legCount[0] + 1));
   const controls: Control[] = [];
@@ -559,10 +745,29 @@ export function generateCourse(o: GenerateOptions): Course {
           : 0.55 + rng.next() * 0.3;
     const legLength = Math.max(spec.minLegM, Math.min(spec.maxLegM, meanLegM * ratio));
 
-    const leg = (finishClearanceM: number): World2 | null => pickNextControl({
+    /**
+     * How far it really is from here, over the network. **One Dijkstra a leg.**
+     *
+     * Computed here rather than inside `pickNextControl` because it depends on
+     * the leg and not on the candidate, and `pickNextControl` weighs ninety
+     * candidates: per candidate this would be ninety floods a leg and the whole
+     * idea would be unaffordable at load; per leg it is a quarter of a
+     * millisecond and the ratio is simply known while the leg is being chosen.
+     *
+     * That is the whole of §3's second bullet, and it is why this is not one of
+     * D-037's three failed variants — those had no route to consult.
+     */
+    const legField = net?.fieldFrom(current) ?? null;
+
+    const leg = (
+      finishClearanceM: number,
+      lengthScale: number,
+      strictNetwork: boolean,
+    ): World2 | null => pickNextControl({
       from: current,
       lastBearing,
-      legLength,
+      legLength: legLength * lengthScale,
+      strictNetwork,
       rng,
       terrain: o.terrain,
       inBounds,
@@ -589,6 +794,17 @@ export function generateCourse(o: GenerateOptions): Course {
       // and made the ceiling below meaningless.
       climbLeftM: Math.max(spec.targetLengthM * spec.climbRatio * 0.3, climbLeftM),
       placed: [start, ...controls.map((c) => c.position)],
+      ...(net ? { net } : {}),
+      ...(legField ? { legField } : {}),
+      // The run-in is nobody's leg. `pickNextControl` never sites the finish —
+      // it was placed before the first control — so the one leg no candidate
+      // rule has ever seen is the last one, and D-037's shipped table has it as
+      // the worst leg of the course at 1.3×. On the last control the route to
+      // the finish is checked as well as the route from the previous control.
+      ...(net && i === targetLegs - 1 ? { homeField: net.fieldFrom(finish) } : {}),
+      // Leg 1 only: the athlete must be able to run out of the start. See
+      // `START_RUN_OUT_M` — this is fault 8, as a property of the pair.
+      ...(i === 0 ? { runOutM: START_RUN_OUT_M } : {}),
     });
 
     // Full clearance first; a narrower pass rather than no leg at all.
@@ -601,7 +817,20 @@ export function generateCourse(o: GenerateOptions): Course {
     // specified at, against one before. A setter faced with the same corner
     // accepts a tighter pass; so does this, once, and `RELAXED_CLEARANCE`
     // stays clear of what `tools/ci/check-race.mjs` will accept.
-    const site = leg(spec.finishClearanceM) ?? leg(spec.finishClearanceM * RELAXED_CLEARANCE);
+    //
+    // **The ladder, and why the shorter leg is on it.** Where the network rules
+    // refuse every candidate, the usual reason is not that this leg is
+    // impossible but that a leg *of this length* in any direction the turn rule
+    // allows lands across the Vltava — the town is 500 m wide and the river
+    // loops right round it. Pulling the leg in is what a setter does there, and
+    // it costs a little course length rather than a whole seed. Only when all
+    // four passes fail does the last one settle for the best rule-breaker,
+    // which is D-037's finding that refusing outright *ends* the course.
+    const site =
+      leg(spec.finishClearanceM, 1, true) ??
+      leg(spec.finishClearanceM, 0.7, true) ??
+      leg(spec.finishClearanceM * RELAXED_CLEARANCE, 1, true) ??
+      leg(spec.finishClearanceM * RELAXED_CLEARANCE, 1, false);
     if (!site) break;
 
     climbLeftM -= legClimbM(current, site, o.terrain);
@@ -688,6 +917,52 @@ interface PickOptions {
    * the first leg only — see `FIRST_LEG_AWAY_RAD`.
    */
   awayFrom?: { p: World2; rad: number };
+  /** The venue's street network, where it has one. See `StreetRouting`. */
+  net?: StreetRouting;
+  /**
+   * Metres over the network from `from` to any point — one Dijkstra, computed
+   * once for the leg by the caller. See the note where it is built.
+   */
+  legField?: (q: World2) => number;
+  /** The same, from the finish. Present on the last leg only: the run-in. */
+  homeField?: ((q: World2) => number) | null;
+  /**
+   * How far the athlete must be able to run straight out of `from` toward the
+   * candidate before something stops them, metres. Leg 1 only.
+   */
+  runOutM?: number;
+  /**
+   * Refuse rather than settle. With it, a pass that finds no candidate meeting
+   * the network's rules returns null instead of the best rule-breaker, so the
+   * caller can try again with a different leg length. See the ladder in
+   * `generateCourse`.
+   */
+  strictNetwork?: boolean;
+}
+
+/** Metres of clear straight running from `a` toward `b`, capped at `capM`. */
+function clearRunM(a: World2, b: World2, terrain: CourseTerrain, capM: number): number {
+  // Called through the terrain rather than lifted into a local, because
+  // `FieldTerrain.blockedAt` is a method and a detached one loses `this` —
+  // which fails at *course setting* time, i.e. before the venue has drawn a
+  // frame, and reads as "the town will not load".
+  if (!terrain.blockedAt) return capM;
+  const blocked = (x: number, z: number) => terrain.blockedAt!(x, z);
+  const total = dist2(a, b);
+  const reach = Math.min(capM, total);
+  const ux = (b.x - a.x) / (total || 1);
+  const uz = (b.z - a.z) / (total || 1);
+  // Half a metre, which is under the narrowest collider in either venue and is
+  // the spacing `Race.step` itself would meet a wall at over one stride.
+  for (let d = 0.5; d <= reach; d += 0.5) {
+    if (blocked(a.x + ux * d, a.z + uz * d)) return d - 0.5;
+  }
+  return reach;
+}
+
+/** Is this point out of bounds, where the terrain can say? */
+function blockedAt(terrain: CourseTerrain, p: World2): boolean {
+  return terrain.blockedAt ? terrain.blockedAt(p.x, p.z) : false;
 }
 
 /** Perpendicular distance from `p` to the segment `a`–`b`, metres. */
@@ -734,8 +1009,32 @@ function countCrossings(from: World2, to: World2, placed: World2[]): number {
  */
 function pickNextControl(o: PickOptions): World2 | null {
   let best: { p: World2; score: number } | null = null;
+  /**
+   * The least bad candidate that broke a network rule. See the return below.
+   *
+   * Ranked by **detour and not by score**, which is the opposite of `best` and
+   * deliberately so. Among candidates that are all allowed, the question is
+   * which is the better control; among candidates that are all disallowed, the
+   * question is which does least damage, and the score cannot answer it — the
+   * detour preference term is zero for every one of them by construction, so
+   * scoring would pick between 3.5× and 16× on feature quality alone.
+   */
+  let fallback: { p: World2; score: number; detour: number } | null = null;
 
-  for (let attempt = 0; attempt < 90; attempt++) {
+  /**
+   * How many bearings to try.
+   *
+   * 90 without a network and 200 with one, and the difference is not
+   * arbitrary: the network adds three more ways for a candidate to be refused —
+   * off the street, unroutable, over the detour limit — and 90 draws was tuned
+   * against a loop that had none of them. Measured on Krumlov, going back to 90
+   * with the network rules in place leaves the fallback firing on the late
+   * home-bias legs, which is where a course that has wandered to the far bank
+   * cannot get back. Each extra draw costs one snap and one array lookup; the
+   * Dijkstra is the leg's, not the candidate's.
+   */
+  const attempts = o.net ? 200 : 90;
+  for (let attempt = 0; attempt < attempts; attempt++) {
     // Turn away from the incoming direction. A change of at least ~40° keeps
     // the control meaningful and avoids the dog-leg the rules discourage.
     const turn = (0.7 + o.rng.next() * 1.6) * (o.rng.next() < 0.5 ? 1 : -1);
@@ -845,16 +1144,105 @@ function pickNextControl(o: PickOptions): World2 | null {
     const climbPenalty = legClimb / Math.max(30, o.climbLeftM);
 
     const interest = legInterest(o.from, sited, o.terrain, o.routeStepM);
-    const score =
+    let score =
       feature * 1.0 +
       interest * 1.3 -
       climbPenalty * 1.15 -
       crossings * 0.9 +
       o.rng.next() * 0.15;
-    if (!best || score > best.score) best = { p: sited, score };
+
+    // --- what the network says, while the leg is being set -------------------
+    //
+    // Everything above this line is a judgement about the *straight line*. The
+    // three tests below are the ones §3 exists for, and each of them is a
+    // question no straight-line probe can answer.
+    let legal = true;
+    /** How far round the leg goes, on the graph. 1 where there is no graph. */
+    let legDetour = 1;
+    if (o.net) {
+      // A control must be on the street network. Not "near paved cells" — a
+      // wall's other side is one metre from a street and a courtyard is fifteen
+      // — but within a stride of a way the graph says you can run along.
+      if (o.net.offNetworkM(sited) > MAX_CONTROL_OFF_NETWORK_M) continue;
+
+      // How far it really is. `legField` is the leg's own Dijkstra and this is
+      // a lookup; `detourOf` returns 1 where the excess is under the
+      // measurement allowance, so a 47 m leg is not judged on 8 % of lattice.
+      const there = o.legField ? o.legField(sited) : Infinity;
+      // **Unroutable is not a long leg — it is not a control site at all.**
+      //
+      // Rejected outright rather than kept as a fallback, which is the
+      // difference between the two ways this loop can say no. The graph has
+      // twelve components: the arena's holds 98.6 % of it and the rest are
+      // streets whose only link to it runs outside the playable square or
+      // across ground the chords do not span. A control there has no bounded
+      // route to the previous one *by any measure this setter has*, and
+      // accepting one as a least-bad option is how a course with a leg of
+      // sixteen times its straight line gets set.
+      if (!Number.isFinite(there)) continue;
+      const detour = detourOf(dist2(o.from, sited), there);
+      legDetour = detour;
+      if (detour > MAX_LEG_DETOUR) legal = false;
+      // The run-in, on the last leg. See `homeField`.
+      if (o.homeField) {
+        const home = o.homeField(sited);
+        if (!Number.isFinite(home)) continue;
+        const runIn = detourOf(dist2(sited, o.home), home);
+        legDetour = Math.max(legDetour, runIn);
+        if (runIn > MAX_LEG_DETOUR) legal = false;
+      }
+      // A preference on top of the rule, so that 1.2× beats 2.8× among legs
+      // that are both allowed. Zero at the limit, so it can never pull a
+      // candidate back over it — `pick-course.mjs`'s own term, and the same
+      // reasoning.
+      score += Math.max(0, 0.9 * (1 - (detour - 1) / (MAX_LEG_DETOUR - 1)));
+    }
+
+    // Fault 8: run out of the start and hit a wall. Leg 1 only, and measured
+    // toward the control the athlete is actually going to head for.
+    if (o.runOutM !== undefined && clearRunM(o.from, sited, o.terrain, o.runOutM) < o.runOutM) {
+      legal = false;
+    }
+
+    if (legal) {
+      if (!best || score > best.score) best = { p: sited, score };
+    } else if (
+      !fallback ||
+      legDetour < fallback.detour ||
+      (legDetour === fallback.detour && score > fallback.score)
+    ) {
+      fallback = { p: sited, score, detour: legDetour };
+    }
   }
 
-  return best?.p ?? null;
+  // **The network's rules are hard, and the fallback is why they can be.**
+  //
+  // D-037 measured what happens when a leg rule has no fallback: on a leg where
+  // every candidate is across the obstacle, `generateCourse` breaks out of its
+  // loop and the course does not lose a leg, it *ends* — Krumlov came out at 12
+  // controls against the 14 a sprint is specified at, and two seeds in three
+  // had to be shopped away from. A setter facing the same corner takes the best
+  // bad option and moves on; the picker and the gate then decide whether the
+  // finished course is raceable, which is D-032's division of labour.
+  //
+  // So an over-limit leg is possible and rare rather than impossible and
+  // ruinous — and the caller tries three more times before it settles for one.
+  if (best) return best.p;
+  return o.strictNetwork ? null : (fallback?.p ?? null);
+}
+
+/**
+ * A leg's detour ratio, with D-037's measurement allowance applied.
+ *
+ * Under `MIN_DETOUR_EXCESS_M` of excess the ratio is not a fact about the
+ * course, it is a fact about snapping two points onto a network: 40 m is about
+ * eight seconds of a sprinter's race, and nobody has ever reported "I could see
+ * it across the street".
+ */
+function detourOf(straightM: number, routedM: number): number {
+  if (!Number.isFinite(routedM)) return Infinity;
+  if (routedM - straightM < MIN_DETOUR_EXCESS_M) return 1;
+  return straightM > 0 ? Math.max(1, routedM / straightM) : 1;
 }
 
 /**

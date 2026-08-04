@@ -27,6 +27,7 @@ import { dist2 } from '@/core/geo';
 import { GROUND_FOR_RUNNABILITY } from '@/world/terrain';
 import type { TerrainField } from '@/world/terrain';
 import type { PassableSpace } from '@/world/passable';
+import type { StreetGraph } from '@/world/streetGraph';
 import type { BearingAim } from '@/world/bearingBand';
 import type { ControlMarker, ControlMarkerState } from '@/world/controlMarkers';
 import { getSettings } from '@/core/settings';
@@ -99,6 +100,13 @@ export interface RaceSceneHost {
    * forest — keeps the load-time flood it has always had.
    */
   readonly passable?: PassableSpace;
+  /**
+   * The street network, derived offline from the same model and asserted
+   * walkable edge by edge. Optional for the forest, which has no network and
+   * whose course setting is not a network problem — see
+   * `CourseTerrain.network`.
+   */
+  readonly streets?: StreetGraph;
   resize(width: number, height: number): void;
 }
 
@@ -239,6 +247,7 @@ export class RaceController {
       ...(host.blockedAt ? { blocked: (x: number, z: number) => host.blockedAt!(x, z) } : {}),
       ...(host.authoritativeR !== undefined ? { authoritativeR: host.authoritativeR } : {}),
       ...(host.passable ? { passable: host.passable } : {}),
+      ...(host.streets ? { streets: host.streets } : {}),
       urban,
       ...(urban && setup.townscape
         ? { features: buildUrbanFeatures(setup.townscape) }

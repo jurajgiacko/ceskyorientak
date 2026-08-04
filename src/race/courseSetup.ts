@@ -17,7 +17,7 @@
  * terrain refuses.
  */
 
-import { arenaFaults, courseLengthBand, generateCourse } from '@/sim/courseGen';
+import { arenaFaults, courseLengthBand, generateCourse, MAX_LEG_DETOUR } from '@/sim/courseGen';
 import { siteRefreshments } from '@/sim/refreshment';
 import type { Course, Control, Discipline, VenueAnchor, World2 } from '@/core/types';
 import { dist2 } from '@/core/geo';
@@ -73,6 +73,32 @@ export interface CourseSetupResult {
    * gate floor of 1200.
    */
   lengthBandM: { min: number; max: number };
+  /**
+   * What the course looks like **on the street graph it was set on**.
+   *
+   * Reported rather than only asserted, for the reason every other number in
+   * this interface is: PLAN-KRUMLOV-V2 §3 says the detour ratio should be known
+   * *while the course is being set* instead of audited afterwards, and a
+   * quantity that is known and not printed is a quantity nobody can check
+   * without a bisect. `null` for a venue with no network — the forest.
+   *
+   *  - `legDetourM` — routed metres over straight metres, per leg, start→1
+   *    first and the run-in last.
+   *  - `limit` — the ceiling the setter applied. `tools/ci/check-race.mjs`
+   *    asserts this is not looser than the one the gate applies, which is the
+   *    containment `lengthBandM` above exists to state for lengths.
+   *  - `offNetworkM` — how far the start and the finish ended up from a way a
+   *    control may hang on. Fault 8's own measurement.
+   *  - `startRunOutM` — metres of clear straight running out of the start
+   *    toward control 1, capped. *"You run out and there's a wall straight
+   *    away"* is this number being small.
+   */
+  street: {
+    legDetour: number[];
+    limit: number;
+    offNetworkM: { start: number; finish: number };
+    startRunOutM: number;
+  } | null;
 }
 
 /** How many seeds to try before accepting an edited course. */
@@ -178,6 +204,7 @@ export function setCourse(
             pavedDistanceM: pavedDistances(terrain, course),
             arenaFaults: arena,
             lengthBandM: band,
+            street: streetReport(terrain, course),
           };
         }
         // Keep the best runner-up: a sound arena first, then enough controls,
@@ -210,6 +237,7 @@ export function setCourse(
       pavedDistanceM: pavedDistances(terrain, complete.course),
       arenaFaults: arenaOf(complete.course),
       lengthBandM: band,
+      street: streetReport(terrain, complete.course),
     };
   }
 
@@ -227,7 +255,66 @@ export function setCourse(
     pavedDistanceM: pavedDistances(terrain, edited),
     arenaFaults: arenaOf(edited),
     lengthBandM: band,
+    street: streetReport(terrain, edited),
   };
+}
+
+/**
+ * The course as the graph sees it — the numbers §3 says should be known while
+ * the course is being set, read back off the course that was.
+ *
+ * Costs one Dijkstra a leg on a 1 900-node graph, which is a quarter of a
+ * millisecond each and is the same measurement the setter has already made;
+ * making it again on the *finished* course is the point, because `setCourse`
+ * moves the start and the finish after `generateCourse` has handed them over.
+ */
+function streetReport(terrain: FieldTerrain, course: Course): CourseSetupResult['street'] {
+  const net = terrain.network;
+  if (!net) return null;
+  const points = [course.start, ...course.controls.map((c) => c.position), course.finish];
+  const legDetour: number[] = [];
+  for (let i = 0; i + 1 < points.length; i++) {
+    const field = net.fieldFrom(points[i]!);
+    const routed = field ? field(points[i + 1]!) : Infinity;
+    const straight = dist2(points[i]!, points[i + 1]!);
+    legDetour.push(
+      Number.isFinite(routed) && straight > 0
+        ? Math.round(Math.max(1, routed / straight) * 100) / 100
+        : Infinity,
+    );
+  }
+  const first = course.controls[0]?.position ?? course.finish;
+  return {
+    legDetour,
+    limit: MAX_LEG_DETOUR,
+    offNetworkM: {
+      start: Math.round(net.offNetworkM(course.start) * 10) / 10,
+      finish: Math.round(net.offNetworkM(course.finish) * 10) / 10,
+    },
+    startRunOutM: Math.round(runOutM(terrain, course.start, first) * 10) / 10,
+  };
+}
+
+/**
+ * Metres of clear straight running from the start toward the first control,
+ * capped at `RUN_OUT_CAP_M`.
+ *
+ * The same measurement `pickNextControl` makes while choosing leg 1, made again
+ * on the course that ships. Capped because the answer wanted is "is there a
+ * run-out", not "how long is this street".
+ */
+const RUN_OUT_CAP_M = 60;
+
+function runOutM(terrain: FieldTerrain, from: World2, toward: World2): number {
+  const total = dist2(from, toward);
+  if (total < 1e-6) return 0;
+  const reach = Math.min(RUN_OUT_CAP_M, total);
+  const ux = (toward.x - from.x) / total;
+  const uz = (toward.z - from.z) / total;
+  for (let d = 0.5; d <= reach; d += 0.5) {
+    if (terrain.blockedAt(from.x + ux * d, from.z + uz * d)) return d - 0.5;
+  }
+  return reach;
 }
 
 /** How far each control sits from the street network, metres. */

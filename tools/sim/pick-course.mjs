@@ -90,6 +90,20 @@ const VENUE_R = { krumlov: 600, martinkov: 1000 };
  * a step. `want` is the middle of the control count a real race of this format
  * carries, and is a preference rather than a gate.
  */
+/**
+ * The street graph's own three, shared with `tools/ci/check-streets.mjs`.
+ *
+ * Stated in both places rather than imported, on this project's usual argument:
+ * a tool that reads the gate's numbers and a gate that reads the tool's cannot
+ * between them catch a wrong number. What they must not do is *disagree*, and
+ * the containment that matters — the setter's limit is not looser than the
+ * gate's — is asserted in check-streets against the setter's own report.
+ */
+const STREET = {
+  maxEndpointOffNetworkM: 2.5,
+  minStartRunOutM: 25,
+};
+
 const SHAPE = {
   // `climbPerKm` is the fraction of the course length that is ascent, and it is
   // the measure that separates a course from a hill session. RESEARCH-SPORT
@@ -148,10 +162,54 @@ const PROBE = `(async () => {
       tightest: r.courseInfo.tightestEscapeM2,
       paved: r.courseInfo.pavedDistanceM,
       arenaFaults: r.courseInfo.arenaFaults,
+      /**
+       * What the setter measured **on the street graph while it was setting**.
+       * PLAN-KRUMLOV-V2 §3, and null for a venue with no network.
+       */
+      street: r.courseInfo.street,
     },
     renderErrors: (window.__renderErrors || []).slice(0, 2),
   });
 })()`;
+
+/**
+ * The 0.5 m audit, told what the street graph found. **Neither is the truth.**
+ *
+ * Both are upper bounds on the shortest route the athlete could actually run,
+ * and neither dominates: the graph is confined to a network drawn inside the
+ * open space, so it can call a leg longer than it is; the 0.5 m lattice cannot
+ * express a doorway narrower than its own diagonal (D-039), so it can too — and
+ * measured over 161 sprint-length legs each one is the shorter of the pair
+ * about as often as the other.
+ *
+ * D-037's fault is *"the flag is in sight across an uncrossable feature and the
+ * way to it is a lap of the venue"*, and a route exhibited by either measure
+ * disproves it. So the leg is judged on the shorter, and the audit rows carry
+ * the graph's answer where it wins.
+ */
+function withGraph(a, street) {
+  if (!street?.legDetour) return a;
+  const rows = a.rows.map((r, i) => {
+    const d = street.legDetour[i];
+    if (d === null || d === undefined) return r;
+    const graphM = d * r.straightM;
+    if (r.status === 'ok' && r.walkedM <= graphM) return r;
+    return {
+      ...r,
+      status: 'ok',
+      walkedM: graphM,
+      detour: r.straightM > 0 ? Math.max(1, graphM / r.straightM) : 1,
+      viaGraph: true,
+    };
+  });
+  const walkedTotal = rows.reduce((s, x) => s + Math.max(0, x.walkedM), 0);
+  return {
+    ...a,
+    rows,
+    walkedTotal,
+    courseDetour: a.straightTotal > 0 ? walkedTotal / a.straightTotal : 1,
+  };
+}
 
 function median(a) {
   if (!a.length) return 0;
@@ -216,6 +274,38 @@ function score(res, routed, shape, urban) {
       };
     }
   }
+  /**
+   * The network's own three, from the setter's report. **PLAN-KRUMLOV-V2 §3.**
+   *
+   * Disqualifications rather than score terms, for D-037's reason: a start in
+   * the woods facing a wall won its round of picking because every term it
+   * failed was a preference, and sixty points of street fraction outvoted them.
+   * The class-based `endpointFaults` stays as well and is not redundant — it
+   * measures the raster the map is drawn from, this measures the network the
+   * course was set on, and the fault they exist for was invisible to the first
+   * one for exactly that reason.
+   */
+  if (info.street) {
+    const s = info.street;
+    if (s.offNetworkM.start > STREET.maxEndpointOffNetworkM) {
+      return { dq: `the start is ${s.offNetworkM.start.toFixed(1)} m off the street network` };
+    }
+    if (s.offNetworkM.finish > STREET.maxEndpointOffNetworkM) {
+      return { dq: `the finish is ${s.offNetworkM.finish.toFixed(1)} m off the street network` };
+    }
+    if (s.startRunOutM < STREET.minStartRunOutM) {
+      return {
+        dq:
+          `the athlete runs ${s.startRunOutM.toFixed(0)} m out of the start before something ` +
+          `stops them`,
+      };
+    }
+    const worstGraph = s.legDetour.reduce((a, d) => Math.max(a, d === null ? Infinity : d), 1);
+    if (worstGraph > s.limit) {
+      return { dq: `leg runs ${worstGraph.toFixed(1)}× its straight line on the street graph` };
+    }
+  }
+
   // A seed the setter had to shop around from is a seed whose own course was
   // rejected; the course that ships should be the one its seed produces.
   if (info.seedsTried > 1) return { dq: `took ${info.seedsTried} seeds to settle` };
@@ -481,7 +571,7 @@ async function main() {
   let winner = null;
   const rejected = [];
   for (let i = 0; i < AUDIT_N; i++) {
-    const a = audit(viable[i].res.points);
+    const a = withGraph(audit(viable[i].res.points), viable[i].res.info.street);
     const f = auditFaults(a);
     viable[i].audit = a;
     if (!f.length) { winner = viable[i]; break; }

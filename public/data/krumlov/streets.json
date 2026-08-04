@@ -1,6 +1,6 @@
 {
   "venue": "krumlov",
-  "generatedAt": "2026-08-04T00:36:07.626Z",
+  "generatedAt": "2026-08-04T00:59:12.319Z",
   "from": "townmodel.bin + townscape.json",
   "modelBytes": 137228,
   "playableR": 600,
@@ -10,90 +10,90 @@
   },
   "sweepM": 0.2,
   "snapM": 1.3,
-  "nodes": 1938,
-  "edges": 5806,
-  "vertices": 14132,
-  "junctions": 1647,
+  "nodes": 1937,
+  "edges": 5799,
+  "vertices": 14719,
+  "junctions": 1649,
   "deadEnds": 88,
-  "lengthM": 178984,
+  "lengthM": 178893,
   "lengthByKind": {
-    "road": 49754,
+    "road": 49768,
     "path": 5409,
-    "steps": 1734,
-    "open": 122088
+    "steps": 1733,
+    "open": 121984
   },
-  "sitableLengthM": 56896,
+  "sitableLengthM": 56909,
   "components": 11,
   "mainComp": 0,
-  "mainLengthM": 176522,
+  "mainLengthM": 176434,
   "mainFraction": 0.98625,
   "arenaNode": 857,
   "derivation": {
     "osmLengthM": 59063,
-    "blockedSamples": 9073,
-    "nudged": 4664,
-    "nudgedM": 933,
+    "blockedSamples": 9289,
+    "nudged": 4876,
+    "nudgedM": 975,
     "splitEdges": 87,
-    "droppedM": 1377,
-    "recoveredJunctions": 191,
+    "droppedM": 1378,
+    "recoveredJunctions": 844,
     "blockedNodes": 138,
     "nodesRescued": 116,
-    "chords": 3582
+    "chords": 3579
   },
   "blockedEdges": 0,
-  "sweptSamples": 907568,
+  "sweptSamples": 908110,
   "sections": {
     "nodeX": {
       "type": "f32",
       "offset": 0,
-      "count": 1938
+      "count": 1937
     },
     "nodeZ": {
       "type": "f32",
-      "offset": 7752,
-      "count": 1938
+      "offset": 7748,
+      "count": 1937
     },
     "nodeComp": {
       "type": "i32",
-      "offset": 15504,
-      "count": 1938
+      "offset": 15496,
+      "count": 1937
     },
     "edgeA": {
       "type": "i32",
-      "offset": 23256,
-      "count": 5806
+      "offset": 23244,
+      "count": 5799
     },
     "edgeB": {
       "type": "i32",
-      "offset": 46480,
-      "count": 5806
+      "offset": 46440,
+      "count": 5799
     },
     "edgeWidth": {
       "type": "f32",
-      "offset": 69704,
-      "count": 5806
+      "offset": 69636,
+      "count": 5799
     },
     "edgeKind": {
       "type": "i32",
-      "offset": 92928,
-      "count": 5806
+      "offset": 92832,
+      "count": 5799
     },
     "edgeLength": {
       "type": "f32",
-      "offset": 116152,
-      "count": 5806
+      "offset": 116028,
+      "count": 5799
     },
     "edgeOffset": {
       "type": "i32",
-      "offset": 139376,
-      "count": 5807
+      "offset": 139224,
+      "count": 5800
     },
     "edgePts": {
       "type": "f32",
-      "offset": 162604,
-      "count": 28264
+      "offset": 162424,
+      "count": 29438
     }
   },
-  "bytes": 275660,
-  "buildMs": 2163
+  "bytes": 280176,
+  "buildMs": 2514
 }

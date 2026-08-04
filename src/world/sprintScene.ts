@@ -36,6 +36,7 @@ import type { SurfaceTextures, TownscapeData } from './buildings';
 import { Townscape } from './townscape';
 import { TownModel, loadTownModel } from './townModel';
 import { PassableSpace, loadPassable } from './passable';
+import { StreetGraph, loadStreets } from './streetGraph';
 import { Landmarks, KRUMLOV_LANDMARKS, KRUMLOV_OVERRIDES, KRUMLOV_SKIP } from './landmarks';
 import { Vegetation, disposeAsset, loadAsset } from './vegetation';
 import type { Asset } from './vegetation';
@@ -96,6 +97,13 @@ export class SprintScene {
    * — see `src/world/passable.ts`.
    */
   passable!: PassableSpace;
+  /**
+   * The street network the course is set on — nodes at junctions, edges along
+   * ways the model says you can run. Public for the same reason `passable` is:
+   * `tools/ci` asserts properties of the graph *the game used*, not of a graph
+   * it rebuilt (D-039).
+   */
+  streets!: StreetGraph;
   /** `groundAt` behind the `GroundSurface` interface, for the pieces that stand on it. */
   private walkable!: GroundSurface;
   private terrain!: TerrainMesh;
@@ -185,6 +193,14 @@ export class SprintScene {
     this.passable = new PassableSpace(await loadPassable('krumlov'));
     this.passable.checkAgainst(this.model, modelData.buffer.byteLength);
     this.warnings.push(...this.passable.warnings);
+    // The street network, derived from the same model and asserted walkable
+    // edge by edge offline. What happens here is indexing — a CSR adjacency and
+    // a segment broadphase — not deriving; PLAN-KRUMLOV-V2 §6 phase 0's rule
+    // that a venue-wide sweep of the model belongs in the build applies to this
+    // as much as to the passable space.
+    this.streets = new StreetGraph(await loadStreets('krumlov'));
+    this.streets.checkAgainst(this.model, modelData.buffer.byteLength);
+    this.warnings.push(...this.streets.warnings);
 
     step(0.4, 'textures');
     this.ground = await loadGroundTextures(this.tier, TOWN_GROUND);

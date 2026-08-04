@@ -130,6 +130,8 @@ const LOW_TIER_TERRAIN = [
   'townmodel.bin', 'townmodel.json',
   'passable.bin', 'passable.json',
   'townscape.json',
+  /** The street graph, phase 3's artefact, fetched by `SprintScene.load` too. */
+  'streets.bin', 'streets.json',
 ];
 
 /**

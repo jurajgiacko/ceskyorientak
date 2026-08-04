@@ -465,8 +465,21 @@ export function buildGraph(col, ways, { playableR, arena }) {
 
   const nodes = [];
   const nodeGrid = new Buckets(8);
-  /** Find or make the node at (x, z), merging anything within `SNAP_M`. */
-  const nodeAt = (x, z) => {
+  /**
+   * Find or make the node at (x, z), merging anything within `SNAP_M`.
+   *
+   * **Rounded to the precision the file is packed in, here rather than at
+   * packing time.** D-038 recorded the same trap one layer down: the tool held
+   * 123.45 and the runtime read 123.44999694824219, and 62 cells of the venue
+   * disagreed. Here it is worse than a disagreement — validate a junction at
+   * full precision, ship it at a centimetre, and the shipped one can be inside
+   * the wall the validated one cleared. Measured before this line existed: **49
+   * of 5806 edges and 31 of 1938 junctions**, all of them clear in the
+   * derivation and blocked in the artefact.
+   */
+  const nodeAt = (rawX, rawZ) => {
+    const x = round2(rawX);
+    const z = round2(rawZ);
     let best = -1;
     let bestD = SNAP_M;
     for (const n of nodeGrid.near(x, z, SNAP_M)) {
@@ -512,8 +525,8 @@ export function buildGraph(col, ways, { playableR, arena }) {
     for (let d = 0.1; d <= NODE_RESCUE_M + 1e-9 && !moved; d += 0.1) {
       for (let a = 0; a < 16; a++) {
         const th = (a / 16) * Math.PI * 2;
-        const x = n.x + Math.sin(th) * d;
-        const z = n.z - Math.cos(th) * d;
+        const x = round2(n.x + Math.sin(th) * d);
+        const z = round2(n.z - Math.cos(th) * d);
         if (col.blockedAt(x, z)) continue;
         n.x = x;
         n.z = z;
@@ -654,8 +667,11 @@ export function buildGraph(col, ways, { playableR, arena }) {
       const cap = NUDGE_CAP_M(e.width);
       for (let s = i === 0 ? 0 : 1; s <= n; s++) {
         const t = s / n;
-        const x = ax + (bx - ax) * t;
-        const z = az + (bz - az) * t;
+        // Rounded to the shipped precision before it is validated — see
+        // `nodeAt`. Every point this loop accepts is a point that will be in
+        // the file, bit for bit.
+        const x = round2(ax + (bx - ax) * t);
+        const z = round2(az + (bz - az) * t);
         /**
          * A sample is accepted only if the athlete can get to it from the last
          * accepted one.
@@ -677,12 +693,16 @@ export function buildGraph(col, ways, { playableR, arena }) {
         stats.blockedSamples++;
         let fixed = null;
         for (let d = 0.1; d <= cap + 1e-9; d += 0.1) {
-          if (reachable(x + px * d, z + pz * d)) {
-            fixed = [x + px * d, z + pz * d, d];
+          const ux2 = round2(x + px * d);
+          const uz2 = round2(z + pz * d);
+          if (reachable(ux2, uz2)) {
+            fixed = [ux2, uz2, d];
             break;
           }
-          if (reachable(x - px * d, z - pz * d)) {
-            fixed = [x - px * d, z - pz * d, d];
+          const dx2 = round2(x - px * d);
+          const dz2 = round2(z - pz * d);
+          if (reachable(dx2, dz2)) {
+            fixed = [dx2, dz2, d];
             break;
           }
         }

@@ -30,11 +30,12 @@ import { Runnability } from '@/core/types';
 import type { TerrainSample } from '@/core/types';
 import { GROUND_FOR_RUNNABILITY } from '@/world/terrain';
 import type { TerrainField } from '@/world/terrain';
-import type { ControlSite, CourseTerrain } from '@/sim/courseGen';
+import type { ControlSite, CourseTerrain, StreetRouting } from '@/sim/courseGen';
 import type { RaceTerrain } from '@/sim/race';
 import { columnDFor } from './urbanFeatures';
 import type { UrbanFeatureIndex } from './urbanFeatures';
 import type { PassableSpace } from '@/world/passable';
+import type { StreetGraph } from '@/world/streetGraph';
 
 /** Extra out-of-bounds test the raster does not carry. */
 export type Blocker = (x: number, z: number) => boolean;
@@ -142,6 +143,16 @@ export interface FieldTerrainOptions {
    * fill it has always had. See `src/world/passable.ts`.
    */
   passable?: PassableSpace;
+  /**
+   * The venue's street network, derived offline from the same model.
+   *
+   * With it, `network` answers and the course setter sites controls on the
+   * graph and routes its legs on it while it is setting them. Absent for a
+   * venue with no `streets.bin` — the forest — where `network` is undefined and
+   * `generateCourse` behaves exactly as it always has. See
+   * `src/world/streetGraph.ts`.
+   */
+  streets?: StreetGraph;
 }
 
 export class FieldTerrain implements CourseTerrain, RaceTerrain {
@@ -153,6 +164,15 @@ export class FieldTerrain implements CourseTerrain, RaceTerrain {
   private readonly authoritativeR: number | null;
   /** See `FieldTerrainOptions.passable`. */
   private readonly passable: PassableSpace | null;
+  /**
+   * The street network, as `CourseTerrain` asks for it.
+   *
+   * Public and readonly rather than private, because `tools/ci` reads it off
+   * the running game: an assertion about the network the course was set on has
+   * to be made against the object that set it, which is D-039's lesson about
+   * whose `blockedAt` a property is a property of.
+   */
+  readonly network: StreetRouting | undefined;
 
   /**
    * Direction of travel, radians.
@@ -191,6 +211,21 @@ export class FieldTerrain implements CourseTerrain, RaceTerrain {
     this.features = opts.features ?? null;
     this.authoritativeR = opts.authoritativeR ?? null;
     this.passable = opts.passable ?? null;
+    const streets = opts.streets;
+    this.network = streets
+      ? {
+          offNetworkM: (p) => streets.nearestSitable(p.x, p.z),
+          snapToNetwork: (p) => {
+            const s = streets.snap(p, 40, true);
+            return s ? { x: s.x, z: s.z } : null;
+          },
+          fieldFrom: (p) => {
+            const f = streets.fieldFrom(p);
+            return f ? (q) => f.to(q) : null;
+          },
+          exitsAt: (p) => streets.exitsAt(p),
+        }
+      : undefined;
 
     const m = field.hMeta;
     this.rStride = Math.max(1, Math.round(RULES_CELL_M / m.resM));
