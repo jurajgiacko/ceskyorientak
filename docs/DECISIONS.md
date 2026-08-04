@@ -2295,3 +2295,27 @@ as a number being wrong, and because it says something about the seam: the
 course setter is handed an *interface*, and the objects behind that interface
 are classes with state.
 
+### The gate
+
+`tools/ci/check-streets.mjs`, and it has two halves for D-039's reason —
+*"anything that asserts a property of `blockedAt` should say whose `blockedAt`
+it means."*
+
+**Offline**, against the model the game loads:
+
+| | |
+|---|---|
+| every edge swept at 0.20 m | **0 blocked** over 908 110 samples |
+| every junction an edge meets | **0** inside anything solid |
+| the graph re-derived from the shipped model, edge for edge and vertex for vertex | **0 differ** of 5799 |
+| the arena's component | 98.6 % of the length, against a 95 % floor |
+
+**In the running game**, on the course `COURSE_SEED` resolves to — because a
+graph that is walkable offline says nothing about whether the setter consulted
+it. Phase 1 made `SprintScene.blockedAt` one call into the model while
+`Race.step` went on colliding against a raster, and every offline assertion was
+true throughout. So the endpoints, the run-out and the per-leg detours are read
+out of `RaceController.courseInfo.street` — the report the setter wrote while it
+was setting — and the setter's own limit is asserted to be no looser than the
+gate's, which is the containment `lengthBandM` already states for lengths.
+
