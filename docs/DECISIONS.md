@@ -2118,11 +2118,15 @@ highway centrelines `townscape.json` carries, and writes
 
 | | |
 |---|---|
-| Nodes | 1937 · 1649 junctions · 88 dead ends · 47 orphans |
-| Edges | 5799, 14 719 vertices |
+| Nodes | 1937 — 1649 of degree ≥ 3, 88 dead ends, 47 orphans |
+| Edges | 5799, 14 719 vertices, 280 kB packed |
 | Street network | **56.91 km** — 49.77 km road, 5.41 km path, 1733 m steps |
 | Open-ground chords | 3579, 121.98 km — routable, never sitable |
 | Components | 11; the arena's holds **98.6 %** of the length |
+
+Counting only the streets — before the chords in the next section but one —
+that is **931 junctions**, which is the number to compare with the plan's
+estimate.
 
 `src/world/streetGraph.ts` indexes it at load — a CSR adjacency and a segment
 broadphase — and one Dijkstra over it costs **0.25 ms**, which is what makes
@@ -2145,11 +2149,11 @@ So the derivation reconciles them, and the model wins every time:
 | | |
 |---|---|
 | Blocked samples on the OSM centreline | 9289 |
-| Nudged perpendicular, inside the way's own half-width | 4664 |
+| Nudged perpendicular, inside the way's own half-width | 4876 |
 | Edges split at a span that could not be rescued | 87 |
-| Dropped as unwalkable | 1378 m |
-| Junctions OSM put inside a building, walked out to open ground | 25 of 47 |
-| Junctions that could not be, and whose edges stop short of them | 22 |
+| Dropped as unwalkable | 1378 m of 59.1 km |
+| Junctions OSM put inside something solid, walked out to open ground | 116 of 138 |
+| Junctions that could not be, whose edges stop short of them instead | 22 |
 
 The assertion that falls out of this carries no tolerance: **every edge of the
 shipped graph is walkable, swept at `SWEEP_M` = 0.20 m, against the shipped
