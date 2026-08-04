@@ -2155,6 +2155,17 @@ So the derivation reconciles them, and the model wins every time:
 | Junctions OSM put inside something solid, walked out to open ground | 116 of 138 |
 | Junctions that could not be, whose edges stop short of them instead | 22 |
 
+**And one silent failure the noding had to be built against.** Junctions are
+found by *coincident vertices* — two OSM ways meet at a shared node — which is
+also why a bridge over a road correctly does not become a junction without a
+`layer` tag being read. But `townscape.mjs` runs `simplifyLine(line, 1.2)` over
+every way, which drops an interior vertex within 1.2 m of the one before it, and
+a junction vertex can be dropped that way. A severed junction is invisible: the
+graph simply routes the long way round, and every detour measured on it is wrong
+in the direction that looks safe. So a node falling within `SNAP_M` = 1.3 m of
+another way's *interior segment* splits it, and **844 junctions come back that
+way**. Without that, one junction in three would have been missing.
+
 The assertion that falls out of this carries no tolerance: **every edge of the
 shipped graph is walkable, swept at `SWEEP_M` = 0.20 m, against the shipped
 model.** Not sampled — 5799 edges over 908 110 samples, 0 blocked.
