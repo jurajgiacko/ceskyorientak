@@ -341,7 +341,7 @@ one that can save the rest.
 2. **Passable space + connectivity.** Derived from the model, asserted before any course
    exists, tier-independent by construction. **Done — see below.**
 3. **Street graph + course setting on it.** Detour ratio and start run-out known at
-   generation time.
+   generation time. **Done — see below.**
 4. **Dress the town** — shopfronts, arcades, furniture — with furniture doubling as control
    sites and column-D descriptions.
 5. **Play it.** Not a gate — a person running the course, several times, on a phone.
@@ -525,3 +525,65 @@ agreement assertion, the energy and nutrition model, and the seed-picking harnes
 
 The thing to *discard* without sentiment is the raster-stamping pipeline in
 `tools/terrain/townscape.mjs` and the `blockedAt` composition in `src/world/sprintScene.ts`.
+
+### Answered: the network is explicit, and the course is set on it rather than audited
+
+**Phase 3 is done. D-040 has the whole record; this is what changes the plan.**
+
+`tools/terrain/streetgraph.mjs` writes `streets.bin` — **1937 nodes, 5799
+edges, 56.9 km of street plus 122 km of open-ground chord, 115 kB gzipped** —
+and `src/world/streetGraph.ts` indexes it at load. Every edge is asserted
+walkable against the shipped model, swept at 0.20 m: **0 blocked edges over
+908 110 samples**, and `check:streets` re-derives the whole graph and compares it
+edge for edge.
+
+The three things §3 promised are now properties of the construction:
+
+- **Controls on the graph** — within 12 m of a way a control may hang on, and
+  never on a chord.
+- **Legs routed while the course is being set** — one Dijkstra a leg, 0.25 ms,
+  and every candidate's detour is a lookup in it.
+- **The start's run-out** — the start and the finish are *projected onto* the
+  network rather than filtered for being near it (0.0 m off it on every seed
+  sampled), and leg 1 requires 25 m of clear straight running out of the start.
+
+**Five corrections to this plan, and the second changes what a street graph is.**
+
+- **§3's "maybe 400 junctions" is out by four**, and the unit is wrong: 931
+  street junctions, 56.9 km of network in a 1.44 km² square, because OSM maps
+  every footway and parking aisle. The conclusion — *this is a small graph* —
+  survives comfortably at 0.25 ms a route and 115 kB on the wire. What would not
+  have survived is a data structure sized for the sentence.
+
+- **A street graph of a medieval town has to model the ground *between* the
+  streets.** OSM maps Náměstí Svornosti as a pedestrian **area**, so the town's
+  biggest open space arrives as a perimeter way and the arena anchor was 11.6 m
+  from anything the graph knew. Perimeter-only, the graph called **18 of 95
+  sprint-length legs over 3.0× that the athlete runs under it** — a setter
+  refusing one leg in five for a reason that is not true. Fixed with chords
+  between junctions with a clear swept line between them, marked routable and
+  never sitable: median error 1.21× → 1.02×.
+
+- **The 0.5 m audit is not the truth either.** D-037 built it as the stricter
+  second measurement and the gate has judged the shipped course by it since.
+  Measured over 161 legs, the graph is the shorter of the two about as often as
+  the audit is, and on the shipped course one leg reads 5.3× on the graph and
+  1.3× on the audit. Both are *upper bounds* on the athlete's shortest route —
+  the graph is confined to a network, the lattice cannot express a narrow
+  doorway (D-039) — and D-037's fault is that **no** short route exists, so a
+  route exhibited by either disproves it. The gate now judges the shorter and
+  prints both.
+
+- **Validating geometry at full precision and shipping it at a centimetre is a
+  bug**, and the assertion caught it on its first run: 49 edges and 31 junctions
+  clear in the derivation and blocked in the artefact. D-038 recorded the same
+  `Math.fround` trap at 62 cells; here it would have shipped a network with
+  edges through walls. Related and from the same run: correcting at 0.5 m while
+  asserting at 0.2 m left 147 edges the correction thought it had fixed. **A
+  pass that fixes and a pass that judges must sample at the same spacing.**
+
+- **`blockedAt` is a method and a detached one loses `this`** — one line, and
+  the whole venue failed to load. Worth recording because it is the only failure
+  in this phase that would have read as "the town is broken" rather than as a
+  number being wrong.
+

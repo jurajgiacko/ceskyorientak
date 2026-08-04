@@ -802,9 +802,13 @@ export function generateCourse(o: GenerateOptions): Course {
       // the worst leg of the course at 1.3×. On the last control the route to
       // the finish is checked as well as the route from the previous control.
       ...(net && i === targetLegs - 1 ? { homeField: net.fieldFrom(finish) } : {}),
-      // Leg 1 only: the athlete must be able to run out of the start. See
-      // `START_RUN_OUT_M` — this is fault 8, as a property of the pair.
-      ...(i === 0 ? { runOutM: START_RUN_OUT_M } : {}),
+      // Leg 1 only, and only in a town: the athlete must be able to run out of
+      // the start. This is fault 8, as a property of the pair — see
+      // `START_RUN_OUT_M`. Withheld from the forest along with everything else
+      // on the network's side of the line, because a rule that rejects one
+      // candidate re-rolls every draw after it (D-029) and Lachovice has never
+      // had this fault: there is nothing there to run out into.
+      ...(net && i === 0 ? { runOutM: START_RUN_OUT_M } : {}),
     });
 
     // Full clearance first; a narrower pass rather than no leg at all.
@@ -826,11 +830,20 @@ export function generateCourse(o: GenerateOptions): Course {
     // it costs a little course length rather than a whole seed. Only when all
     // four passes fail does the last one settle for the best rule-breaker,
     // which is D-037's finding that refusing outright *ends* the course.
-    const site =
-      leg(spec.finishClearanceM, 1, true) ??
-      leg(spec.finishClearanceM, 0.7, true) ??
-      leg(spec.finishClearanceM * RELAXED_CLEARANCE, 1, true) ??
-      leg(spec.finishClearanceM * RELAXED_CLEARANCE, 1, false);
+    //
+    // **The extra rungs exist only where there is a network**, and that is not
+    // caution about scope — it is D-029's finding that the generator's RNG is
+    // drawn inside geometry-dependent branches, so an extra pass that never
+    // finds anything still re-rolls every draw after it. The forest has no
+    // network, has never had a leg over 1.55×, and must come out of this change
+    // bit for bit.
+    const site = net
+      ? leg(spec.finishClearanceM, 1, true) ??
+        leg(spec.finishClearanceM, 0.7, true) ??
+        leg(spec.finishClearanceM * RELAXED_CLEARANCE, 1, true) ??
+        leg(spec.finishClearanceM * RELAXED_CLEARANCE, 1, false)
+      : leg(spec.finishClearanceM, 1, false) ??
+        leg(spec.finishClearanceM * RELAXED_CLEARANCE, 1, false);
     if (!site) break;
 
     climbLeftM -= legClimbM(current, site, o.terrain);

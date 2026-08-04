@@ -2096,3 +2096,194 @@ phase 1 that premise has not held: `COURSE_SEED` names a seed whose course
 re-rolls whenever the geometry moves, so the gate's strictest assertion is being
 applied to an unchosen sample. It passed this time at 2.1× against a 3.0× limit.
 It is luck, and phase 3 is where it stops being luck.
+
+---
+
+## D-040 — Phase 3: the street graph, and a course set on it rather than audited afterwards
+
+PLAN-KRUMLOV-V2 §3: *"A sprint is run on a network. Build it explicitly — nodes
+at junctions and gateways, edges along runnable ways, with the barrier crossings
+that are legal."* Then, by construction rather than by gate: controls sited on
+the graph, legs routed on it **while the course is being set**, and the start's
+run-out checked.
+
+This is what was built, what it found, and the five places it contradicts the
+plan.
+
+### The graph
+
+`tools/terrain/streetgraph.mjs` reads the shipped `townmodel.bin` and the OSM
+highway centrelines `townscape.json` carries, and writes
+`public/data/krumlov/streets.bin` — 274 kB, **115 kB gzipped**:
+
+| | |
+|---|---|
+| Nodes | 1937 · 1649 junctions · 88 dead ends · 47 orphans |
+| Edges | 5799, 14 719 vertices |
+| Street network | **56.91 km** — 49.77 km road, 5.41 km path, 1733 m steps |
+| Open-ground chords | 3579, 121.98 km — routable, never sitable |
+| Components | 11; the arena's holds **98.6 %** of the length |
+
+`src/world/streetGraph.ts` indexes it at load — a CSR adjacency and a segment
+broadphase — and one Dijkstra over it costs **0.25 ms**, which is what makes
+routing affordable inside a loop that weighs two hundred candidates a leg.
+
+### Whose network it is: OSM says where to look, the model says what is there
+
+§2's diagram has the street graph as one of four things derived from
+`TownModel`, and that is not quite what it is. The model knows what is *solid*;
+it does not know what is a *street*. The centrelines have to come from OSM, and
+OSM is a hypothesis: **3.3 % of the network's metres inside the playable square
+run through something the model calls solid.** Some of that is a centreline
+drawn a metre off the alley it names; some is real, and the honest example is
+`tunnel=building_passage`, which OSM maps as a way through a building the model
+has as one sealed footprint — the same arches D-039 measured the block interiors
+behind as genuinely sealed.
+
+So the derivation reconciles them, and the model wins every time:
+
+| | |
+|---|---|
+| Blocked samples on the OSM centreline | 9289 |
+| Nudged perpendicular, inside the way's own half-width | 4664 |
+| Edges split at a span that could not be rescued | 87 |
+| Dropped as unwalkable | 1378 m |
+| Junctions OSM put inside a building, walked out to open ground | 25 of 47 |
+| Junctions that could not be, and whose edges stop short of them | 22 |
+
+The assertion that falls out of this carries no tolerance: **every edge of the
+shipped graph is walkable, swept at `SWEEP_M` = 0.20 m, against the shipped
+model.** Not sampled — 5799 edges over 908 110 samples, 0 blocked.
+`tools/ci/check-streets.mjs` re-derives the whole graph from the shipped model
+and compares it edge for edge and vertex for vertex, which is what
+`check-passable` does cell for cell with the passable space.
+
+### What the setter does with it
+
+`src/sim/courseGen.ts` gains `CourseTerrain.network`, two methods and a snap.
+Three things it could not do before:
+
+- **A control must be on the network.** Within `MAX_CONTROL_OFF_NETWORK_M` =
+  12 m of a way a control may hang on — Road, Path or Steps, never an
+  open-ground chord. Looser than the start and the finish because a sprint
+  control on the corner of a building is correct; what it forbids is the other
+  thing, a control fifteen metres into a courtyard with a wall between it and
+  the street the leg comes down.
+- **A leg's detour is known while the leg is being chosen.** One Dijkstra per
+  leg from the previous control, and every candidate's routed distance is a
+  lookup in it. Over the limit and the candidate is not taken.
+- **The start and the finish are *projected onto* the network**, not filtered
+  for being near it, and leg 1's candidates must leave `START_RUN_OUT_M` = 25 m
+  of clear straight running out of the start. Both are fault 8, and every seed
+  sampled since reports **0.0 m** off the network at both ends.
+
+**Why this is not one of D-037's three failed variants.** That decision tried to
+make the generator avoid a long leg and concluded *"no — not safely, and that is
+the finding rather than a budget excuse."* All three variants measured the
+**straight line**: `routeCost` returns `Infinity` for a leg with a river across
+it and `Infinity` for a leg into a courtyard, so a rule built on it cannot tell
+"go round the block" from "go round the town", and refusing on it starved the
+candidate pool — `generateCourse` broke out of its loop and the course did not
+lose a leg, it *ended*. Krumlov came out at 12 controls against the 14 a sprint
+is specified at, and nought candidates in twenty survived the picker.
+
+The difference is that there is now a **route** to consult. A candidate refused
+here is refused because the way to it is genuinely a lap of the venue, and a
+candidate accepted comes with a route the athlete can physically run at that
+ratio — every edge of it swept clear against the model.
+
+D-037's *structural* objection stands, though, and is respected rather than
+argued with: `pickNextControl` is greedy and cannot revisit, so a leg where
+every candidate is across the obstacle usually means the *previous* control was
+the mistake. So the refusals are a ladder — full clearance, then a shorter leg,
+then relaxed clearance, and only then the least-bad rule-breaker. The last rung
+is ranked by **detour and not by score**, which is the opposite of the others
+and deliberately so: among candidates that are all allowed the question is which
+is the better control, and among candidates that are all disallowed the question
+is which does least damage, which the score cannot answer because the detour
+preference term is zero for every one of them.
+
+Measured over 24 menu-shaped seeds, against D-037's own baseline of 240:
+
+| worst leg per candidate | D-037 | phase 3 |
+|---|---|---|
+| best | 1.49× | 1.78× |
+| median | **8.71×** | **3.35×** |
+| candidates keeping every leg under 3.0× | 16 % | **50 %** |
+| legs with no route at all | — | 0 |
+
+That is the number that says the generator is *usually* right, which is all a
+generator has to be (D-032): the setter picks.
+
+### Five contradictions with the plan
+
+**1. "Maybe 400 junctions. This is a small graph."** §3's sizing is out by a
+factor of four and its unit is wrong. Krumlov has **931 street junctions** among
+1937 nodes, and **56.9 km of street network inside a 1.44 km² square** — 40 km
+per km², because OSM maps every footway, service road, parking aisle and castle
+ramp, not only the streets a course setter would name. The *conclusion* survives
+and comfortably: a Dijkstra over it is 0.25 ms and the whole artefact is 115 kB
+gzipped. What would not have survived is a data structure sized for the sentence
+— 400 junctions is a graph you can route with an adjacency list of arrays and a
+linear scan for the nearest edge, and 5799 edges of 14 719 vertices is not.
+
+**2. A street graph of a medieval town has to model the ground *between* the
+streets.** §3 says "edges along runnable ways", and the biggest open space in
+Krumlov is not a way. OSM maps Náměstí Svornosti as a `highway=pedestrian`
+**area**, so `townscape.json` carries it as a 7 m way round its perimeter and
+the graph inherits a square you can only run round; the arena anchor came out
+**11.6 m from anything the graph knew about**. Measured over 95 sprint-length
+legs against the athlete's own 0.5 m space, the perimeter-only graph put the
+median routed distance at **1.21×** the truth, p90 2.36 — and **18 of 95 legs
+read over 3.0× on the graph that the athlete runs under it**. A setter refusing
+one leg in five for a reason that is not true is the exact fault D-037 recorded
+when it tried the same thing with a straight-line probe.
+
+So the graph carries **chords**: any two junctions with a clear swept line
+between them, where the network makes you go 10 % further round. 3579 of them,
+122 km, marked `KIND_OPEN` — **routable and never sitable**, because the ground
+you may *run* over is anything the model lets you stand on and the network you
+may *site* on is the street. With them the median is 1.02× and the p90 1.33×.
+
+**3. The 0.5 m audit is not the truth either, and phase 3 had to stop treating
+it as one.** D-037 built `makeCourseAudit` as the stricter second measurement
+and the gate has judged the shipped course by it ever since. Measured over 161
+sprint-length legs, the graph is shorter than the audit about as often as the
+reverse, and on the shipped course leg 16→17 reads **5.3× on the graph and 1.3×
+on the audit**. Neither dominates, and the reason is structural on both sides:
+the graph is confined to a network drawn inside the open space, and a lattice
+cannot express a doorway narrower than its own diagonal — which is D-039's own
+third contradiction, arriving from the other direction.
+
+Both are **upper bounds on the shortest route the athlete could actually run**.
+D-037's fault is *"the flag is in sight across an uncrossable feature and the way
+to it is a lap of the venue"* — a statement that **no** short route exists — so a
+route exhibited by either measure disproves it. `check-streets` and
+`pick-course` judge a leg on the shorter of the two and print both.
+
+**4. Validating geometry at full precision and shipping it at a centimetre is a
+bug, and the assertion caught it on its first run.** The derivation checked
+every edge against the model in double precision and then packed it through
+`round2` — D-038's own `Math.fround` quantisation, which that decision recorded
+as costing 62 cells of disagreement. Here it cost **49 of 5799 edges and 31 of
+1937 junctions that were clear in the tool and blocked in the artefact**: a
+shipped network with edges running through walls, every one of which the
+derivation believed it had corrected. Points are rounded *before* they are
+validated now, so the thing checked and the thing shipped are the same numbers.
+
+The same shape appeared once more inside the derivation itself: correcting the
+centreline at 0.5 m while asserting at 0.2 m left 147 edges the correction
+thought it had fixed. **A pass that fixes and a pass that judges must sample at
+the same spacing**, which is phase 2's "one graph, one surface, everywhere" one
+layer down.
+
+**5. `blockedAt` is a method, and a detached one loses `this`.** The first
+build that routed on the graph did not load at all — *"the town will not load"*,
+a `TypeError` from inside course setting, before the venue had drawn a frame.
+The cause was one line lifting `terrain.blockedAt` into a local. It is trivial
+and it is worth recording, because it is the *only* failure mode in this whole
+phase that a gate would have reported as "the venue never mounted" rather than
+as a number being wrong, and because it says something about the seam: the
+course setter is handed an *interface*, and the objects behind that interface
+are classes with state.
+
