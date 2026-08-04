@@ -212,6 +212,12 @@ export class FieldTerrain implements CourseTerrain, RaceTerrain {
     this.authoritativeR = opts.authoritativeR ?? null;
     this.passable = opts.passable ?? null;
     const streets = opts.streets;
+    // Indexing the graph is a load-time cost of the venue, so it is reported
+    // where every other one is. `tools/perf/setup-cost.mjs` reads this at the
+    // 4× Android throttle; phase 0's rule is that a venue-wide sweep belongs in
+    // the build, and the only way to know this stayed a linear index rather
+    // than becoming a sweep is to measure it.
+    if (streets) this.costMs.streets = streets.buildMs;
     this.network = streets
       ? {
           offNetworkM: (p) => streets.nearestSitable(p.x, p.z),

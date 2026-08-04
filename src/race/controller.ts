@@ -254,12 +254,21 @@ export class RaceController {
         : {}),
     });
 
+    // Course setting is now a load-time cost worth naming: since
+    // PLAN-KRUMLOV-V2 §3 it routes every candidate leg over the street graph
+    // rather than sampling a straight line, which is a Dijkstra per leg per
+    // seed. Recorded beside the terrain's own phases so `setup-cost.mjs` sees
+    // it — phase 0 budgeted the loading screen and a cost with no instrument is
+    // one nobody can tell has grown.
+    const courseT0 = typeof performance === 'undefined' ? Date.now() : performance.now();
     const set = setCourse(this.terrain, {
       venue: setup.anchor,
       discipline: setup.discipline,
       seed: setup.seed,
       arena: host.arena,
     });
+    this.terrain.costMs.course =
+      (typeof performance === 'undefined' ? Date.now() : performance.now()) - courseT0;
     this.course = set.course;
     this.setup_ = set;
 
