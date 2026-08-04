@@ -1,0 +1,99 @@
+{
+  "venue": "krumlov",
+  "generatedAt": "2026-08-04T00:36:07.626Z",
+  "from": "townmodel.bin + townscape.json",
+  "modelBytes": 137228,
+  "playableR": 600,
+  "arena": {
+    "x": 1,
+    "z": 24
+  },
+  "sweepM": 0.2,
+  "snapM": 1.3,
+  "nodes": 1938,
+  "edges": 5806,
+  "vertices": 14132,
+  "junctions": 1647,
+  "deadEnds": 88,
+  "lengthM": 178984,
+  "lengthByKind": {
+    "road": 49754,
+    "path": 5409,
+    "steps": 1734,
+    "open": 122088
+  },
+  "sitableLengthM": 56896,
+  "components": 11,
+  "mainComp": 0,
+  "mainLengthM": 176522,
+  "mainFraction": 0.98625,
+  "arenaNode": 857,
+  "derivation": {
+    "osmLengthM": 59063,
+    "blockedSamples": 9073,
+    "nudged": 4664,
+    "nudgedM": 933,
+    "splitEdges": 87,
+    "droppedM": 1377,
+    "recoveredJunctions": 191,
+    "blockedNodes": 138,
+    "nodesRescued": 116,
+    "chords": 3582
+  },
+  "blockedEdges": 0,
+  "sweptSamples": 907568,
+  "sections": {
+    "nodeX": {
+      "type": "f32",
+      "offset": 0,
+      "count": 1938
+    },
+    "nodeZ": {
+      "type": "f32",
+      "offset": 7752,
+      "count": 1938
+    },
+    "nodeComp": {
+      "type": "i32",
+      "offset": 15504,
+      "count": 1938
+    },
+    "edgeA": {
+      "type": "i32",
+      "offset": 23256,
+      "count": 5806
+    },
+    "edgeB": {
+      "type": "i32",
+      "offset": 46480,
+      "count": 5806
+    },
+    "edgeWidth": {
+      "type": "f32",
+      "offset": 69704,
+      "count": 5806
+    },
+    "edgeKind": {
+      "type": "i32",
+      "offset": 92928,
+      "count": 5806
+    },
+    "edgeLength": {
+      "type": "f32",
+      "offset": 116152,
+      "count": 5806
+    },
+    "edgeOffset": {
+      "type": "i32",
+      "offset": 139376,
+      "count": 5807
+    },
+    "edgePts": {
+      "type": "f32",
+      "offset": 162604,
+      "count": 28264
+    }
+  },
+  "bytes": 275660,
+  "buildMs": 2163
+}
