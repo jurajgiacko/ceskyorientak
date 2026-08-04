@@ -56,7 +56,10 @@
  * model's solid set: derived, in one pass, from one source, rather than stamped
  * by five passes in an order no single place owns.
  *
- * Pipeline order, and it matters:  build.mjs → townscape.mjs → townmodel.mjs.
+ * Pipeline order, and it matters:  build.mjs → townscape.mjs → townmodel.mjs →
+ * passable.mjs → streetgraph.mjs. The last two read the *shipped*
+ * `townmodel.bin` rather than re-deriving it, and both record its byte count so
+ * a partial re-run is a warning at load rather than a mystery on the ground.
  *
  * Usage: node tools/terrain/townmodel.mjs [--venue krumlov] [--check] [--no-raster]
  */
