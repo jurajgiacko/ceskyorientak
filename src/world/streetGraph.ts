@@ -19,19 +19,26 @@
  *    `pickNextControl` weigh ninety candidates a leg against a detour ratio it
  *    can actually see, instead of a straight line that cannot see a river
  *    (D-037).
- *  - **The run-out.** Fault 8 is a start with a wall in front of it. On a graph
- *    the start's own junction has a degree and its edges have bearings.
+ *  - **Siting the arena.** `snap` puts the start and the finish *on* a way
+ *    rather than near one, which is fault 8 stated as a construction. How far
+ *    the athlete can then run out of it is measured continuously against the
+ *    model, not off this graph: the question is what is in front of them, and a
+ *    junction's degree is a poor proxy for it.
  *
  * ---------------------------------------------------------------------------
  * The one property that makes the detour limit structural
  * ---------------------------------------------------------------------------
  *
- * **A route on this graph is never shorter than the way the athlete would
- * actually run** — it is confined to a network drawn inside the open space,
- * while the athlete may cut any line the model allows. So a leg the generator
- * accepts at ≤ 3.0× on the graph is a leg that is ≤ 3.0× on the ground, and
- * D-037's limit stops being something a later audit discovers and becomes
- * something the setter could not have violated.
+ * **Every edge is a line the athlete can physically run**, swept at 0.20 m
+ * against the model in the build and asserted by `check:streets` with no
+ * tolerance. So a route on this graph is a *witness*: a leg the generator
+ * accepts at ≤ 3.0× comes with an actual way round at that ratio, and D-037's
+ * limit stops being something a later audit discovers and becomes something the
+ * setter has already been shown.
+ *
+ * It is an upper bound on the athlete's shortest route and not the route
+ * itself — confined to a network drawn inside the open space, it can call a leg
+ * worse than it is by a median of 4 %.
  *
  * The converse is where it costs: the graph can call a leg worse than it is,
  * and the generator will pass over a candidate that was fine. `addChords` in
@@ -444,36 +451,4 @@ export class StreetGraph {
     return k;
   }
 
-  /**
-   * The bearings you can leave a point on, along the network.
-   *
-   * Fault 8's own question. The start is snapped, and every edge at the two
-   * junctions its edge runs between contributes the bearing of its first few
-   * metres. A start with one bearing is a cul-de-sac; a start whose only
-   * bearings point back at the finish is the "run out and there's a wall"
-   * report with the wall drawn as a dead end instead.
-   */
-  exitsAt(p: { x: number; z: number }, maxSnapM = MAX_SNAP_M): number[] {
-    const s = this.snap(p, maxSnapM);
-    if (!s) return [];
-    const out: number[] = [];
-    const addFrom = (node: number) => {
-      for (let i = this.adjStart[node] as number; i < (this.adjStart[node + 1] as number); i++) {
-        const ei = this.adjEdge[i] as number;
-        const o0 = this.edgeOffset[ei] as number;
-        const o1 = this.edgeOffset[ei + 1] as number;
-        const first = (this.edgeA[ei] as number) === node;
-        const px = this.edgePts[(first ? o0 : o1 - 1) * 2] as number;
-        const pz = this.edgePts[(first ? o0 : o1 - 1) * 2 + 1] as number;
-        const qx = this.edgePts[(first ? o0 + 1 : o1 - 2) * 2] as number;
-        const qz = this.edgePts[(first ? o0 + 1 : o1 - 2) * 2 + 1] as number;
-        void px;
-        void pz;
-        out.push(Math.atan2(qx - p.x, -(qz - p.z)));
-      }
-    };
-    addFrom(s.a);
-    if (s.b !== s.a) addFrom(s.b);
-    return out;
-  }
 }
